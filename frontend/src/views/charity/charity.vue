@@ -18,6 +18,73 @@
   <h1 class="text-3xl font-bold underline bg-red-200 dark:bg-gray-200 text-yellow-200  dark:text-red-200">
     Hello world!
   </h1>
+      <Vueform> 
+      <TextElement name="hello_world" label="Hello" placeholder="World" />
+    </Vueform>
+
+     <Vueform
+    size="md"
+    :display-errors="false"
+    add-class="vf-create-account"
+  >
+    <StaticElement
+      name="register_title"
+      content="Create account"
+      tag="h1"
+    />
+    <StaticElement
+      name="divider"
+      tag="hr"
+    />
+    <GroupElement
+      name="container"
+      description="Make sure it matches your legal name"
+    >
+      <TextElement
+        name="first_name"
+        placeholder="First name"
+        :columns="{
+          container: 6,
+          label: 12,
+          wrapper: 12,
+        }"
+        field-name="First name"
+        :rules="[
+          'required',
+          'max:255',
+        ]"
+      />
+      <TextElement
+        name="last_name"
+        placeholder="Last name"
+        :columns="{
+          container: 6,
+          label: 12,
+          wrapper: 12,
+        }"
+        field-name="Last name"
+        :rules="[
+          'required',
+          'max:255',
+        ]"
+      />
+    </GroupElement>
+    <CheckboxElement
+      name="marketing_emails"
+      text="I want to recieve marketing emails"
+    />
+    <StaticElement
+      name="divider_1"
+      tag="hr"
+    />
+    <ButtonElement
+      name="register"
+      :submits="true"
+      button-label="Create account"
+      :full="true"
+      size="lg"
+    />
+  </Vueform>
 
 </template>
 
