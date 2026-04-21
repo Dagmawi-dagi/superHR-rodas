@@ -7,11 +7,11 @@
         </svg>
       </button>
       <div class="logo-section">
-   
+
         <span class="system-name">SUPER HR</span>
       </div>
     </div>
-    
+
     <div class="header-right">
       <!-- Notifications -->
       <div class="notification-dropdown" @click.stop>
@@ -22,7 +22,7 @@
           </svg>
           <span v-if="unreadCount > 0" class="notification-badge">{{ unreadCount }}</span>
         </button>
-        
+
         <transition name="dropdown">
           <div v-if="showNotifications" class="notifications-panel">
             <div class="notifications-header">
@@ -62,8 +62,8 @@
 
       <!-- User Avatar - Only avatar visible -->
       <div class="user-avatar-btn" @click="toggleDropdown">
-        <img 
-          :src="userProfilePicture" 
+        <img
+          :src="userProfilePicture"
           class="avatar"
           @error="handleImageError"
         />
@@ -71,13 +71,13 @@
           <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
         </svg>
       </div>
-      
+
       <!-- Dropdown Menu -->
       <transition name="dropdown">
         <div v-if="isDropdownOpen" class="dropdown-menu">
           <div class="dropdown-header">
-            <img 
-              :src="userProfilePicture" 
+            <img
+              :src="userProfilePicture"
               class="dropdown-avatar"
               @error="handleImageError"
             />
@@ -91,16 +91,16 @@
               </span>
             </div>
           </div>
-          
+
           <div class="dropdown-divider"></div>
-          
+
           <button @click="goToProfile" class="dropdown-item">
             <svg class="dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
             <span>My Profile</span>
           </button>
-          
+
           <button @click="goToSettings" class="dropdown-item">
             <svg class="dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -108,9 +108,9 @@
             </svg>
             <span>Settings</span>
           </button>
-          
+
           <div class="dropdown-divider"></div>
-          
+
           <div v-if="authStore.user?.employeeCode || authStore.user?.departmentCode" class="dropdown-stats">
             <div v-if="authStore.user?.employeeCode" class="stat-item">
               <span class="stat-label">Employee ID</span>
@@ -121,9 +121,9 @@
               <span class="stat-value">{{ authStore.user.departmentCode }}</span>
             </div>
           </div>
-          
+
           <div class="dropdown-divider"></div>
-          
+
           <button @click="handleLogout" class="dropdown-item logout-item">
             <svg class="dropdown-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -133,7 +133,7 @@
         </div>
       </transition>
     </div>
-    
+
     <!-- Backdrop -->
     <div v-if="isDropdownOpen || showNotifications" class="dropdown-backdrop" @click="closeAll"></div>
   </header>
@@ -179,7 +179,7 @@ const getRoleTitle = () => {
     hr: 'HR Manager',
     finance: 'Finance Officer',
     employee: 'Employee',
-      attendance: 'Attendance Manager'
+    attendance: 'Attendance Manager'
   }
   return titles[authStore.user?.role] || authStore.user?.role || 'User'
 }
@@ -695,11 +695,11 @@ onUnmounted(() => {
     padding: 0 16px;
     height: 56px;
   }
-  
+
   .system-name {
     display: none;
   }
-  
+
   .dropdown-menu,
   .notifications-panel {
     width: calc(100vw - 32px);

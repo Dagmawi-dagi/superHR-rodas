@@ -1,0 +1,1037 @@
+const {
+  Donation,
+  DonationItem,
+  DonationApproval,
+  DonationLog,
+  DonationDistribution,
+  Company,
+  Campaign,
+  Beneficiary,
+  Employee,
+  sequelize,
+} = require("../../models");
+const { Op } = require("sequelize");
+
+// ------------------------------------------------------------------
+// PAGINATION HELPER
+// ------------------------------------------------------------------
+const getPagination = (page, size, defaultLimit = 10, maxLimit = 100) => {
+  const limit = size ? Math.min(parseInt(size), maxLimit) : defaultLimit;
+  const offset = page ? (parseInt(page) - 1) * limit : 0;
+  return { limit, offset };
+};
+
+// ------------------------------------------------------------------
+// RECALCULATE DONATION TOTAL
+// ------------------------------------------------------------------
+const recalculateDonationTotal = async (donationId, transaction = null) => {
+  const items = await DonationItem.findAll({
+    where: { donationId },
+    attributes: ["totalValue"],
+    transaction,
+  });
+  const total = items.reduce(
+    (sum, item) => sum + parseFloat(item.totalValue || 0),
+    0,
+  );
+  await Donation.update(
+    { totalValue: total },
+    { where: { donationId }, transaction },
+  );
+  return total;
+};
+
+// ------------------------------------------------------------------
+// LOG ACTION
+// ------------------------------------------------------------------
+const logDonationAction = async (
+  donationId,
+  userId,
+  action,
+  metadata = {},
+  transaction = null,
+) => {
+  await DonationLog.create(
+    {
+      donationId,
+      userId,
+      action,
+      metadata,
+    },
+    { transaction },
+  );
+};
+
+// ------------------------------------------------------------------
+// CREATE DONATION (status: draft)
+// ------------------------------------------------------------------
+exports.createDonation = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { companyId, campaignId, donationDate, notes } = req.body;
+
+    if (!companyId || !campaignId || !donationDate) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        error: "companyId, campaignId, and donationDate are required",
+      });
+    }
+
+    const company = await Company.findByPk(companyId, { transaction: t });
+    if (!company) {
+      await t.rollback();
+      return res
+        .status(404)
+        .json({ success: false, error: "Company not found" });
+    }
+
+    const campaign = await Campaign.findByPk(campaignId, { transaction: t });
+    if (!campaign) {
+      await t.rollback();
+      return res
+        .status(404)
+        .json({ success: false, error: "Campaign not found" });
+    }
+
+    const donation = await Donation.create(
+      {
+        companyId,
+        campaignId,
+        donationDate,
+        notes,
+        status: "draft",
+        totalValue: 0,
+      },
+      { transaction: t },
+    );
+
+    await logDonationAction(
+      donation.donationId,
+      req.user.userId,
+      "CREATE",
+      {
+        company: company.name,
+        campaign: campaign.title,
+      },
+      t,
+    );
+
+    await t.commit();
+
+    res.status(201).json({
+      success: true,
+      message: "Donation created (draft)",
+      data: donation,
+    });
+  } catch (error) {
+    await t.rollback();
+    console.error("Create donation error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// GET ALL DONATIONS (with filters & pagination)
+// ------------------------------------------------------------------
+exports.getAllDonations = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      size = 10,
+      status,
+      companyId,
+      campaignId,
+      startDate,
+      endDate,
+      search,
+    } = req.query;
+    const { limit, offset } = getPagination(page, size);
+
+    const where = {};
+    if (status) where.status = status;
+    if (companyId) where.companyId = parseInt(companyId);
+    if (campaignId) where.campaignId = parseInt(campaignId);
+    if (startDate && endDate) {
+      where.donationDate = { [Op.between]: [startDate, endDate] };
+    } else if (startDate) {
+      where.donationDate = { [Op.gte]: startDate };
+    } else if (endDate) {
+      where.donationDate = { [Op.lte]: endDate };
+    }
+
+    const include = [
+      { model: Company, attributes: ["companyId", "name", "type"] },
+      { model: Campaign, attributes: ["campaignId", "title", "category"] },
+    ];
+
+    const { count, rows } = await Donation.findAndCountAll({
+      where,
+      include,
+      limit,
+      offset,
+      order: [["created_at", "DESC"]],
+      distinct: true,
+    });
+
+    res.json({
+      success: true,
+      data: rows,
+      pagination: {
+        totalItems: count,
+        totalPages: Math.ceil(count / limit),
+        currentPage: parseInt(page),
+        pageSize: limit,
+      },
+    });
+  } catch (error) {
+    console.error("Get donations error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// GET DONATION BY ID (full details)
+// ------------------------------------------------------------------
+exports.getDonationById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const donation = await Donation.findByPk(id, {
+      include: [
+        {
+          model: Company,
+          attributes: ["companyId", "name", "type", "contactInfo"],
+        },
+        {
+          model: Campaign,
+          attributes: [
+            "campaignId",
+            "title",
+            "description",
+            "category",
+            "targetAmount",
+          ],
+        },
+        {
+          model: DonationItem,
+          include: [
+            {
+              model: DonationDistribution,
+              include: [
+                {
+                  model: Beneficiary,
+                  attributes: ["beneficiaryId", "name", "type"],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          model: DonationApproval,
+          include: [
+            {
+              model: Employee,
+              attributes: ["employeeId", "firstName", "lastName"],
+            },
+          ],
+          order: [["created_at", "DESC"]],
+        },
+      ],
+    });
+
+    if (!donation) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Donation not found" });
+    }
+
+    res.json({ success: true, data: donation });
+  } catch (error) {
+    console.error("Get donation error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// UPDATE DONATION (draft only)
+// ------------------------------------------------------------------
+exports.updateDonation = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { companyId, campaignId, donationDate, notes } = req.body;
+
+    const donation = await Donation.findByPk(id, { transaction: t });
+    if (!donation) {
+      await t.rollback();
+      return res
+        .status(404)
+        .json({ success: false, error: "Donation not found" });
+    }
+
+    if (donation.status !== "draft") {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({ success: false, error: "Only draft donations can be edited" });
+    }
+
+    const updates = {};
+    if (companyId !== undefined) updates.companyId = companyId;
+    if (campaignId !== undefined) updates.campaignId = campaignId;
+    if (donationDate !== undefined) updates.donationDate = donationDate;
+    if (notes !== undefined) updates.notes = notes;
+
+    await donation.update(updates, { transaction: t });
+    await logDonationAction(id, req.user.userId, "UPDATE", updates, t);
+
+    await t.commit();
+    res.json({ success: true, message: "Donation updated", data: donation });
+  } catch (error) {
+    await t.rollback();
+    console.error("Update donation error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// CANCEL DONATION (any status → cancelled)
+// ------------------------------------------------------------------
+exports.cancelDonation = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+
+    const donation = await Donation.findByPk(id, { transaction: t });
+    if (!donation) {
+      await t.rollback();
+      return res
+        .status(404)
+        .json({ success: false, error: "Donation not found" });
+    }
+
+    if (donation.status === "cancelled") {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({ success: false, error: "Donation already cancelled" });
+    }
+
+    await donation.update({ status: "cancelled" }, { transaction: t });
+    await logDonationAction(id, req.user.userId, "CANCEL", {}, t);
+
+    await t.commit();
+    res.json({ success: true, message: "Donation cancelled" });
+  } catch (error) {
+    await t.rollback();
+    console.error("Cancel donation error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// ADD DONATION ITEM (draft only)
+// ------------------------------------------------------------------
+exports.addDonationItem = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { type, description, quantity, unitValue } = req.body;
+
+    const donation = await Donation.findByPk(id, { transaction: t });
+    if (!donation) {
+      await t.rollback();
+      return res
+        .status(404)
+        .json({ success: false, error: "Donation not found" });
+    }
+
+    if (donation.status !== "draft") {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({ success: false, error: "Cannot add items after submission" });
+    }
+
+    if (!type || quantity === undefined || unitValue === undefined) {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({ success: false, error: "type, quantity, unitValue required" });
+    }
+
+    const totalValue = parseFloat(quantity) * parseFloat(unitValue);
+
+    const item = await DonationItem.create(
+      {
+        donationId: id,
+        type,
+        description,
+        quantity,
+        unitValue,
+        totalValue,
+      },
+      { transaction: t },
+    );
+
+    await recalculateDonationTotal(id, t);
+    await logDonationAction(
+      id,
+      req.user.userId,
+      "ADD_ITEM",
+      { itemId: item.donationItemId },
+      t,
+    );
+
+    await t.commit();
+
+    res.status(201).json({
+      success: true,
+      message: "Item added",
+      data: item,
+    });
+  } catch (error) {
+    await t.rollback();
+    console.error("Add item error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// UPDATE DONATION ITEM (draft only)
+// ------------------------------------------------------------------
+exports.updateDonationItem = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { itemId } = req.params;
+    const { quantity, unitValue, description } = req.body;
+
+    const item = await DonationItem.findByPk(itemId, {
+      include: [{ model: Donation, attributes: ["status"] }],
+      transaction: t,
+    });
+
+    if (!item) {
+      await t.rollback();
+      return res.status(404).json({ success: false, error: "Item not found" });
+    }
+
+    if (item.Donation.status !== "draft") {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({ success: false, error: "Donation is not editable" });
+    }
+
+    const updates = {};
+    if (quantity !== undefined) updates.quantity = quantity;
+    if (unitValue !== undefined) updates.unitValue = unitValue;
+    if (description !== undefined) updates.description = description;
+
+    if (quantity !== undefined || unitValue !== undefined) {
+      const qty =
+        quantity !== undefined
+          ? parseFloat(quantity)
+          : parseFloat(item.quantity);
+      const val =
+        unitValue !== undefined
+          ? parseFloat(unitValue)
+          : parseFloat(item.unitValue);
+      updates.totalValue = qty * val;
+    }
+
+    await item.update(updates, { transaction: t });
+    await recalculateDonationTotal(item.donationId, t);
+    await logDonationAction(
+      item.donationId,
+      req.user.userId,
+      "UPDATE_ITEM",
+      { itemId },
+      t,
+    );
+
+    await t.commit();
+    res.json({ success: true, message: "Item updated", data: item });
+  } catch (error) {
+    await t.rollback();
+    console.error("Update item error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// DELETE DONATION ITEM (draft only)
+// ------------------------------------------------------------------
+exports.deleteDonationItem = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { itemId } = req.params;
+
+    const item = await DonationItem.findByPk(itemId, {
+      include: [{ model: Donation, attributes: ["status", "donationId"] }],
+      transaction: t,
+    });
+
+    if (!item) {
+      await t.rollback();
+      return res.status(404).json({ success: false, error: "Item not found" });
+    }
+
+    if (item.Donation.status !== "draft") {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({ success: false, error: "Cannot delete item after submission" });
+    }
+
+    const donationId = item.donationId;
+    await item.destroy({ transaction: t });
+    await recalculateDonationTotal(donationId, t);
+    await logDonationAction(
+      donationId,
+      req.user.userId,
+      "DELETE_ITEM",
+      { itemId },
+      t,
+    );
+
+    await t.commit();
+    res.json({ success: true, message: "Item deleted" });
+  } catch (error) {
+    await t.rollback();
+    console.error("Delete item error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// SUBMIT FOR APPROVAL (draft → pending)
+// ------------------------------------------------------------------
+exports.submitForApproval = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+
+    const donation = await Donation.findByPk(id, {
+      include: [{ model: DonationItem }],
+      transaction: t,
+    });
+
+    if (!donation) {
+      await t.rollback();
+      return res
+        .status(404)
+        .json({ success: false, error: "Donation not found" });
+    }
+
+    if (donation.status !== "draft") {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({
+          success: false,
+          error: `Cannot submit from status: ${donation.status}`,
+        });
+    }
+
+    if (!donation.DonationItems || donation.DonationItems.length === 0) {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({
+          success: false,
+          error: "Donation must have at least one item",
+        });
+    }
+
+    await donation.update({ status: "pending" }, { transaction: t });
+
+    await DonationApproval.create(
+      {
+        donationId: id,
+        status: "pending",
+      },
+      { transaction: t },
+    );
+
+    await logDonationAction(id, req.user.userId, "SUBMIT_FOR_APPROVAL", {}, t);
+
+    await t.commit();
+
+    res.json({
+      success: true,
+      message: "Donation submitted for approval",
+      data: { donationId: id, status: "pending" },
+    });
+  } catch (error) {
+    await t.rollback();
+    console.error("Submit error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// APPROVE DONATION (pending → approved)
+// ------------------------------------------------------------------
+exports.approveDonation = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { comment } = req.body;
+
+    if (!["admin", "finance"].includes(req.user.role)) {
+      await t.rollback();
+      return res
+        .status(403)
+        .json({ success: false, error: "Insufficient permissions" });
+    }
+
+    const donation = await Donation.findByPk(id, { transaction: t });
+    if (!donation) {
+      await t.rollback();
+      return res
+        .status(404)
+        .json({ success: false, error: "Donation not found" });
+    }
+
+    if (donation.status !== "pending") {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({ success: false, error: "Donation is not pending approval" });
+    }
+
+    await donation.update({ status: "approved" }, { transaction: t });
+
+    const approval = await DonationApproval.findOne({
+      where: { donationId: id, status: "pending" },
+      transaction: t,
+    });
+    if (approval) {
+      await approval.update(
+        {
+          status: "approved",
+          approvedBy: req.user.userId,
+          comment: comment || null,
+        },
+        { transaction: t },
+      );
+    } else {
+      await DonationApproval.create(
+        {
+          donationId: id,
+          approvedBy: req.user.userId,
+          status: "approved",
+          comment,
+        },
+        { transaction: t },
+      );
+    }
+
+    await logDonationAction(id, req.user.userId, "APPROVE", { comment }, t);
+
+    await t.commit();
+
+    res.json({ success: true, message: "Donation approved" });
+  } catch (error) {
+    await t.rollback();
+    console.error("Approve error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// DISTRIBUTE DONATION (approved → distributed)
+// ------------------------------------------------------------------
+exports.distributeDonation = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+
+    const donation = await Donation.findByPk(id, { transaction: t });
+    if (!donation) {
+      await t.rollback();
+      return res
+        .status(404)
+        .json({ success: false, error: "Donation not found" });
+    }
+
+    if (donation.status !== "approved") {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({ success: false, error: "Donation must be approved first" });
+    }
+
+    await donation.update({ status: "distributed" }, { transaction: t });
+    await logDonationAction(id, req.user.userId, "DISTRIBUTE", {}, t);
+
+    await t.commit();
+    res.json({ success: true, message: "Donation marked as distributed" });
+  } catch (error) {
+    await t.rollback();
+    console.error("Distribute error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// DISTRIBUTE SPECIFIC ITEM TO BENEFICIARY(IES)
+// ------------------------------------------------------------------
+exports.distributeItem = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { itemId } = req.params;
+    const { distributions } = req.body;
+
+    if (
+      !distributions ||
+      !Array.isArray(distributions) ||
+      distributions.length === 0
+    ) {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({ success: false, error: "distributions array required" });
+    }
+
+    const item = await DonationItem.findByPk(itemId, {
+      include: [{ model: Donation }],
+      transaction: t,
+    });
+
+    if (!item) {
+      await t.rollback();
+      return res.status(404).json({ success: false, error: "Item not found" });
+    }
+
+    if (item.Donation.status !== "approved") {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({
+          success: false,
+          error: "Donation must be approved before distribution",
+        });
+    }
+
+    const totalDistQty = distributions.reduce(
+      (sum, d) => sum + parseFloat(d.quantity),
+      0,
+    );
+    if (totalDistQty > parseFloat(item.quantity)) {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({
+          success: false,
+          error: "Distribution quantity exceeds item quantity",
+        });
+    }
+
+    const createdDistributions = [];
+    for (const dist of distributions) {
+      const beneficiary = await Beneficiary.findByPk(dist.beneficiaryId, {
+        transaction: t,
+      });
+      if (!beneficiary) {
+        await t.rollback();
+        return res
+          .status(404)
+          .json({
+            success: false,
+            error: `Beneficiary ${dist.beneficiaryId} not found`,
+          });
+      }
+
+      const value = parseFloat(dist.quantity) * parseFloat(item.unitValue);
+      const distribution = await DonationDistribution.create(
+        {
+          donationItemId: itemId,
+          beneficiaryId: dist.beneficiaryId,
+          quantity: dist.quantity,
+          value,
+        },
+        { transaction: t },
+      );
+      createdDistributions.push(distribution);
+    }
+
+    await logDonationAction(
+      item.Donation.donationId,
+      req.user.userId,
+      "DISTRIBUTE_ITEM",
+      {
+        itemId,
+        distributions: distributions.length,
+      },
+      t,
+    );
+
+    await t.commit();
+
+    res.status(201).json({
+      success: true,
+      message: "Item distributed",
+      data: createdDistributions,
+    });
+  } catch (error) {
+    await t.rollback();
+    console.error("Distribute item error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// GET DISTRIBUTIONS LIST
+// ------------------------------------------------------------------
+exports.getDistributions = async (req, res) => {
+  try {
+    const { page = 1, size = 10, beneficiaryId, donationId } = req.query;
+    const { limit, offset } = getPagination(page, size);
+
+    const where = {};
+    if (beneficiaryId) where.beneficiaryId = parseInt(beneficiaryId);
+
+    const include = [
+      {
+        model: DonationItem,
+        include: [
+          {
+            model: Donation,
+            attributes: ["donationId", "donationDate"],
+            where: donationId
+              ? { donationId: parseInt(donationId) }
+              : undefined,
+          },
+        ],
+      },
+      { model: Beneficiary, attributes: ["beneficiaryId", "name", "type"] },
+    ];
+
+    const { count, rows } = await DonationDistribution.findAndCountAll({
+      where,
+      include,
+      limit,
+      offset,
+      order: [["created_at", "DESC"]],
+      distinct: true,
+    });
+
+    res.json({
+      success: true,
+      data: rows,
+      pagination: {
+        totalItems: count,
+        totalPages: Math.ceil(count / limit),
+        currentPage: parseInt(page),
+        pageSize: limit,
+      },
+    });
+  } catch (error) {
+    console.error("Get distributions error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// GET DISTRIBUTION BY ID
+// ------------------------------------------------------------------
+exports.getDistributionById = async (req, res) => {
+  try {
+    const { distributionId } = req.params;
+
+    const distribution = await DonationDistribution.findByPk(distributionId, {
+      include: [
+        {
+          model: DonationItem,
+          include: [
+            {
+              model: Donation,
+              include: [{ model: Company }, { model: Campaign }],
+            },
+          ],
+        },
+        { model: Beneficiary },
+      ],
+    });
+
+    if (!distribution) {
+      return res
+        .status(404)
+        .json({ success: false, error: "Distribution not found" });
+    }
+
+    res.json({ success: true, data: distribution });
+  } catch (error) {
+    console.error("Get distribution error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// GET APPROVAL HISTORY FOR A DONATION
+// ------------------------------------------------------------------
+exports.getApprovalHistory = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const approvals = await DonationApproval.findAll({
+      where: { donationId: id },
+      include: [
+        {
+          model: Employee,
+          attributes: ["employeeId", "firstName", "lastName"],
+        },
+      ],
+      order: [["created_at", "ASC"]],
+    });
+
+    res.json({ success: true, data: approvals });
+  } catch (error) {
+    console.error("Get approval history error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// GET LOGS FOR A DONATION
+// ------------------------------------------------------------------
+exports.getDonationLogs = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { page = 1, size = 20 } = req.query;
+    const { limit, offset } = getPagination(page, size);
+
+    const { count, rows } = await DonationLog.findAndCountAll({
+      where: { donationId: id },
+      include: [
+        {
+          model: Employee,
+          attributes: ["employeeId", "firstName", "lastName"],
+        },
+      ],
+      limit,
+      offset,
+      order: [["created_at", "DESC"]],
+    });
+
+    res.json({
+      success: true,
+      data: rows,
+      pagination: {
+        totalItems: count,
+        totalPages: Math.ceil(count / limit),
+        currentPage: parseInt(page),
+        pageSize: limit,
+      },
+    });
+  } catch (error) {
+    console.error("Get donation logs error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// DONATION STATS SUMMARY
+// ------------------------------------------------------------------
+exports.getDonationStats = async (req, res) => {
+  try {
+    const totalDonations = await Donation.count();
+    const totalValue =
+      (await Donation.sum("totalValue", {
+        where: { status: { [Op.ne]: "cancelled" } },
+      })) || 0;
+
+    const statusCounts = await Donation.findAll({
+      attributes: [
+        "status",
+        [sequelize.fn("COUNT", sequelize.col("status")), "count"],
+      ],
+      group: ["status"],
+    });
+
+    const byType = await DonationItem.findAll({
+      attributes: [
+        "type",
+        [sequelize.fn("SUM", sequelize.col("totalValue")), "total"],
+      ],
+      group: ["type"],
+    });
+
+    const recentDonations = await Donation.findAll({
+      limit: 5,
+      order: [["created_at", "DESC"]],
+      include: [{ model: Company, attributes: ["name"] }],
+    });
+
+    res.json({
+      success: true,
+      data: {
+        totalDonations,
+        totalValue,
+        statusBreakdown: statusCounts.reduce((acc, curr) => {
+          acc[curr.status] = parseInt(curr.dataValues.count);
+          return acc;
+        }, {}),
+        valueByType: byType.reduce((acc, curr) => {
+          acc[curr.type] = parseFloat(curr.dataValues.total);
+          return acc;
+        }, {}),
+        recentDonations,
+      },
+    });
+  } catch (error) {
+    console.error("Donation stats error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// DONATIONS BY CAMPAIGN
+// ------------------------------------------------------------------
+exports.getDonationsByCampaign = async (req, res) => {
+  try {
+    const stats = await Donation.findAll({
+      attributes: [
+        "campaignId",
+        [sequelize.fn("COUNT", sequelize.col("donationId")), "count"],
+        [sequelize.fn("SUM", sequelize.col("totalValue")), "total"],
+      ],
+      include: [{ model: Campaign, attributes: ["title"] }],
+      where: { status: { [Op.ne]: "cancelled" } },
+      group: ["campaignId", "Campaign.campaignId", "Campaign.title"],
+      order: [[sequelize.fn("SUM", sequelize.col("totalValue")), "DESC"]],
+    });
+
+    res.json({ success: true, data: stats });
+  } catch (error) {
+    console.error("Donations by campaign error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// ------------------------------------------------------------------
+// DONATIONS BY COMPANY
+// ------------------------------------------------------------------
+exports.getDonationsByCompany = async (req, res) => {
+  try {
+    const stats = await Donation.findAll({
+      attributes: [
+        "companyId",
+        [sequelize.fn("COUNT", sequelize.col("donationId")), "count"],
+        [sequelize.fn("SUM", sequelize.col("totalValue")), "total"],
+      ],
+      include: [{ model: Company, attributes: ["name", "type"] }],
+      where: { status: { [Op.ne]: "cancelled" } },
+      group: ["companyId", "Company.companyId", "Company.name", "Company.type"],
+      order: [[sequelize.fn("SUM", sequelize.col("totalValue")), "DESC"]],
+    });
+
+    res.json({ success: true, data: stats });
+  } catch (error) {
+    console.error("Donations by company error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
