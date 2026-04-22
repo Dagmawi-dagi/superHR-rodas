@@ -50,5 +50,9 @@ router.get("/:id/logs", donationController.getDonationLogs);
 router.get("/stats/summary", donationController.getDonationStats);
 router.get("/stats/by-campaign", donationController.getDonationsByCampaign);
 router.get("/stats/by-company", donationController.getDonationsByCompany);
-
+// Deductions
+router.post('/items/:itemId/deductions', donationController.addDeduction);
+router.get('/items/:itemId/deductions', donationController.getItemDeductions);
+// Returns
+router.post('/distributions/:distributionId/return', donationController.returnDistribution);
 module.exports = router;

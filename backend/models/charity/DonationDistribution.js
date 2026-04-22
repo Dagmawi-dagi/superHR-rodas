@@ -35,6 +35,10 @@ module.exports = (sequelize, DataTypes) => {
       value: {
         type: DataTypes.DECIMAL(15, 2),
       },
+      // NEW FIELDS
+      isReturned: { type: DataTypes.BOOLEAN, defaultValue: false, field: "is_returned" },
+      returnReason: { type: DataTypes.TEXT, field: "return_reason" },
+      returnedAt: { type: DataTypes.DATE, field: "returned_at" },
     },
     {
       sequelize,

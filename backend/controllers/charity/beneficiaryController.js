@@ -147,3 +147,53 @@ exports.deleteBeneficiary = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+
+
+exports.transferBeneficiary = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { toGroupId, reason } = req.body;
+    if (!toGroupId || !reason) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'toGroupId and reason required' });
+    }
+    const beneficiary = await Beneficiary.findByPk(id, { transaction: t });
+    if (!beneficiary) throw new Error('Beneficiary not found');
+    const toGroup = await BeneficiaryGroup.findByPk(toGroupId, { transaction: t });
+    if (!toGroup) throw new Error('Target group not found');
+    const fromGroupId = beneficiary.groupId;
+    beneficiary.groupId = toGroupId;
+    await beneficiary.save({ transaction: t });
+    await BeneficiaryTransfer.create({
+      beneficiaryId: id,
+      fromGroupId,
+      toGroupId,
+      reason,
+      transferredBy: req.user.userId
+    }, { transaction: t });
+    await t.commit();
+    res.json({ success: true, message: 'Beneficiary transferred' });
+  } catch (error) {
+    await t.rollback();
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+exports.getTransferHistory = async (req, res) => {
+  try {
+    const transfers = await BeneficiaryTransfer.findAll({
+      where: { beneficiaryId: req.params.id },
+      include: [
+        { model: BeneficiaryGroup, as: 'fromGroup', attributes: ['name'] },
+        { model: BeneficiaryGroup, as: 'toGroup', attributes: ['name'] },
+        { model: Employee, attributes: ['firstName', 'lastName'] }
+      ],
+      order: [['created_at', 'DESC']]
+    });
+    res.json({ success: true, data: transfers });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};

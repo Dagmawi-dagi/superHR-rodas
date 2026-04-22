@@ -62,7 +62,7 @@ app.use(
   "/api/charity/locations",
   require("./routes/charity/donationLocationRoutes"),
 );
-
+app.use('/api/charity/beneficiary-groups', require('./routes/charity/beneficiaryGroupRoutes'));
 // ============================================================================
 // GLOBAL MIDDLEWARE
 // ============================================================================

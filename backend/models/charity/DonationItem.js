@@ -41,6 +41,17 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DECIMAL(15, 2),
         field: "total_value",
       },
+      // NEW FIELDS
+      paymentMethod: {
+        type: DataTypes.ENUM("bank", "cash"),
+        field: "payment_method",
+        defaultValue: "bank",
+      },
+      unassignedDeduction: {
+        type: DataTypes.DECIMAL(15, 2),
+        field: "unassigned_deduction",
+        defaultValue: 0,
+      },
     },
     {
       sequelize,

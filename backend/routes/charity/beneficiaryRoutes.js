@@ -22,5 +22,6 @@ router.delete(
   authMiddleware("admin"),
   beneficiaryController.deleteBeneficiary,
 );
-
+router.post('/:id/transfer', authMiddleware('admin'), beneficiaryController.transferBeneficiary);
+router.get('/:id/transfers', beneficiaryController.getTransferHistory);
 module.exports = router;

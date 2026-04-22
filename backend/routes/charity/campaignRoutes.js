@@ -15,5 +15,6 @@ router.delete(
   authMiddleware("admin"),
   campaignController.deleteCampaign,
 );
-
+router.post('/:id/extend', authMiddleware('admin'), campaignController.extendCampaign);
+router.post('/:id/terminate', authMiddleware('admin'), campaignController.terminateCampaign);
 module.exports = router;

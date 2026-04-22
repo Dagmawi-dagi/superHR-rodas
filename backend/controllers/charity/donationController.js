@@ -1035,3 +1035,71 @@ exports.getDonationsByCompany = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+
+// Add deduction to money item
+exports.addDeduction = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { itemId } = req.params;
+    const { amount, reason, reassignedToBeneficiaryId } = req.body;
+    const item = await DonationItem.findByPk(itemId, { transaction: t });
+    if (!item) throw new Error('Item not found');
+    if (item.type !== 'money') throw new Error('Only money items can have deductions');
+    const deduction = await DonationDeduction.create({
+      donationItemId: itemId,
+      amount,
+      reason,
+      reassignedToBeneficiaryId,
+      createdBy: req.user.userId
+    }, { transaction: t });
+    if (!reassignedToBeneficiaryId) {
+      item.unassignedDeduction = parseFloat(item.unassignedDeduction || 0) + parseFloat(amount);
+      await item.save({ transaction: t });
+    }
+    await t.commit();
+    res.status(201).json({ success: true, data: deduction });
+  } catch (error) {
+    await t.rollback();
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+// Get deductions for an item
+exports.getItemDeductions = async (req, res) => {
+  try {
+    const deductions = await DonationDeduction.findAll({
+      where: { donationItemId: req.params.itemId },
+      include: [
+        { model: Beneficiary, as: 'reassignedTo', attributes: ['name'] },
+        { model: Employee, attributes: ['firstName', 'lastName'] }
+      ],
+      order: [['created_at', 'DESC']]
+    });
+    res.json({ success: true, data: deductions });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Return a distribution
+exports.returnDistribution = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { distributionId } = req.params;
+    const { reason } = req.body;
+    const distribution = await DonationDistribution.findByPk(distributionId, { transaction: t });
+    if (!distribution) throw new Error('Distribution not found');
+    if (distribution.isReturned) throw new Error('Already returned');
+    distribution.isReturned = true;
+    distribution.returnReason = reason;
+    distribution.returnedAt = new Date();
+    await distribution.save({ transaction: t });
+    // Optional: restore available quantity logic
+    await t.commit();
+    res.json({ success: true, message: 'Distribution returned' });
+  } catch (error) {
+    await t.rollback();
+    res.status(400).json({ success: false, error: error.message });
+  }
+};

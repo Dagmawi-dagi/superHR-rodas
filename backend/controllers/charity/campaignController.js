@@ -208,3 +208,36 @@ exports.getCampaignProgress = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+
+exports.extendCampaign = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newEndDate, reason } = req.body;
+    if (!newEndDate) return res.status(400).json({ success: false, error: 'newEndDate required' });
+    const campaign = await Campaign.findByPk(id);
+    if (!campaign) return res.status(404).json({ success: false, error: 'Campaign not found' });
+    campaign.endDate = newEndDate;
+    campaign.extensionReason = reason || null;
+    await campaign.save();
+    res.json({ success: true, data: campaign });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+exports.terminateCampaign = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    const campaign = await Campaign.findByPk(id);
+    if (!campaign) return res.status(404).json({ success: false, error: 'Campaign not found' });
+    campaign.status = 'cancelled';
+    campaign.actualEndDate = new Date();
+    campaign.terminationReason = reason || null;
+    await campaign.save();
+    res.json({ success: true, data: campaign });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};

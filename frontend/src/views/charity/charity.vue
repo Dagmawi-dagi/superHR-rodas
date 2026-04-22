@@ -3,9 +3,9 @@
         <!-- Page Header -->
         <div class="page-header">
             <div>
-                <h1 class="page-title">Users Management</h1>
+                <h1 class="page-title">Charity Management</h1>
                 <p class="page-subtitle">
-                    Manage system users, roles, and permissions
+                    Manage all charity workflow from here
                 </p>
             </div>
             <button class="btn-primary" @click="openUserModal()">
@@ -26,13 +26,58 @@
         <UsersStatsCards :stats="stats" />
 
         <!-- Filters Bar Component -->
+        <UsersFiltersBar
+            :filters="filters"
+            :roles="roles"
+            :departments="departments"
+            @update:filters="updateFilters"
+            @clear-filters="clearFilters"
+        />
 
         <!-- Loading State -->
+        <div v-if="loading" class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading users...</p>
+        </div>
 
         <!-- Users Table Component -->
         <!-- Users Table Component -->
+        <UsersTable
+            v-else
+            :users="users"
+            :selected-users="selectedUsers"
+            :select-all="selectAll"
+            :pagination="pagination"
+            @toggle-select-all="toggleSelectAll"
+            @toggle-user-select="toggleUserSelect"
+            @edit-user="openUserModal"
+            @reset-password="openResetPasswordModal"
+            @toggle-status="toggleStatus"
+            @go-to-page="goToPage"
+            @bulk-update="bulkUpdateStatus"
+            @clear-filters="clearFilters"
+        />
 
         <!-- Modals Component -->
+        <UsersModals
+            :show-modal="showModal"
+            :show-reset-modal="showResetModal"
+            :is-editing="isEditing"
+            :user-form="userForm"
+            :reset-user="resetUser"
+            :reset-password-data="resetPasswordData"
+            :roles="roles"
+            :departments="departments"
+            :errors="errors"
+            :saving="saving"
+            :resetting="resetting"
+            :toasts="toasts"
+            @close-modal="closeModal"
+            @close-reset-modal="closeResetModal"
+            @save-user="saveUser"
+            @reset-password="resetPassword"
+            @remove-toast="removeToast"
+        />
     </div>
 </template>
 

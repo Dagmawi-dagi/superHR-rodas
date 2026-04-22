@@ -47,6 +47,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         field: "created_by",
       },
+       // NEW FIELDS
+      actualEndDate: { type: DataTypes.DATEONLY, field: "actual_end_date" },
+      terminationReason: { type: DataTypes.TEXT, field: "termination_reason" },
+      extensionReason: { type: DataTypes.TEXT, field: "extension_reason" },
     },
     {
       sequelize,
