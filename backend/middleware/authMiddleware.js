@@ -9,7 +9,7 @@ const authMiddleware = (requiredRole = null) => {
   return (req, res, next) => {
     try {
       const authHeader = req.headers.authorization;
-      
+
       console.log('=== AUTH MIDDLEWARE DEBUG ===');
       console.log('Auth header present:', !!authHeader);
       

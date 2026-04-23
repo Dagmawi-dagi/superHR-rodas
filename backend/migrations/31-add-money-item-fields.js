@@ -15,4 +15,3 @@ module.exports = {
     await queryInterface.removeColumn('donation_items', 'unassigned_deduction');
     // Drop enum type if needed
   }
-};

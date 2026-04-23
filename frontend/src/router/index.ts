@@ -91,8 +91,13 @@ const router = createRouter({
         {
           path: "charity",
           name: "charity",
-          component: () => import("@/views/charity/charity.vue"),
+          component: () => import("@/views/charity/DonationsPage.vue"),
           meta: { title: "charity", roles: ["admin", "hr","attendance"] },
+        },
+        { 
+          path: '/charity/beneficiaries', 
+          name: "charity_beneficiaries",
+          component: () => import('@/views/charity/BeneficiariesPage.vue') 
         },
         {
           path: "",

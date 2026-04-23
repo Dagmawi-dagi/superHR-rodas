@@ -47,27 +47,23 @@ uploadDirs.forEach((dir) => {
 const userRoutes = require("./routes/userRoutes");
 const employeeRoutes = require("./routes/employeeRoutes");
 const settingRoutes = require("./routes/settingRoutes");
-// Charity Module Routes
-app.use("/api/charity/donations", require("./routes/charity/donationRoutes"));
-app.use(
-  "/api/charity/companies",
-  require("./routes/charity/donationCompanyRoutes"),
-);
-app.use("/api/charity/campaigns", require("./routes/charity/campaignRoutes"));
-app.use(
-  "/api/charity/beneficiaries",
-  require("./routes/charity/beneficiaryRoutes"),
-);
-app.use(
-  "/api/charity/locations",
-  require("./routes/charity/donationLocationRoutes"),
-);
-app.use('/api/charity/beneficiary-groups', require('./routes/charity/beneficiaryGroupRoutes'));
+//charity
+const donationRoutes = require("./routes/charity/donationRoutes")
+const donationCompanyRoutes = require("./routes/charity/donationCompanyRoutes")
+const campaignRoutes = require("./routes/charity/campaignRoutes")
+const beneficiaryRoutes = require("./routes/charity/beneficiaryRoutes")
+const donationLocationRoutes = require("./routes/charity/donationLocationRoutes")
+const beneficiaryGroupRoutes = require("./routes/charity/beneficiaryGroupRoutes")
 // ============================================================================
 // GLOBAL MIDDLEWARE
 // ============================================================================
 // REMOVED requestId, requestMonitor, trackError - they don't exist
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5173', // or your frontend port
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -102,7 +98,13 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/users", userRoutes);
 app.use("/api/employees", employeeRoutes);
 app.use("/api/settings", settingRoutes);
-
+// Charity Module Routes
+app.use("/api/charity/donations", donationRoutes);
+app.use("/api/charity/companies",donationCompanyRoutes);
+app.use("/api/charity/campaigns", campaignRoutes);
+app.use("/api/charity/beneficiaries",beneficiaryRoutes);
+app.use("/api/charity/locations",donationLocationRoutes);
+app.use('/api/charity/beneficiary-groups', beneficiaryGroupRoutes);
 // ============================================================================
 // HEALTH CHECK ENDPOINT
 // ============================================================================

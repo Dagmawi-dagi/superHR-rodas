@@ -4,7 +4,7 @@ const {
   DonationApproval,
   DonationLog,
   DonationDistribution,
-  Company,
+  DonationCompany,
   Campaign,
   Beneficiary,
   Employee,
@@ -78,12 +78,12 @@ exports.createDonation = async (req, res) => {
       });
     }
 
-    const company = await Company.findByPk(companyId, { transaction: t });
-    if (!company) {
+    const DonationCompany = await DonationCompany.findByPk(companyId, { transaction: t });
+    if (!DonationCompany) {
       await t.rollback();
       return res
         .status(404)
-        .json({ success: false, error: "Company not found" });
+        .json({ success: false, error: "DonationCompany not found" });
     }
 
     const campaign = await Campaign.findByPk(campaignId, { transaction: t });
@@ -111,7 +111,7 @@ exports.createDonation = async (req, res) => {
       req.user.userId,
       "CREATE",
       {
-        company: company.name,
+        DonationCompany: DonationCompany.name,
         campaign: campaign.title,
       },
       t,
@@ -161,7 +161,7 @@ exports.getAllDonations = async (req, res) => {
     }
 
     const include = [
-      { model: Company, attributes: ["companyId", "name", "type"] },
+      { model: DonationCompany, attributes: ["companyId", "name", "type"] },
       { model: Campaign, attributes: ["campaignId", "title", "category"] },
     ];
 
@@ -200,7 +200,7 @@ exports.getDonationById = async (req, res) => {
     const donation = await Donation.findByPk(id, {
       include: [
         {
-          model: Company,
+          model: DonationCompany,
           attributes: ["companyId", "name", "type", "contactInfo"],
         },
         {
@@ -849,7 +849,7 @@ exports.getDistributionById = async (req, res) => {
           include: [
             {
               model: Donation,
-              include: [{ model: Company }, { model: Campaign }],
+              include: [{ model: DonationCompany }, { model: Campaign }],
             },
           ],
         },
@@ -939,31 +939,33 @@ exports.getDonationLogs = async (req, res) => {
 exports.getDonationStats = async (req, res) => {
   try {
     const totalDonations = await Donation.count();
-    const totalValue =
-      (await Donation.sum("totalValue", {
-        where: { status: { [Op.ne]: "cancelled" } },
-      })) || 0;
+
+    const totalValue = await Donation.sum('total_value', {
+      where: { status: { [Op.ne]: 'cancelled' } }
+    }) || 0;
 
     const statusCounts = await Donation.findAll({
       attributes: [
-        "status",
-        [sequelize.fn("COUNT", sequelize.col("status")), "count"],
+        'status',
+        [sequelize.fn('COUNT', sequelize.col('donation_id')), 'count']
       ],
-      group: ["status"],
+      group: ['status'],
+      raw: true
     });
 
     const byType = await DonationItem.findAll({
       attributes: [
-        "type",
-        [sequelize.fn("SUM", sequelize.col("totalValue")), "total"],
+        'type',
+        [sequelize.fn('SUM', sequelize.col('total_value')), 'total']
       ],
-      group: ["type"],
+      group: ['type'],
+      raw: true
     });
 
     const recentDonations = await Donation.findAll({
       limit: 5,
-      order: [["created_at", "DESC"]],
-      include: [{ model: Company, attributes: ["name"] }],
+      order: [['created_at', 'DESC']],
+      include: [{ model: DonationCompany, attributes: ['name'] }]
     });
 
     res.json({
@@ -972,22 +974,21 @@ exports.getDonationStats = async (req, res) => {
         totalDonations,
         totalValue,
         statusBreakdown: statusCounts.reduce((acc, curr) => {
-          acc[curr.status] = parseInt(curr.dataValues.count);
+          acc[curr.status] = parseInt(curr.dataValues?.count ?? curr.count);
           return acc;
         }, {}),
         valueByType: byType.reduce((acc, curr) => {
-          acc[curr.type] = parseFloat(curr.dataValues.total);
+          acc[curr.type] = parseFloat(curr.dataValues?.total ?? curr.total);
           return acc;
         }, {}),
-        recentDonations,
-      },
+        recentDonations
+      }
     });
   } catch (error) {
-    console.error("Donation stats error:", error);
+    console.error('Donation stats error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
-
 // ------------------------------------------------------------------
 // DONATIONS BY CAMPAIGN
 // ------------------------------------------------------------------
@@ -995,19 +996,18 @@ exports.getDonationsByCampaign = async (req, res) => {
   try {
     const stats = await Donation.findAll({
       attributes: [
-        "campaignId",
-        [sequelize.fn("COUNT", sequelize.col("donationId")), "count"],
-        [sequelize.fn("SUM", sequelize.col("totalValue")), "total"],
+        'campaignId',
+        [sequelize.fn('COUNT', sequelize.col('donation_id')), 'count'],
+        [sequelize.fn('SUM', sequelize.col('total_value')), 'total']
       ],
-      include: [{ model: Campaign, attributes: ["title"] }],
-      where: { status: { [Op.ne]: "cancelled" } },
-      group: ["campaignId", "Campaign.campaignId", "Campaign.title"],
-      order: [[sequelize.fn("SUM", sequelize.col("totalValue")), "DESC"]],
+      include: [{ model: Campaign, attributes: ['title'] }],
+      where: { status: { [Op.ne]: 'cancelled' } },
+      group: ['campaignId', 'Campaign.campaignId', 'Campaign.title'],
+      order: [[sequelize.fn('SUM', sequelize.col('total_value')), 'DESC']]
     });
-
     res.json({ success: true, data: stats });
   } catch (error) {
-    console.error("Donations by campaign error:", error);
+    console.error('Donations by campaign error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -1019,22 +1019,22 @@ exports.getDonationsByCompany = async (req, res) => {
   try {
     const stats = await Donation.findAll({
       attributes: [
-        "companyId",
-        [sequelize.fn("COUNT", sequelize.col("donationId")), "count"],
-        [sequelize.fn("SUM", sequelize.col("totalValue")), "total"],
+        'companyId',
+        [sequelize.fn('COUNT', sequelize.col('donation_id')), 'count'],
+        [sequelize.fn('SUM', sequelize.col('total_value')), 'total']
       ],
-      include: [{ model: Company, attributes: ["name", "type"] }],
-      where: { status: { [Op.ne]: "cancelled" } },
-      group: ["companyId", "Company.companyId", "Company.name", "Company.type"],
-      order: [[sequelize.fn("SUM", sequelize.col("totalValue")), "DESC"]],
+      include: [{ model: DonationCompany, attributes: ['name', 'type'] }],
+      where: { status: { [Op.ne]: 'cancelled' } },
+      group: ['companyId', 'DonationCompany.companyId', 'DonationCompany.name', 'DonationCompany.type'],
+      order: [[sequelize.fn('SUM', sequelize.col('total_value')), 'DESC']]
     });
-
     res.json({ success: true, data: stats });
   } catch (error) {
-    console.error("Donations by company error:", error);
+    console.error('Donations by DonationCompany error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
 
 
 // Add deduction to money item

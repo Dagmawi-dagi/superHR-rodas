@@ -10,4 +10,3 @@ module.exports = {
     await queryInterface.removeColumn('campaigns', 'termination_reason');
     await queryInterface.removeColumn('campaigns', 'extension_reason');
   }
-};

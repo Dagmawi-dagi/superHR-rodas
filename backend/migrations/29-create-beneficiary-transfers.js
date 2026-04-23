@@ -12,4 +12,3 @@ module.exports = {
     });
   },
   async down(queryInterface) { await queryInterface.dropTable('beneficiary_transfers'); }
-};

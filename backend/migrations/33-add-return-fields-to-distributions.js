@@ -10,4 +10,3 @@ module.exports = {
     await queryInterface.removeColumn('donation_distributions', 'return_reason');
     await queryInterface.removeColumn('donation_distributions', 'returned_at');
   }
-};

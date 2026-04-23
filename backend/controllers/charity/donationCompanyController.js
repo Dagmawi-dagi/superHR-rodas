@@ -1,4 +1,4 @@
-const { Company, sequelize } = require("../../models");
+const { DonationCompany, sequelize } = require("../../models");
 const { Op } = require("sequelize");
 
 // ------------------------------------------------------------------
@@ -15,7 +15,7 @@ exports.getAllCompanies = async (req, res) => {
       where.name = { [Op.like]: `%${search}%` };
     }
 
-    const companies = await Company.findAll({
+    const companies = await DonationCompany.findAll({
       where,
       order: [["name", "ASC"]],
     });
@@ -33,7 +33,7 @@ exports.getAllCompanies = async (req, res) => {
 exports.getCompanyById = async (req, res) => {
   try {
     const { id } = req.params;
-    const company = await Company.findByPk(id);
+    const company = await DonationCompany.findByPk(id);
 
     if (!company) {
       return res
@@ -61,7 +61,7 @@ exports.createCompany = async (req, res) => {
         .json({ success: false, error: "Company name is required" });
     }
 
-    const company = await Company.create({
+    const company = await DonationCompany.create({
       name,
       type: type || "partner",
       contactInfo: contactInfo || {},
@@ -87,7 +87,7 @@ exports.updateCompany = async (req, res) => {
     const { id } = req.params;
     const { name, type, contactInfo, isActive } = req.body;
 
-    const company = await Company.findByPk(id);
+    const company = await DonationCompany.findByPk(id);
     if (!company) {
       return res
         .status(404)
@@ -100,7 +100,7 @@ exports.updateCompany = async (req, res) => {
     if (contactInfo !== undefined) updates.contactInfo = contactInfo;
     if (isActive !== undefined) updates.isActive = isActive;
 
-    await company.update(updates);
+    await DonationCompany.update(updates);
 
     res.json({ success: true, message: "Company updated", data: company });
   } catch (error) {
@@ -116,14 +116,14 @@ exports.deleteCompany = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const company = await Company.findByPk(id);
+    const company = await DonationCompany.findByPk(id);
     if (!company) {
       return res
         .status(404)
         .json({ success: false, error: "Company not found" });
     }
 
-    await company.update({ isActive: false });
+    await DonationCompany.update({ isActive: false });
 
     res.json({ success: true, message: "Company deactivated" });
   } catch (error) {

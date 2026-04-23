@@ -1,4 +1,4 @@
-const { Beneficiary, Location, sequelize } = require("../../models");
+const { Beneficiary, DonationLocation, sequelize } = require("../../models");
 const { Op } = require("sequelize");
 
 // ------------------------------------------------------------------
@@ -19,7 +19,7 @@ exports.getAllBeneficiaries = async (req, res) => {
       where,
       include: [
         {
-          model: Location,
+          model: DonationLocation,
           attributes: ["locationId", "region", "city", "woreda"],
         },
       ],
@@ -41,7 +41,7 @@ exports.getBeneficiaryById = async (req, res) => {
     const { id } = req.params;
 
     const beneficiary = await Beneficiary.findByPk(id, {
-      include: [{ model: Location }],
+      include: [{ model: DonationLocation }],
     });
 
     if (!beneficiary) {

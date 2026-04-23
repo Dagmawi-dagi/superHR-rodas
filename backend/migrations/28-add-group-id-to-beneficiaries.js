@@ -9,4 +9,3 @@ module.exports = {
     });
   },
   async down(queryInterface) { await queryInterface.removeColumn('beneficiaries', 'group_id'); }
-};
