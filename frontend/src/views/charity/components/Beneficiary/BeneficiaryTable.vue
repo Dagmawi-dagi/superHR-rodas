@@ -22,8 +22,8 @@
           <td>
             <span :class="['type-badge', `type-${ben.type}`]">{{ ben.type }}</span>
           </td>
-          <td>{{ ben.BeneficiaryGroup?.name || 'Unassigned' }}</td>
-          <td>{{ ben.Location ? `${ben.Location.region}, ${ben.Location.city}` : 'N/A' }}</td>
+          <td>{{ ben.BeneficiaryGroup ? `${ben.BeneficiaryGroup.name} - ${ ben.BeneficiaryGroup.manager.firstName} ${ ben.BeneficiaryGroup.manager.lastName }`: 'Unassigned' }}</td>
+          <td>{{ ben.DonationLocation ? `${ben.DonationLocation.region}, ${ben.DonationLocation.city}` : 'N/A' }}</td>
           <td>{{ ben.contactInfo?.phone || ben.contactInfo?.email || 'N/A' }}</td>
           <td class="actions-cell">
             <button class="action-btn view" @click="$emit('view', ben)" title="View Details">

@@ -9,7 +9,7 @@ module.exports = {
         primaryKey: true,
       },
       type: {
-        type: Sequelize.ENUM("individual", "group", "organization"),
+        type: Sequelize.ENUM("individual", "organization"),
       },
       name: {
         type: Sequelize.STRING(200),

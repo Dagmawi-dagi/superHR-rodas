@@ -137,7 +137,7 @@ const roleMenus = {
             icon: "ChartBarIcon",
             badge: null,
         },
-        { name: "charity", path: "/charity", icon: "userPlus ", badge: null },
+        { name: "charity", path: "/charity/donations", icon: "userPlus ", badge: null },
         { name: "Settings", path: "/settings", icon: "CogIcon", badge: null },
     ],
     hr: [
@@ -255,7 +255,7 @@ const roleMenus = {
             icon: "HomeIcon",
             badge: null,
         },
-        { name: "charity", path: "/charity", icon: "userPlus ", badge: null },
+        { name: "charity", path: "/charity/donations", icon: "userPlus ", badge: null },
     ],
 };
 

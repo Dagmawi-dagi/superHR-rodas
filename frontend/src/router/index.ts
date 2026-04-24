@@ -89,15 +89,49 @@ const router = createRouter({
           meta: { title: "HR attendance Config", roles: ["admin", "hr","attendance"] },
         },
         {
-          path: "charity",
-          name: "charity",
-          component: () => import("@/views/charity/DonationsPage.vue"),
-          meta: { title: "charity", roles: ["admin", "hr","attendance"] },
+          path: "charity/donations",
+          name: "donations",
+          component: () => import("@/views/charity/Donations.vue"),
+          meta: { title: "charity", roles: ["admin"] },
+        },
+        { 
+          path: '/charity/donations/create', 
+          name: 'donations-create', 
+          component: () => import('@/views/charity/DonationCreate.vue') 
+        },
+        { 
+          path: '/charity/donations/:id', 
+          component: () => import('@/views/charity/DonationDetail.vue') 
         },
         { 
           path: '/charity/beneficiaries', 
-          name: "charity_beneficiaries",
-          component: () => import('@/views/charity/BeneficiariesPage.vue') 
+          name: "charity-beneficiaries",
+          component: () => import('@/views/charity/Beneficiaries.vue'),
+        },
+        { 
+          path: '/charity/beneficiaries/create', 
+          name: 'beneficiaries-create', 
+          component: () => import('@/views/charity/BeneficiaryCreate.vue') 
+        },
+        { 
+          path: '/charity/companies', 
+          name: 'companies', 
+          component: () => import('@/views/charity/Companies.vue') 
+        },
+        { 
+          path: '/charity/companies/create', 
+          name: 'companies-create', 
+          component: () => import('@/views/charity/CompanyCreate.vue') 
+        },
+        { 
+          path: '/charity/campaigns', 
+          name: 'campaigns', 
+          component: () => import('@/views/charity/Campaigns.vue') 
+        },
+        { 
+          path: '/charity/campaigns/create', 
+          name: 'campaigns-create', 
+          component: () => import('@/views/charity/CampaignCreate.vue') 
         },
         {
           path: "",

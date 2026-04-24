@@ -4,9 +4,9 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class BeneficiaryGroup extends Model {
     static associate(models) {
-      BeneficiaryGroup.hasMany(models.Beneficiary, { foreignKey: "groupId" });
+      BeneficiaryGroup.hasMany(models.Beneficiary, { foreignKey: "group_id" });
       BeneficiaryGroup.belongsTo(models.Employee, {
-        foreignKey: "managerEmployeeId",
+        foreignKey: "manager_employee_id",
         as: "manager",
       });
     }

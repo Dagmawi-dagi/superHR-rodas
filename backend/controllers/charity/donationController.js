@@ -78,12 +78,12 @@ exports.createDonation = async (req, res) => {
       });
     }
 
-    const DonationCompany = await DonationCompany.findByPk(companyId, { transaction: t });
-    if (!DonationCompany) {
+    const Donation_Company = await DonationCompany.findByPk(companyId, { transaction: t });
+    if (!Donation_Company) {
       await t.rollback();
       return res
         .status(404)
-        .json({ success: false, error: "DonationCompany not found" });
+        .json({ success: false, error: "Donation_Company not found" });
     }
 
     const campaign = await Campaign.findByPk(campaignId, { transaction: t });
@@ -706,14 +706,9 @@ exports.distributeItem = async (req, res) => {
       return res.status(404).json({ success: false, error: "Item not found" });
     }
 
-    if (item.Donation.status !== "approved") {
+    if (!['draft', 'pending', 'approved'].includes(item.Donation.status)) {
       await t.rollback();
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: "Donation must be approved before distribution",
-        });
+      return res.status(400).json({ success: false, error: 'Cannot distribute at this donation status' });
     }
 
     const totalDistQty = distributions.reduce(

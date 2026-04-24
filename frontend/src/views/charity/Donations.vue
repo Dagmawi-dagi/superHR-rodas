@@ -78,10 +78,10 @@ import { useRouter } from 'vue-router';
 import CharityService from '@/stores/charity';
 import { useAuthStore } from '@/stores/auth';
 
-import DonationStatsCards from './components/DonationStatsCards.vue';
-import DonationFiltersBar from './components/DonationFiltersBar.vue';
-import DonationTable from './components/DonationTable.vue';
-import DonationModals from './components/DonationModals.vue';
+import DonationStatsCards from './components/Donation/DonationStatsCards.vue';
+import DonationFiltersBar from './components/Donation/DonationFiltersBar.vue';
+import DonationTable from './components/Donation/DonationTable.vue';
+import DonationModals from './components/Donation/DonationModals.vue';
 
 const router = useRouter();
 const authStore = useAuthStore();

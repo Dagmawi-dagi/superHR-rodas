@@ -1,4 +1,4 @@
-const { Beneficiary, DonationLocation, sequelize } = require("../../models");
+const { Beneficiary, DonationLocation, BeneficiaryGroup, Employee, BeneficiaryTransfer, sequelize } = require("../../models");
 const { Op } = require("sequelize");
 
 // ------------------------------------------------------------------
@@ -21,6 +21,15 @@ exports.getAllBeneficiaries = async (req, res) => {
         {
           model: DonationLocation,
           attributes: ["locationId", "region", "city", "woreda"],
+        },
+        {
+          model: BeneficiaryGroup,
+          attributes: ["groupId", "name"],
+          include: {
+            model: Employee,
+            as: "manager",               // must match the alias defined in the association
+            attributes: ["employeeId", "firstName", "lastName"],
+          },
         },
       ],
       order: [["name", "ASC"]],
@@ -62,19 +71,26 @@ exports.getBeneficiaryById = async (req, res) => {
 // ------------------------------------------------------------------
 exports.createBeneficiary = async (req, res) => {
   try {
-    const { type, name, contactInfo, locationId } = req.body;
+    const { type, name, contactInfo, locationId, groupId } = req.body;
 
     if (!name || !type) {
-      return res
-        .status(400)
-        .json({ success: false, error: "Name and type are required" });
+      return res.status(400).json({ success: false, error: "Name and type are required" });
+    }
+
+    // Validate group existence if groupId given
+    if (groupId) {
+      const group = await BeneficiaryGroup.findByPk(groupId);
+      if (!group) {
+        return res.status(400).json({ success: false, error: "Beneficiary group not found" });
+      }
     }
 
     const beneficiary = await Beneficiary.create({
       type,
       name,
       contactInfo: contactInfo || {},
-      locationId,
+      locationId: locationId || null,
+      groupId: groupId || null,   // Now works because the model has this field
     });
 
     res.status(201).json({
@@ -92,15 +108,13 @@ exports.createBeneficiary = async (req, res) => {
 // UPDATE BENEFICIARY
 // ------------------------------------------------------------------
 exports.updateBeneficiary = async (req, res) => {
-  try {
+try {
     const { id } = req.params;
-    const { type, name, contactInfo, locationId } = req.body;
+    const { type, name, contactInfo, locationId, groupId } = req.body;
 
     const beneficiary = await Beneficiary.findByPk(id);
     if (!beneficiary) {
-      return res
-        .status(404)
-        .json({ success: false, error: "Beneficiary not found" });
+      return res.status(404).json({ success: false, error: "Beneficiary not found" });
     }
 
     const updates = {};
@@ -108,14 +122,11 @@ exports.updateBeneficiary = async (req, res) => {
     if (name !== undefined) updates.name = name;
     if (contactInfo !== undefined) updates.contactInfo = contactInfo;
     if (locationId !== undefined) updates.locationId = locationId;
+    if (groupId !== undefined) updates.groupId = groupId;   // allow group change
 
     await beneficiary.update(updates);
 
-    res.json({
-      success: true,
-      message: "Beneficiary updated",
-      data: beneficiary,
-    });
+    res.json({ success: true, message: "Beneficiary updated", data: beneficiary });
   } catch (error) {
     console.error("Update beneficiary error:", error);
     res.status(500).json({ success: false, error: error.message });

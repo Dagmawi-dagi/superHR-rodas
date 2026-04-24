@@ -4,12 +4,10 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class Beneficiary extends Model {
     static associate(models) {
-      Beneficiary.hasMany(models.DonationDistribution, {
-        foreignKey: "beneficiaryId",
-      });
-      Beneficiary.belongsTo(models.DonationLocation, {
-        foreignKey: "locationId",
-      });
+      Beneficiary.hasMany(models.DonationDistribution, { foreignKey: "beneficiary_id"});
+      Beneficiary.belongsTo(models.DonationLocation, { foreignKey: "location_id",});
+      Beneficiary.belongsTo(models.BeneficiaryGroup, { foreignKey: "group_id" });
+      Beneficiary.hasMany(models.BeneficiaryTransfer, { foreignKey: "beneficiary_id" });
     }
   }
 
@@ -22,7 +20,8 @@ module.exports = (sequelize, DataTypes) => {
         field: "beneficiary_id",
       },
       type: {
-        type: DataTypes.ENUM("individual", "group", "organization"),
+        type: DataTypes.ENUM("individual", "organization"),
+        allowNull:false
       },
       name: {
         type: DataTypes.STRING(200),
@@ -36,7 +35,12 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         field: "location_id",
       },
+      groupId: {
+        type: DataTypes.INTEGER,
+        field: "group_id",
+      },
     },
+
     {
       sequelize,
       modelName: "Beneficiary",
