@@ -1,10 +1,10 @@
 <template>
   <div class="modal-overlay" @click.self="$emit('close')">
-    <div class="modal" style="max-width: 800px; max-height: 90vh; overflow-y: auto;">
+    <div class="modal" style="max-width: 850px; max-height: 90vh; overflow-y: auto;">
       <h3>Add Donation Item &amp; Assign Beneficiaries</h3>
       
       <form @submit.prevent="handleSubmit">
-        <!-- Item Details -->
+        <!-- ============ Item Details ============ -->
         <div class="section">
           <h4>Item Details</h4>
           <div class="form-row">
@@ -44,10 +44,47 @@
           </div>
         </div>
 
-        <!-- Distribution Assignment -->
+        <!-- ============ Group Assignment (Bulk) ============ -->
+        <!-- ============ Group Assignment (Bulk) ============ -->
         <div class="section">
-          <h4>Assign to Beneficiaries</h4>
-          <p class="help">Distribute the item's value/quantity among beneficiaries.</p>
+          <h4>Assign by Beneficiary Group</h4>
+          <p class="help">
+            Select one or more groups, then click the button to auto‑fill an equal split
+            among all members of the selected groups. You can then adjust individual amounts below.
+          </p>
+          <div class="group-checkboxes">
+            <label
+              v-for="group in groups"
+              :key="group.groupId"
+              class="checkbox-label"
+            >
+              <span class="custom-checkbox">
+                <input
+                  type="checkbox"
+                  :value="group.groupId"
+                  v-model="selectedGroupIds"
+                />
+                <span class="checkmark"></span>
+              </span>
+              <span>{{ group.name }}</span>
+            </label>
+          </div>
+          <button
+            type="button"
+            class="btn-secondary"
+            :disabled="selectedGroupIds.length === 0"
+            @click="assignFromGroups"
+          >
+            Assign to Selected Groups ({{ selectedGroupIds.length }})
+          </button>
+        </div>
+
+        <!-- ============ Individual Assignment ============ -->
+        <div class="section">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h4 style="margin:0;">Individual Assignment</h4>
+            <span class="help">Or manually add beneficiaries</span>
+          </div>
           <div v-for="(row, index) in distributionRows" :key="index" class="dist-row">
             <div class="field beneficiary">
               <label>Beneficiary</label>
@@ -72,16 +109,22 @@
             </div>
             <button type="button" class="remove-row" @click="removeDistributionRow(index)">×</button>
           </div>
-          <button type="button" class="btn-secondary" @click="addDistributionRow">+ Add Beneficiary</button>
+<!--           <button type="button" class="btn-secondary" @click="addDistributionRow">
+            + Add Beneficiary
+          </button> -->
           <div class="dist-summary">
             <span>
               <strong>{{ form.type === 'money' ? 'Total Assigned:' : 'Total Quantity Assigned:' }}</strong>
               {{ form.type === 'money' ? formatCurrency(totalAssignedValue) : totalAssignedQuantity }}
             </span>
             <span v-if="exceedsTotal" class="error">Exceeds item total!</span>
+            <span v-else-if="totalAssignedValue < totalItemValue && distributionRows.length > 0" class="warning">
+              (Remaining: {{ formatCurrency(totalItemValue - totalAssignedValue) }})
+            </span>
           </div>
         </div>
 
+        <!-- ============ Actions ============ -->
         <div class="modal-actions">
           <button type="button" @click="$emit('close')" class="btn-outline">Cancel</button>
           <button type="submit" class="btn-primary" :disabled="!isValid || saving">
@@ -104,12 +147,24 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'save'])
 
+// All beneficiaries (loaded once)
 const beneficiariesList = ref([])
-const loadBeneficiaries = async () => {
-  const res = await CharityService.getBeneficiaries()
-  if (res.success) beneficiariesList.value = res.data
+
+// All groups
+const groups = ref([])
+// Selected group for bulk assignment
+const selectedGroupIds = ref([])   // multi-select
+
+const loadData = async () => {
+  const [benRes, groupRes] = await Promise.all([
+    CharityService.getBeneficiaries(),
+    CharityService.getBeneficiaryGroups()
+  ])
+  if (benRes.success) beneficiariesList.value = benRes.data
+  if (groupRes.success) groups.value = groupRes.data
 }
 
+// ------ Item form ------
 const form = reactive({
   type: 'goods',
   description: '',
@@ -118,6 +173,7 @@ const form = reactive({
   paymentMethod: 'bank'
 })
 
+// ------ Distribution rows ------
 const distributionRows = ref([])
 
 const totalItemValue = computed(() => {
@@ -150,17 +206,56 @@ const isValid = computed(() => {
   return allRowsValid && !exceedsTotal.value
 })
 
+// ------ Row management ------
 function addDistributionRow() {
   distributionRows.value.push({ beneficiaryId: '', quantity: 0, value: 0 })
 }
+
 function removeDistributionRow(index) {
   distributionRows.value.splice(index, 1)
 }
 
+// ------ Bulk assign from group ------
+function assignFromGroups() {
+  if (selectedGroupIds.value.length === 0) return
+
+  // Gather all members from all selected groups
+  const selectedIds = selectedGroupIds.value.map(id => parseInt(id))
+  const allMembers = beneficiariesList.value.filter(b => selectedIds.includes(b.groupId))
+
+  if (allMembers.length === 0) {
+    alert('No beneficiaries found in selected groups.')
+    return
+  }
+
+  // Clear existing rows
+  distributionRows.value = []
+
+  if (form.type === 'money') {
+    const amountPerPerson = totalItemValue.value / allMembers.length
+    allMembers.forEach(member => {
+      distributionRows.value.push({
+        beneficiaryId: member.beneficiaryId,
+        quantity: 0,
+        value: amountPerPerson
+      })
+    })
+  } else {
+    const qtyPerPerson = parseFloat(form.quantity) / allMembers.length
+    allMembers.forEach(member => {
+      distributionRows.value.push({
+        beneficiaryId: member.beneficiaryId,
+        quantity: qtyPerPerson,
+        value: 0
+      })
+    })
+  }
+}
+
+// ------ Submit ------
 function handleSubmit() {
   if (!isValid.value) return
 
-  // Build item payload
   const itemData = {
     type: form.type,
     description: form.description,
@@ -169,7 +264,6 @@ function handleSubmit() {
     paymentMethod: form.type === 'money' ? form.paymentMethod : undefined
   }
 
-  // Build distribution payload
   const distributions = distributionRows.value.map(row => {
     const dist = { beneficiaryId: row.beneficiaryId }
     if (form.type === 'money') {
@@ -182,16 +276,16 @@ function handleSubmit() {
     return dist
   })
 
-  // Emit combined data
   emit('save', { itemData, distributions })
 }
 
 const formatCurrency = (v) => v ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'ETB' }).format(v) : '0.00'
 
-onMounted(loadBeneficiaries)
+onMounted(loadData)
 </script>
 
 <style scoped>
+/* Keep all existing styles from previous version, add a few new ones */
 .modal-overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index:1000; }
 .modal { background: white; border-radius: 16px; padding: 24px; width: 100%; }
 h3 { margin-bottom: 16px; }
@@ -211,9 +305,87 @@ input, select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px
 .remove-row { background: none; border: none; color: #ef4444; font-size: 18px; cursor: pointer; padding: 4px; }
 .dist-summary { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; font-size: 14px; }
 .error { color: #dc2626; font-weight: 600; }
+.warning { color: #b45309; font-size: 13px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 16px; }
 .btn-outline { background: white; border: 1px solid #e2e8f0; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
 .btn-primary { background: linear-gradient(135deg,#6a11cb,#7c3aed); color: white; border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; }
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-secondary { background: #f1f5f9; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+.group-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+}
+
+/* custom checkbox container */
+.custom-checkbox {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* hide native checkbox */
+.custom-checkbox input {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+/* the visible checkmark */
+.custom-checkbox .checkmark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 2px solid #cbd5e1;
+  border-radius: 4px;
+  background: white;
+  transition: all 0.2s;
+}
+
+/* hover */
+.custom-checkbox:hover .checkmark {
+  border-color: #6a11cb;
+}
+
+/* checked state */
+.custom-checkbox input:checked ~ .checkmark {
+  background: #6a11cb;
+  border-color: #6a11cb;
+}
+
+/* checkmark icon (simple tick via pseudo) */
+.custom-checkbox .checkmark::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  opacity: 0;
+}
+
+/* show tick when checked */
+.custom-checkbox input:checked ~ .checkmark::after {
+  opacity: 1;
+}
 </style>

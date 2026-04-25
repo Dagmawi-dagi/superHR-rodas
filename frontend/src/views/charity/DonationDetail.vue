@@ -117,12 +117,12 @@
                   <polyline points="22 4 12 14.01 9 11.01" />
                 </svg>
                 </button>
-                <button v-if="donation?.status === 'draft'" @click="openEditItemModal(item)" class="action-btn edit" title="Edit">
+                <!-- <button v-if="donation?.status === 'draft'" @click="openEditItemModal(item)" class="action-btn edit" title="Edit">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                   <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
                 </svg>
-                </button>
+                </button> -->
                 <button v-if="donation?.status === 'draft'" @click="deleteItem(item)" class="action-btn delete" title="Delete">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -141,35 +141,77 @@
             <tr v-if="expandedItems.includes(item.donationItemId)">
               <td colspan="7" class="dist-detail-cell">
                 <div class="dist-detail">
-                  <h4>Assigned Beneficiaries</h4>
-                  <div v-if="item.DonationDistributions && item.DonationDistributions.length">
-                    <table class="mini-table">
-                      <thead>
-                        <tr>
-                          <th>Beneficiary</th>
-                          <th>{{ item.type === 'money' ? 'Amount' : 'Quantity' }}</th>
-                          <th>Value</th>
-                          <th>Returned?</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr v-for="dist in item.DonationDistributions" :key="dist.distributionId">
-                          <td>{{ dist.Beneficiary?.name || 'Unknown' }} ({{ dist.Beneficiary?.type }})</td>
-                          <td>{{ item.type === 'money' ? formatCurrency(dist.value) : dist.quantity }}</td>
-                          <td>{{ formatCurrency(dist.value) }}</td>
-                          <td>
-                            <span v-if="dist.isReturned" class="returned">Yes ({{ dist.returnReason }})</span>
-                            <span v-else>No</span>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <!-- Show remaining unassigned -->
-                    <div class="unassigned" v-if="item.type === 'money' && item.unassignedDeduction > 0">
-                      <em>Unassigned deduction: {{ formatCurrency(item.unassignedDeduction) }}</em>
+                  <div class="dist-header">
+                    <h4>Assigned Beneficiaries</h4>
+                    <div class="view-toggle">
+                      <button
+                        :class="['toggle-btn', { active: (distViewMode[item.donationItemId] || 'individual') === 'individual' }]"
+                        @click="toggleDistView(item.donationItemId, 'individual')"
+                      >
+                        Individual
+                      </button>
+                      <button
+                        :class="['toggle-btn', { active: (distViewMode[item.donationItemId] || 'individual') === 'group' }]"
+                        @click="toggleDistView(item.donationItemId, 'group')"
+                      >
+                        By Group
+                      </button>
                     </div>
                   </div>
-                  <p v-else class="no-dist">No beneficiaries assigned yet.</p>
+
+                  <!-- Individual view -->
+                  <div v-if="(distViewMode[item.donationItemId] || 'individual') === 'individual'">
+                    <div v-if="item.DonationDistributions && item.DonationDistributions.length">
+                      <table class="mini-table">
+                        <thead>
+                          <tr>
+                            <th>Beneficiary</th>
+                            <th>{{ item.type === 'money' ? 'Amount' : 'Quantity' }}</th>
+                            <th>Value</th>
+                            <th>Returned?</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="dist in item.DonationDistributions" :key="dist.distributionId">
+                            <td>{{ dist.Beneficiary?.name || 'Unknown' }} ({{ dist.Beneficiary?.type }})</td>
+                            <td>{{ item.type === 'money' ? formatCurrency(dist.value) : dist.quantity }}</td>
+                            <td>{{ formatCurrency(dist.value) }}</td>
+                            <td>
+                              <span v-if="dist.isReturned" class="returned">Yes ({{ dist.returnReason }})</span>
+                              <span v-else>No</span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <div class="unassigned" v-if="item.type === 'money' && item.unassignedDeduction > 0">
+                        <em>Unassigned deduction: {{ formatCurrency(item.unassignedDeduction) }}</em>
+                      </div>
+                    </div>
+                    <p v-else class="no-dist">No beneficiaries assigned yet.</p>
+                  </div>
+
+                  <!-- Group view -->
+                  <div v-else>
+                    <div v-if="item.DonationDistributions && item.DonationDistributions.length">
+                      <table class="mini-table">
+                        <thead>
+                          <tr>
+                            <th>Group</th>
+                            <th>{{ item.type === 'money' ? 'Total Amount' : 'Total Quantity' }}</th>
+                            <th>Total Value</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr v-for="(group, groupId) in groupedDistributions(item)" :key="groupId">
+                            <td>{{ getGroupName(groupId) }}</td>
+                            <td>{{ item.type === 'money' ? formatCurrency(group.totalValue) : group.totalQuantity }}</td>
+                            <td>{{ formatCurrency(group.totalValue) }}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <p v-else class="no-dist">No beneficiaries assigned yet.</p>
+                  </div>
                 </div>
               </td>
             </tr>
@@ -270,11 +312,57 @@ const editingItem = ref(null)
 const toasts = ref([])
 const expandedItems = ref([])
 
+const distViewMode = ref({}) // { [itemId]: 'individual' | 'group' }
+
+function toggleDistView(itemId, mode) {
+  distViewMode.value[itemId] = mode
+}
+// existing… then add:
+const groups = ref([])
+const loadGroups = async () => {
+  const res = await CharityService.getBeneficiaryGroups()
+  if (res.success) groups.value = res.data
+}
+
+// Group distributions by beneficiary's groupId
+function groupedDistributions(item) {
+  if (!item.DonationDistributions) return {}
+  const groups = {}
+  item.DonationDistributions.forEach(dist => {
+    const beneficiary = dist.Beneficiary
+    if (!beneficiary) return
+    const gId = beneficiary.groupId || 'unassigned'
+    if (!groups[gId]) {
+      groups[gId] = { totalValue: 0, totalQuantity: 0 }
+    }
+    groups[gId].totalValue += parseFloat(dist.value || 0)
+    groups[gId].totalQuantity += parseFloat(dist.quantity || 0)
+  })
+  return groups
+}
+
+function getGroupName(groupId) {
+  console.log(groupId)
+  if (!groupId || groupId === 'unassigned') return 'Unassigned'
+  const group = groups.value.find(g => g.groupId === parseInt(groupId))
+  return group ? `${group?.manager?.firstName} ${group?.manager?.lastName}  <${group.name}>` : 'Unassigned'
+}
+
+
 function toggleDistributions(itemId) {
   const idx = expandedItems.value.indexOf(itemId)
-  if (idx > -1) expandedItems.value.splice(idx, 1)
-  else expandedItems.value.push(itemId)
+  if (idx > -1) {
+    expandedItems.value.splice(idx, 1)
+  } else {
+    expandedItems.value.push(itemId)
+    // set default view mode for newly expanded item
+    if (!distViewMode.value[itemId]) {
+      distViewMode.value[itemId] = 'individual'
+    }
+  }
 }
+
+
 const beneficiaries = ref([])
 const showDistributeModal = ref(false)
 const distributingItem = ref(null)
@@ -409,12 +497,14 @@ const formatDate = (d) => d ? new Date(d).toLocaleDateString() : 'N/A'
 const formatCurrency = (v) => v ? new Intl.NumberFormat('en-US',{style:'currency',currency:'ETB'}).format(v) : '0.00'
 const getTypeLabel = (t) => ({ money:'Money', goods:'Goods', service:'Service' })[t] || t
 
-// onMounted(() => loadDonation())
 
+// Add loadGroups to onMounted dependencies
 onMounted(async () => {
   await loadDonation()
-  loadDependencies()
+  await loadDependencies()
+  await loadGroups()
 })
+
 </script>
 
 <style scoped>
@@ -447,9 +537,9 @@ onMounted(async () => {
 .type-service { background: #fef3c7; color: #92400e; }
 .total-cell { font-weight: 600; }
 .actions-cell { display: flex; gap: 6px; }
-.action-btn { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; background: none; color: #64748b; }
-.action-btn.edit:hover { background: #3b82f620; color: #3b82f6; }
-.action-btn.delete:hover { background: #ef444420; color: #dc2626; }
+.action-btn { width: 28px; height: 28px; border-radius: 6px; display: flex; padding: 5px;align-items: center; justify-content: center; cursor: pointer; border: none; background: none; color: #64748b; }
+.action-btn.edit { background: #3b82f620; color: #3b82f6; }
+.action-btn.delete { background: #ef444420; color: #dc2626; }
 .empty-items { text-align: center; padding: 20px; color: #94a3b8; }
 .modal-overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index:1000; }
 .modal { background: white; border-radius: 16px; padding: 24px; width: 400px; max-width: 90%; }
@@ -471,4 +561,28 @@ onMounted(async () => {
 .returned { color: #dc2626; font-size: 11px; }
 .unassigned { margin-top: 8px; color: #64748b; font-style: italic; }
 .no-dist { color: #94a3b8; font-size: 13px; }
+.dist-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.view-toggle {
+  display: flex;
+  gap: 4px;
+}
+.toggle-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #475569;
+}
+.toggle-btn.active {
+  background: #6a11cb;
+  color: white;
+  border-color: #6a11cb;
+}
 </style>

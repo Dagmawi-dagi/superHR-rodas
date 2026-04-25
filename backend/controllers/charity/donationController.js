@@ -221,7 +221,7 @@ exports.getDonationById = async (req, res) => {
               include: [
                 {
                   model: Beneficiary,
-                  attributes: ["beneficiaryId", "name", "type"],
+                  attributes: ["beneficiaryId", "name", "type", "groupId"],
                 },
               ],
             },
