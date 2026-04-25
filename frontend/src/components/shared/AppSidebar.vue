@@ -14,19 +14,46 @@
 
         <!-- Navigation Menu -->
         <nav class="nav-menu">
-            <router-link
-                v-for="item in menuItems"
-                :key="item.path"
-                :to="item.path"
-                class="nav-item"
-                :class="{ active: isActiveRoute(item.path) }"
-            >
-                <component :is="getIcon(item.icon)" class="nav-icon" />
-                <span class="nav-text">{{ item.name }}</span>
-                <span v-if="item.badge" class="nav-badge">{{
-                    item.badge
-                }}</span>
-            </router-link>
+            <template v-for="item in menuItems" :key="item.path">
+                <router-link 
+                    v-if="!item?.dropdownMenu"
+                    :to="item.path"
+                    class="nav-item"
+                    :class="{ active: isActiveRoute(item.path) }"
+                >
+                    <component :is="getIcon(item.icon)" class="nav-icon" />
+                    <span class="nav-text">{{ item.name }}</span>
+                    <span v-if="item.badge" class="nav-badge">{{ item.badge }}</span>
+                </router-link>
+                <!-- Dropdown -->
+                  <div v-if="item?.dropdownMenu">
+                    <button
+                      @click="toggleDropdown"
+                      class="!py-2.5 !px-3 w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-[#2d3a54] hover:text-white transition-colors"
+                      :class="{ 'bg-[#2d3a54] text-white': dropdownMenuOpen }"
+                    >
+                      <div class="flex items-center space-x-3 gap-2 ">
+                        <component :is="getIcon(item.icon)" class="nav-icon" />
+                        <span class="text-sm">{{item.name }}</span>
+                      </div>
+                      <component class="nav-icon !w-3 !min-w-px" :is="dropdownMenuOpen ? getIcon('ChevronDownIcon') : getIcon('ChevronRightIcon')" :size="14" />
+                    </button>
+                    <div v-if="dropdownMenuOpen" class="mt-1 ml-9 space-y-1 !pl-4 overflow-hidden transition-all duration-300">
+                        <router-link 
+                            v-for="item in item.dropdownMenu"
+                            :to="item.path"
+                            class="nav-item !py-1 !px-1"
+                            :class="{ active: isActiveRoute(item.path) }"
+                        >
+                            <component :is="getIcon(item.icon)" class="nav-icon !w-4 !min-w-px" />
+                            <span class="nav-text">{{ item.name }}</span>
+                            <span v-if="item.badge" class="nav-badge">{{ item.badge }}</span>
+                        </router-link>
+                    </div>
+                  </div>
+            </template>
+
+
         </nav>
 
         <!-- Bottom Section with Status -->
@@ -65,7 +92,10 @@ const props = defineProps({
 });
 
 const emit = defineEmits(["update:collapsed"]);
-
+const dropdownMenuOpen = ref(false)
+const toggleDropdown = () => {
+  dropdownMenuOpen.value = !dropdownMenuOpen.value
+}
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
@@ -137,8 +167,41 @@ const roleMenus = {
             icon: "ChartBarIcon",
             badge: null,
         },
-        { name: "charity", path: "/charity/donations", icon: "userPlus ", badge: null },
-        { name: "Settings", path: "/settings", icon: "CogIcon", badge: null },
+
+        { 
+            name: "Charity", 
+            path: "/charity/donations", 
+            icon: "HeartIcon", 
+            badge: null,  
+            dropdownMenu:[
+                {
+                    name: "donations", 
+                    path: "/charity/donations", 
+                    icon: "userPlus", 
+                },
+                {
+                    name: "beneficiaries", 
+                    path: "/charity/beneficiaries", 
+                    icon: "userPlusIcon", 
+                },
+                {
+                    name: "campaigns", 
+                    path: "/charity/campaigns", 
+                    icon: "userPlus", 
+                },
+                {
+                    name: "companies", 
+                    path: "/charity/companies", 
+                    icon: "userPlus", 
+                },
+            ]
+        },
+        { 
+            name: "Settings", 
+            path: "/settings", 
+            icon: "CogIcon", 
+            badge: null 
+        },
     ],
     hr: [
         {
@@ -247,15 +310,6 @@ const roleMenus = {
         },
         // { name: 'My Leaves', path: '/my-leaves', icon: 'CalendarIcon', badge: null },
         // { name: 'My Salary', path: '/my-salary', icon: 'CurrencyDollarIcon', badge: null }
-    ],
-    charity: [
-        {
-            name: "Dashboard",
-            path: "/dashboard",
-            icon: "HomeIcon",
-            badge: null,
-        },
-        { name: "charity", path: "/charity/donations", icon: "userPlus ", badge: null },
     ],
 };
 
