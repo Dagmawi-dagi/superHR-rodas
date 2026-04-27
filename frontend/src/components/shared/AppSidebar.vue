@@ -175,25 +175,26 @@ const roleMenus = {
             badge: null,  
             dropdownMenu:[
                 {
-                    name: "donations", 
-                    path: "/charity/donations", 
-                    icon: "userPlus", 
+                    name: "companies", 
+                    path: "/charity/companies", 
+                    icon: "BuildingOffice2Icon", 
                 },
                 {
                     name: "beneficiaries", 
                     path: "/charity/beneficiaries", 
-                    icon: "userPlusIcon", 
+                    icon: "UsersIcon", 
                 },
                 {
                     name: "campaigns", 
                     path: "/charity/campaigns", 
-                    icon: "userPlus", 
+                    icon: "SpeakerWaveIcon", 
                 },
                 {
-                    name: "companies", 
-                    path: "/charity/companies", 
-                    icon: "userPlus", 
+                    name: "donations", 
+                    path: "/charity/donations", 
+                    icon: "ArchiveBoxIcon", 
                 },
+
             ]
         },
         { 
@@ -310,6 +311,43 @@ const roleMenus = {
         },
         // { name: 'My Leaves', path: '/my-leaves', icon: 'CalendarIcon', badge: null },
         // { name: 'My Salary', path: '/my-salary', icon: 'CurrencyDollarIcon', badge: null }
+    ],
+    charity: [        
+        {
+            name: "Dashboard",
+            path: "/dashboard",
+            icon: "HomeIcon",
+            badge: null,
+        },
+        { 
+            name: "Charity", 
+            path: "/charity/donations", 
+            icon: "HeartIcon", 
+            badge: null,  
+            dropdownMenu:[
+                {
+                    name: "companies", 
+                    path: "/charity/companies", 
+                    icon: "BuildingOffice2Icon", 
+                },
+                {
+                    name: "beneficiaries", 
+                    path: "/charity/beneficiaries", 
+                    icon: "UsersIcon", 
+                },
+                {
+                    name: "campaigns", 
+                    path: "/charity/campaigns", 
+                    icon: "SpeakerWaveIcon", 
+                },
+                {
+                    name: "donations", 
+                    path: "/charity/donations", 
+                    icon: "ArchiveBoxIcon", 
+                },
+
+            ]
+        },
     ],
 };
 

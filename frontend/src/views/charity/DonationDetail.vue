@@ -381,7 +381,7 @@ const removeToast = (id) => toasts.value = toasts.value.filter(t => t.id !== id)
 
 // Permissions
 const canSubmit = computed(() => donation.value?.status === 'draft')
-const canApprove = computed(() => donation.value?.status === 'pending' && ['admin','finance'].includes(authStore.user?.role))
+const canApprove = computed(() => donation.value?.status === 'pending' && ['admin','finance',"charity"].includes(authStore.user?.role))
 const canDistribute = computed(() => donation.value?.status === 'approved')
 const canCancel = computed(() => donation.value?.status !== 'cancelled')
 

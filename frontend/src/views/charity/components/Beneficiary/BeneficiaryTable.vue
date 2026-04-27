@@ -117,10 +117,10 @@ defineEmits(['view', 'edit', 'transfer', 'delete', 'go-to-page', 'clear-filters'
 .actions-cell { display: flex; gap: 6px; }
 .action-btn { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; background: none; color: #64748b; }
 .action-btn svg { width: 14px; height: 14px; }
-.action-btn.view:hover { background: #10b98120; color: #10b981; }
-.action-btn.edit:hover { background: #3b82f620; color: #3b82f6; }
-.action-btn.transfer:hover { background: #f59e0b20; color: #d97706; }
-.action-btn.delete:hover { background: #ef444420; color: #dc2626; }
+.action-btn.view { background: #10b98120; color: #10b981; }
+.action-btn.edit { background: #3b82f620; color: #3b82f6; }
+.action-btn.transfer { background: #f59e0b20; color: #d97706; }
+.action-btn.delete { background: #ef444420; color: #dc2626; }
 .pagination { display: flex; justify-content: center; align-items: center; gap: 16px; margin-top: 20px; padding: 16px; }
 .page-btn { padding: 8px 12px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; }
 .page-btn svg { width: 16px; height: 16px; }

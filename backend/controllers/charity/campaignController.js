@@ -1,41 +1,71 @@
 const { Campaign, Donation, Employee, sequelize } = require("../../models");
 const { Op } = require("sequelize");
+// ------------------------------------------------------------------
+// helpers 
+// ------------------------------------------------------------------
 
+const getPagination = (page, size, defaultLimit = 10, maxLimit = 100) => {
+  const limit = size ? Math.min(parseInt(size), maxLimit) : defaultLimit;
+  const offset = page ? (parseInt(page) - 1) * limit : 0;
+  return { limit, offset };
+};
+
+const buildSortingOptions = (sortBy, sortOrder, allowedFields = ['name', 'type', 'created_at']) => {
+  const field = allowedFields.includes(sortBy) ? sortBy : 'name';
+  const order = sortOrder && sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+  return [[field, order]];
+};
 // ------------------------------------------------------------------
 // GET ALL CAMPAIGNS
 // ------------------------------------------------------------------
 exports.getAllCampaigns = async (req, res) => {
   try {
-    const { status, category, search } = req.query;
+    const { page, size, sortBy, sortOrder, status, category, search } = req.query;
+    const { limit, offset } = getPagination(page, size);
     const where = {};
 
-    if (status) where.status = status;
-    if (category) where.category = category;
-    if (search) {
+    if (status && status.trim() !== '') {
+      where.status = status;
+    }
+    if (category && category.trim() !== '') {
+      where.category = category;
+    }
+    if (search && search.trim() !== '') {
       where[Op.or] = [
         { title: { [Op.like]: `%${search}%` } },
-        { description: { [Op.like]: `%${search}%` } },
+        { description: { [Op.like]: `%${search}%` } }
       ];
     }
 
-    const campaigns = await Campaign.findAll({
+    const allowedSortFields = ['title', 'startDate', 'endDate', 'targetAmount', 'status', 'category', 'created_at'];
+    const order = buildSortingOptions(sortBy, sortOrder, allowedSortFields);
+
+    const { count, rows: campaigns } = await Campaign.findAndCountAll({
       where,
+      limit,
+      offset,
+      order,
       include: [
-        {
-          model: Employee,
-          attributes: ["employeeId", "firstName", "lastName"],
-        },
+        { model: Employee, attributes: ['employeeId', 'firstName', 'lastName'] }
       ],
-      order: [["startDate", "DESC"]],
+      distinct: true,
     });
 
-    res.json({ success: true, data: campaigns });
+    res.json({
+      success: true,
+      data: campaigns,
+      pagination: {
+        totalItems: count,
+        totalPages: Math.ceil(count / limit),
+        currentPage: parseInt(page) || 1,
+        pageSize: limit
+      }
+    });
   } catch (error) {
-    console.error("Get campaigns error:", error);
+    console.error('Get campaigns error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
-
 // ------------------------------------------------------------------
 // GET CAMPAIGN BY ID
 // ------------------------------------------------------------------

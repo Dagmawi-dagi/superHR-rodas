@@ -22,7 +22,7 @@ const router = createRouter({
           component: () => import("@/views/dashboard/Dashboard.vue"),
           meta: {
             title: "Dashboard",
-            roles: ["admin", "hr", "finance", "employee","attendance"],
+            roles: ["admin", "hr", "finance", "employee","attendance","charity"],
           },
         },
         {
@@ -31,7 +31,7 @@ const router = createRouter({
           component: () => import("@/views/employee/Profile.vue"),
           meta: {
             title: "My Profile",
-            roles: ["admin", "hr", "finance", "employee","attendance"],
+            roles: ["admin", "hr", "finance", "employee","attendance","charity"],
           },
         },
         {
@@ -92,46 +92,82 @@ const router = createRouter({
           path: "charity/donations",
           name: "donations",
           component: () => import("@/views/charity/Donations.vue"),
-          meta: { title: "charity", roles: ["admin"] },
+          meta: { 
+            title: "charity", 
+            roles: ["admin","charity"],
+          },
+
         },
         { 
           path: '/charity/donations/create', 
           name: 'donations-create', 
-          component: () => import('@/views/charity/DonationCreate.vue') 
+          component: () => import('@/views/charity/DonationCreate.vue') ,
+          meta: { 
+            title: "charity", 
+            roles: ["admin","charity"],
+          },
         },
         { 
           path: '/charity/donations/:id', 
-          component: () => import('@/views/charity/DonationDetail.vue') 
+          component: () => import('@/views/charity/DonationDetail.vue') ,
+          meta: { 
+            title: "charity", 
+            roles: ["admin","charity"],
+          },
         },
         { 
           path: '/charity/beneficiaries', 
           name: "charity-beneficiaries",
           component: () => import('@/views/charity/Beneficiaries.vue'),
+          meta: { 
+            title: "charity", 
+            roles: ["admin","charity"],
+          },
         },
         { 
           path: '/charity/beneficiaries/create', 
           name: 'beneficiaries-create', 
-          component: () => import('@/views/charity/BeneficiaryCreate.vue') 
+          component: () => import('@/views/charity/BeneficiaryCreate.vue'),
+          meta: { 
+            title: "charity", 
+            roles: ["admin","charity"],
+          },
         },
         { 
           path: '/charity/companies', 
           name: 'companies', 
-          component: () => import('@/views/charity/Companies.vue') 
+          component: () => import('@/views/charity/Companies.vue'),
+          meta: { 
+            title: "charity", 
+            roles: ["admin","charity"],
+          },
         },
         { 
           path: '/charity/companies/create', 
           name: 'companies-create', 
-          component: () => import('@/views/charity/CompanyCreate.vue') 
+          component: () => import('@/views/charity/CompanyCreate.vue'),
+          meta: { 
+            title: "charity", 
+            roles: ["admin","charity"],
+          }, 
         },
         { 
           path: '/charity/campaigns', 
           name: 'campaigns', 
-          component: () => import('@/views/charity/Campaigns.vue') 
+          component: () => import('@/views/charity/Campaigns.vue'),
+          meta: { 
+            title: "charity", 
+            roles: ["admin","charity"],
+          }, 
         },
         { 
           path: '/charity/campaigns/create', 
           name: 'campaigns-create', 
-          component: () => import('@/views/charity/CampaignCreate.vue') 
+          component: () => import('@/views/charity/CampaignCreate.vue') ,
+          meta: { 
+            title: "charity", 
+            roles: ["admin","charity"],
+          },
         },
         {
           path: "",

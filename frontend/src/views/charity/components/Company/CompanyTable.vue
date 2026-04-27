@@ -65,8 +65,8 @@ defineEmits(['view', 'edit', 'toggle-status', 'go-to-page', 'clear-filters'])
 .actions-cell { display: flex; gap: 6px; }
 .action-btn { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; background: none; color: #64748b; }
 .action-btn svg { width: 14px; height: 14px; }
-.action-btn.view:hover { background: #10b98120; color: #10b981; }
-.action-btn.edit:hover { background: #3b82f620; color: #3b82f6; }
-.action-btn.toggle:hover { background: #f59e0b20; color: #d97706; }
+.action-btn.view { background: #10b98120; color: #10b981; }
+.action-btn.edit { background: #3b82f620; color: #3b82f6; }
+.action-btn.toggle { background: #f59e0b20; color: #d97706; }
 .empty-state { text-align: center; padding: 40px; color: #94a3b8; }
 </style>

@@ -9,19 +9,19 @@ router.get("/", beneficiaryController.getAllBeneficiaries);
 router.get("/:id", beneficiaryController.getBeneficiaryById);
 router.post(
   "/",
-  authMiddleware("admin"),
+  authMiddleware(),
   beneficiaryController.createBeneficiary,
 );
 router.put(
   "/:id",
-  authMiddleware("admin"),
+  authMiddleware(),
   beneficiaryController.updateBeneficiary,
 );
 router.delete(
   "/:id",
-  authMiddleware("admin"),
+  authMiddleware(),
   beneficiaryController.deleteBeneficiary,
 );
-router.post('/:id/transfer', authMiddleware('admin'), beneficiaryController.transferBeneficiary);
+router.post('/:id/transfer', authMiddleware(), beneficiaryController.transferBeneficiary);
 router.get('/:id/transfers', beneficiaryController.getTransferHistory);
 module.exports = router;

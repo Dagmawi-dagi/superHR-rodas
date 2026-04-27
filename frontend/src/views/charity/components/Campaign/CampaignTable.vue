@@ -94,10 +94,10 @@ const formatDate = (d) => d ? new Date(d).toLocaleDateString() : ''
 .actions-cell { display: flex; gap: 6px; }
 .action-btn { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; background: none; color: #64748b; }
 .action-btn svg { width: 14px; height: 14px; }
-.action-btn.view:hover { background: #10b98120; color: #10b981; }
-.action-btn.edit:hover { background: #3b82f620; color: #3b82f6; }
-.action-btn.extend:hover { background: #f59e0b20; color: #d97706; }
-.action-btn.terminate:hover { background: #ef444420; color: #dc2626; }
+.action-btn.view { background: #10b98120; color: #10b981; }
+.action-btn.edit { background: #3b82f620; color: #3b82f6; }
+.action-btn.extend { background: #f59e0b20; color: #d97706; }
+.action-btn.terminate { background: #ef444420; color: #dc2626; }
 .empty-state { text-align: center; padding: 60px; color: #94a3b8; }
 .empty-state-content svg { width: 48px; height: 48px; margin-bottom: 16px; opacity: 0.5; }
 .empty-state-content h3 { font-size: 16px; margin-bottom: 8px; }

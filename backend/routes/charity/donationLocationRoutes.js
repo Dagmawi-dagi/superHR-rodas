@@ -7,8 +7,8 @@ router.use(authMiddleware());
 
 router.get("/", locationController.getAllLocations);
 router.get("/:id", locationController.getLocationById);
-router.post("/", authMiddleware("admin"), locationController.createLocation);
-router.put("/:id", authMiddleware("admin"), locationController.updateLocation);
+router.post("/", authMiddleware(), locationController.createLocation);
+router.put("/:id", authMiddleware(), locationController.updateLocation);
 router.delete(
   "/:id",
   authMiddleware("admin"),

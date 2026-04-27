@@ -14,7 +14,7 @@
           Add Company
         </router-link>
       </div>
-    </div>
+    </div>  
 
     <!-- Stats Cards -->
     <CompanyStatsCards :stats="stats" />
@@ -43,6 +43,7 @@
         @go-to-page="goToPage"
         @clear-filters="clearFilters"
       />
+
     </div>
 
     <!-- Toggle Status Modal (optional) -->
@@ -58,6 +59,16 @@
         </div>
       </div>
     </div>
+
+    <!-- Edit Modal -->
+    <EditCompanyModal
+      v-if="showEditModal"
+      :company="editingCompany"
+      :saving="savingEdit"
+      @close="closeEditModal"
+      @save="saveEdit"
+    />
+    
 
     <!-- Toasts -->
     <div class="toast-container">
@@ -75,11 +86,17 @@ import CharityService from '@/stores/charity'
 import CompanyStatsCards from './components/Company/CompanyStatsCards.vue'
 import CompanyFiltersBar from './components/Company/CompanyFiltersBar.vue'
 import CompanyTable from './components/Company/CompanyTable.vue'
+import EditCompanyModal from './components/Company/EditCompanyModal.vue'
 
 const router = useRouter()
 const companies = ref([])
 const loading = ref(false)
 const toggling = ref(false)
+const showEditModal = ref(false)
+const editingCompany = ref(null)
+const savingEdit = ref(false)
+
+
 
 const stats = ref({
   total: 0,
@@ -159,7 +176,29 @@ const computeStats = (data) => {
 }
 
 const viewCompany = (company) => router.push(`/charity/companies/${company.companyId}`)
-const editCompany = (company) => router.push(`/charity/companies/${company.companyId}/edit`)
+const editCompany = (company) => {
+  editingCompany.value = company
+  showEditModal.value = true
+}
+const closeEditModal = () => {
+  showEditModal.value = false
+  editingCompany.value = null
+}
+const saveEdit = async (data) => {
+  if (!editingCompany.value) return
+  savingEdit.value = true
+  const res = await CharityService.updateCompany(editingCompany.value.companyId, data)
+  savingEdit.value = false
+  if (res.success) {
+    addToast(`Company "${data.name}" updated successfully`)
+    closeEditModal()
+    loadCompanies()
+  } else {
+    addToast(res.error || 'Update failed', 'error')
+  }
+}
+
+
 
 const toggleStatus = (company) => {
   companyToToggle.value = company

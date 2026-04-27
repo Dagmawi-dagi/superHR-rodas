@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from './interceptor'
 
-export type UserRole = 'admin' | 'hr' | 'finance' | 'employee'
+export type UserRole = 'admin' | 'hr' | 'finance' | 'employee' | 'charity'
 
 export interface User {
   userId: number

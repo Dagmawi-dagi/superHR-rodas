@@ -1,43 +1,80 @@
 const { Beneficiary, DonationLocation, BeneficiaryGroup, Employee, BeneficiaryTransfer, sequelize } = require("../../models");
 const { Op } = require("sequelize");
+// ------------------------------------------------------------------
+// helpers 
+// ------------------------------------------------------------------
 
+const getPagination = (page, size, defaultLimit = 10, maxLimit = 100) => {
+  const limit = size ? Math.min(parseInt(size), maxLimit) : defaultLimit;
+  const offset = page ? (parseInt(page) - 1) * limit : 0;
+  return { limit, offset };
+};
+
+const buildSortingOptions = (sortBy, sortOrder, allowedFields = ['name', 'type', 'created_at']) => {
+  const field = allowedFields.includes(sortBy) ? sortBy : 'name';
+  const order = sortOrder && sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+  return [[field, order]];
+};
 // ------------------------------------------------------------------
 // GET ALL BENEFICIARIES
 // ------------------------------------------------------------------
 exports.getAllBeneficiaries = async (req, res) => {
   try {
-    const { type, locationId, search } = req.query;
+    const { page, size, sortBy, sortOrder, type, groupId, locationId, search } = req.query;
+    const { limit, offset } = getPagination(page, size);
     const where = {};
 
-    if (type) where.type = type;
-    if (locationId) where.locationId = parseInt(locationId);
-    if (search) {
+    if (type && type.trim() !== '') {
+      where.type = type;
+    }
+    if (groupId && groupId !== 'all') {
+      where.groupId = parseInt(groupId);
+    }
+    if (locationId && locationId !== 'all') {
+      where.locationId = parseInt(locationId);
+    }
+    if (search && search.trim() !== '') {
       where.name = { [Op.like]: `%${search}%` };
     }
 
-    const beneficiaries = await Beneficiary.findAll({
+    const allowedSortFields = ['name', 'type', 'created_at'];
+    const order = buildSortingOptions(sortBy, sortOrder, allowedSortFields);
+
+    const { count, rows: beneficiaries } = await Beneficiary.findAndCountAll({
       where,
+      limit,
+      offset,
+      order,
       include: [
         {
           model: DonationLocation,
-          attributes: ["locationId", "region", "city", "woreda"],
+          attributes: ['locationId', 'region', 'city', 'woreda']
         },
         {
           model: BeneficiaryGroup,
-          attributes: ["groupId", "name"],
+          attributes: ['groupId', 'name'],
           include: {
             model: Employee,
-            as: "manager",               // must match the alias defined in the association
-            attributes: ["employeeId", "firstName", "lastName"],
-          },
-        },
+            as: 'manager',
+            attributes: ['employeeId', 'firstName', 'lastName']
+          }
+        }
       ],
-      order: [["name", "ASC"]],
+      distinct: true,
     });
 
-    res.json({ success: true, data: beneficiaries });
+    res.json({
+      success: true,
+      data: beneficiaries,
+      pagination: {
+        totalItems: count,
+        totalPages: Math.ceil(count / limit),
+        currentPage: parseInt(page) || 1,
+        pageSize: limit
+      }
+    });
   } catch (error) {
-    console.error("Get beneficiaries error:", error);
+    console.error('Get beneficiaries error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

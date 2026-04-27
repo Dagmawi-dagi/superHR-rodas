@@ -66,7 +66,7 @@
                 />
                 <span class="checkmark"></span>
               </span>
-              <span>{{ group.name }}</span>
+              <span>{{ `${group?.manager.firstName} ${group?.manager.lastName}  <${group?.name}>` }}</span>
             </label>
           </div>
           <button
@@ -316,6 +316,7 @@ input, select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 12px;
+  flex-direction: column; 
 }
 
 .checkbox-label {
