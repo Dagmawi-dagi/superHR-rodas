@@ -1,17 +1,14 @@
 const { Campaign, Donation, Employee, sequelize } = require("../../models");
 const { Op } = require("sequelize");
-// ------------------------------------------------------------------
-// helpers 
-// ------------------------------------------------------------------
-
+// ---------- HELPER ----------
 const getPagination = (page, size, defaultLimit = 10, maxLimit = 100) => {
   const limit = size ? Math.min(parseInt(size), maxLimit) : defaultLimit;
   const offset = page ? (parseInt(page) - 1) * limit : 0;
   return { limit, offset };
 };
 
-const buildSortingOptions = (sortBy, sortOrder, allowedFields = ['name', 'type', 'created_at']) => {
-  const field = allowedFields.includes(sortBy) ? sortBy : 'name';
+const buildSortingOptions = (sortBy, sortOrder, allowedFields) => {
+  const field = allowedFields.includes(sortBy) ? sortBy : allowedFields[0];
   const order = sortOrder && sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
   return [[field, order]];
 };
@@ -22,8 +19,9 @@ exports.getAllCampaigns = async (req, res) => {
   try {
     const { page, size, sortBy, sortOrder, status, category, search } = req.query;
     const { limit, offset } = getPagination(page, size);
-    const where = {};
 
+    // Build filters
+    const where = {};
     if (status && status.trim() !== '') {
       where.status = status;
     }
@@ -32,11 +30,12 @@ exports.getAllCampaigns = async (req, res) => {
     }
     if (search && search.trim() !== '') {
       where[Op.or] = [
-        { title: { [Op.like]: `%${search}%` } },
-        { description: { [Op.like]: `%${search}%` } }
+        { title: { [Op.like]: `%${search.trim()}%` } },
+        { description: { [Op.like]: `%${search.trim()}%` } }
       ];
     }
 
+    // Allowed sort fields – only columns that exist in the campaigns table
     const allowedSortFields = ['title', 'startDate', 'endDate', 'targetAmount', 'status', 'category', 'created_at'];
     const order = buildSortingOptions(sortBy, sortOrder, allowedSortFields);
 
@@ -58,8 +57,8 @@ exports.getAllCampaigns = async (req, res) => {
         totalItems: count,
         totalPages: Math.ceil(count / limit),
         currentPage: parseInt(page) || 1,
-        pageSize: limit
-      }
+        pageSize: limit,
+      },
     });
   } catch (error) {
     console.error('Get campaigns error:', error);
