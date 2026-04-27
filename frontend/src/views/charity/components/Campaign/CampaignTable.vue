@@ -29,9 +29,9 @@
             </span>
           </td>
           <td class="actions-cell">
-            <button class="action-btn view" @click="$emit('view', c)" title="View">
+            <!-- <button class="action-btn view" @click="$emit('view', c)" title="View">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-            </button>
+            </button> -->
             <button class="action-btn edit" @click="$emit('edit', c)" title="Edit">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" /></svg>
             </button>

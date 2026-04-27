@@ -16,7 +16,8 @@ const createDirectories = () => {
     'uploads/documents/id_cards',
     'uploads/documents/cv_resumes',
     'uploads/documents/degrees',
-    'uploads/documents/guarantees'
+    'uploads/documents/guarantees',
+    'uploads/documents/charityEvidences'
   ];
   dirs.forEach(dir => ensureDirectoryExists(dir));
 };
@@ -46,7 +47,8 @@ const getDocumentFolder = (documentType) => {
     'id_card': 'id_cards',
     'cv': 'cv_resumes',
     'degree': 'degrees',
-    'guarantee_letter': 'guarantees'
+    'guarantee_letter': 'guarantees',
+    'charity_evidence': 'charityEvidences'
   };
   return folders[documentType] || 'others';
 };

@@ -7,12 +7,12 @@
         </svg>
       </router-link>
       <div class="header-title">
-        <h1>New Campaign</h1>
-        <p>Create a fundraising campaign</p>
+        <h1>{{ isEdit ? 'Edit Campaign' : 'New Campaign' }}</h1>
+        <p>{{ isEdit ? 'Update campaign details' : 'Create a fundraising campaign' }}</p>
       </div>
     </div>
 
-    <form @submit.prevent="createCampaign" class="campaign-form">
+    <form @submit.prevent="handleSubmit" class="campaign-form">
       <!-- Basic Info -->
       <div class="form-card">
         <div class="card-header">
@@ -76,14 +76,14 @@
       <div class="form-actions">
         <router-link to="/charity/campaigns" class="btn-outline">Cancel</router-link>
         <button type="submit" class="btn-primary" :disabled="isSubmitting">
-          {{ isSubmitting ? 'Creating...' : 'Create Campaign' }}
+          {{ isSubmitting ? 'Saving...' : isEdit ? 'Update Campaign' : 'Create Campaign' }}
         </button>
       </div>
     </form>
 
     <div v-if="isSubmitting" class="loading-section">
       <div class="loading-spinner"></div>
-      <p>Creating campaign...</p>
+      <p>Saving campaign...</p>
     </div>
 
     <div class="toast-container">
@@ -95,13 +95,17 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import CharityService from '@/stores/charity'
 
 const router = useRouter()
+const route = useRoute()
 const toasts = ref([])
 const isSubmitting = ref(false)
+
+// Check if we are editing (route contains :id)
+const isEdit = computed(() => !!route.params.id)
 
 const form = ref({
   title: '',
@@ -114,6 +118,7 @@ const form = ref({
 
 const errors = ref({})
 
+// ---- Toast helpers ----
 const addToast = (message, type = 'success') => {
   const id = Date.now()
   toasts.value.push({ id, message, type })
@@ -121,6 +126,24 @@ const addToast = (message, type = 'success') => {
 }
 const removeToast = (id) => { toasts.value = toasts.value.filter(t => t.id !== id) }
 
+// ---- Load existing campaign for editing ----
+const loadCampaign = async (id) => {
+  const res = await CharityService.getCampaignById(id)
+  if (res.success && res.data) {
+    const c = res.data
+    form.value.title = c.title || ''
+    form.value.description = c.description || ''
+    form.value.category = c.category || ''
+    form.value.startDate = c.startDate || ''
+    form.value.endDate = c.endDate || ''
+    form.value.targetAmount = c.targetAmount || ''
+  } else {
+    addToast('Failed to load campaign data', 'error')
+    router.push('/charity/campaigns')
+  }
+}
+
+// ---- Validation ----
 const validateForm = () => {
   const newErrors = {}
   if (!form.value.title.trim()) newErrors.title = 'Title is required'
@@ -128,7 +151,8 @@ const validateForm = () => {
   return Object.keys(newErrors).length === 0
 }
 
-const createCampaign = async () => {
+// ---- Create or Update ----
+const handleSubmit = async () => {
   if (!validateForm()) return
   isSubmitting.value = true
 
@@ -141,18 +165,32 @@ const createCampaign = async () => {
     targetAmount: form.value.targetAmount ? parseFloat(form.value.targetAmount) : undefined
   }
 
-  const result = await CharityService.createCampaign(data)
+  let result
+  if (isEdit.value) {
+    result = await CharityService.updateCampaign(route.params.id, data)
+  } else {
+    result = await CharityService.createCampaign(data)
+  }
+
   if (result.success) {
-    addToast(`✅ Campaign "${form.value.title}" created!`, 'success')
+    addToast(`✅ Campaign "${form.value.title}" ${isEdit.value ? 'updated' : 'created'}!`, 'success')
     setTimeout(() => router.push('/charity/campaigns'), 1500)
   } else {
-    addToast(result.error || 'Failed to create campaign', 'error')
+    addToast(result.error || 'Failed to save campaign', 'error')
   }
   isSubmitting.value = false
 }
+
+// ---- Init ----
+onMounted(async () => {
+  if (isEdit.value) {
+    await loadCampaign(route.params.id)
+  }
+})
 </script>
 
 <style scoped>
+/* Keep all existing styles – no changes needed */
 .campaign-create {
   max-width: 900px;
   margin: 0 auto;

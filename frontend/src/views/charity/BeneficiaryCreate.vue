@@ -8,12 +8,12 @@
         </svg>
       </router-link>
       <div class="header-title">
-        <h1>Add Beneficiary</h1>
-        <p>Create a new beneficiary (individual or organization)</p>
+        <h1>{{ isEdit ? 'Edit Beneficiary' : 'Add Beneficiary' }}</h1>
+        <p>{{ isEdit ? 'Update beneficiary details' : 'Create a new beneficiary (individual or organization)' }}</p>
       </div>
     </div>
 
-    <form @submit.prevent="createBeneficiary" class="beneficiary-form">
+    <form @submit.prevent="handleSubmit" class="beneficiary-form">
       <!-- Basic Info -->
       <div class="form-card">
         <div class="card-header">
@@ -97,7 +97,7 @@
               <select v-model="form.groupId">
                 <option value="">Select group</option>
                 <option v-for="group in groups" :key="group.groupId" :value="group.groupId">
-                  {{ group.name }}
+                  {{ `${group.manager.firstName} ${group.manager.lastName}  <${group.name}>`}}
                 </option>
               </select>
             </div>
@@ -109,15 +109,15 @@
       <div class="form-actions">
         <router-link to="/charity/beneficiaries" class="btn-outline">Cancel</router-link>
         <button type="submit" class="btn-primary" :disabled="isSubmitting">
-          {{ isSubmitting ? 'Creating...' : 'Create Beneficiary' }}
+          {{ isSubmitting ? 'Saving...' : isEdit ? 'Update Beneficiary' : 'Create Beneficiary' }}
         </button>
       </div>
     </form>
 
-    <!-- Loading overlay (optional) -->
+    <!-- Loading overlay -->
     <div v-if="isSubmitting" class="loading-section">
       <div class="loading-spinner"></div>
-      <p>Creating beneficiary...</p>
+      <p>Saving beneficiary...</p>
     </div>
 
     <!-- Toasts -->
@@ -130,13 +130,16 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import CharityService from '@/stores/charity'
 
 const router = useRouter()
+const route = useRoute()
 const toasts = ref([])
 const isSubmitting = ref(false)
+
+const isEdit = computed(() => !!route.params.id)
 
 const form = ref({
   name: '',
@@ -172,6 +175,24 @@ const loadGroups = async () => {
   if (res.success) groups.value = res.data
 }
 
+// Load beneficiary data for editing
+const loadBeneficiary = async (id) => {
+  const res = await CharityService.getBeneficiaryById(id)
+  if (res.success && res.data) {
+    const b = res.data
+    form.value.name = b.name || ''
+    form.value.type = b.type || ''
+    form.value.phone = b.contactInfo?.phone || ''
+    form.value.email = b.contactInfo?.email || ''
+    form.value.contactPerson = b.contactInfo?.contactPerson || b.contactInfo?.contact_person || ''
+    form.value.locationId = b.locationId || ''
+    form.value.groupId = b.groupId || ''
+  } else {
+    addToast('Failed to load beneficiary data', 'error')
+    router.push('/charity/beneficiaries')
+  }
+}
+
 // Validation
 const validateForm = () => {
   const newErrors = {}
@@ -181,8 +202,8 @@ const validateForm = () => {
   return Object.keys(newErrors).length === 0
 }
 
-// Create beneficiary
-const createBeneficiary = async () => {
+// Create or update
+const handleSubmit = async () => {
   if (!validateForm()) return
 
   isSubmitting.value = true
@@ -199,26 +220,32 @@ const createBeneficiary = async () => {
     groupId: form.value.groupId || null,
   }
 
-  console.log(beneficiaryData)
-
-
-  const result = await CharityService.createBeneficiary(beneficiaryData)
+  let result
+  if (isEdit.value) {
+    result = await CharityService.updateBeneficiary(route.params.id, beneficiaryData)
+  } else {
+    result = await CharityService.createBeneficiary(beneficiaryData)
+  }
 
   if (result.success) {
-    addToast(`✅ Beneficiary "${form.value.name}" created successfully!`, 'success')
+    addToast(`✅ Beneficiary "${form.value.name}" ${isEdit.value ? 'updated' : 'created'} successfully!`, 'success')
     setTimeout(() => router.push('/charity/beneficiaries'), 2000)
   } else {
-    addToast(result.error || 'Failed to create beneficiary', 'error')
+    addToast(result.error || 'Failed to save beneficiary', 'error')
   }
   isSubmitting.value = false
 }
 
 onMounted(async () => {
   await Promise.all([loadLocations(), loadGroups()])
+  if (isEdit.value) {
+    await loadBeneficiary(route.params.id)
+  }
 })
 </script>
 
 <style scoped>
+/* styles remain identical to your existing styles */
 .beneficiary-create {
   max-width: 900px;
   margin: 0 auto;
@@ -226,7 +253,6 @@ onMounted(async () => {
   background: #f5f7fb;
   min-height: 100vh;
 }
-
 .create-header {
   display: flex;
   align-items: center;
@@ -254,7 +280,6 @@ onMounted(async () => {
   flex-direction: column;
   gap: 20px;
 }
-
 .form-card {
   background: white;
   border-radius: 16px;

@@ -1,3 +1,5 @@
+
+
 <template>
   <div class="donation-detail" v-if="donation">
     <!-- Back header -->
@@ -15,38 +17,11 @@
       </div>
       <div class="header-actions">
         <StatusBadge :status="donation.status" />
-        <button
-          v-if="canSubmit"
-          @click="submitDonation"
-          class="btn-primary"
-          :disabled="submitting"
-        >
-          Submit for Approval
-        </button>
-        <button
-          v-if="canApprove"
-          @click="approveDonation"
-          class="btn-primary"
-          :disabled="approving"
-        >
-          Approve
-        </button>
-        <button
-          v-if="canDistribute"
-          @click="markDistributed"
-          class="btn-primary"
-          :disabled="distributing"
-        >
-          Mark Distributed
-        </button>
-        <button
-          v-if="canCancel"
-          @click="openCancelModal"
-          class="btn-danger"
-          :disabled="canceling"
-        >
-          Cancel Donation
-        </button>
+        <button v-if="canSubmit" @click="submitDonation" class="btn-primary" :disabled="submitting">Submit for Approval</button>
+        <button v-if="canApprove" @click="approveDonation" class="btn-primary" :disabled="approving">Approve</button>
+        <button v-if="canApprove" @click="showRequestChangesModal = true" class="btn-warning" :disabled="submittingChanges">Request Changes</button>
+        <button v-if="canDistribute" @click="markDistributed" class="btn-primary" :disabled="distributing">Mark Distributed</button>
+        <button v-if="canCancel" @click="openCancelModal" class="btn-danger" :disabled="canceling">Cancel Donation</button>
       </div>
     </div>
 
@@ -80,13 +55,7 @@
     <div class="section-card">
       <div class="section-header">
         <h3>Donation Items</h3>
-        <button
-          v-if="donation.status === 'draft'"
-          @click="openAddItemModal"
-          class="btn-secondary"
-        >
-          + Add Item
-        </button>
+        <button v-if="donation.status === 'draft'" @click="openAddItemModal" class="btn-secondary">+ Add Item</button>
       </div>
 
       <table class="items-table" v-if="items.length">
@@ -114,19 +83,13 @@
                 <button v-if="donation?.status === 'approved'" @click="distributingItem = item; showDistributeModal = true" class="action-btn distribute" title="Distribute">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                  <polyline points="22 4 12 14.01 9 11.01" />
-                </svg>
+                    <polyline points="22 4 12 14.01 9 11.01" />
+                  </svg>
                 </button>
-                <!-- <button v-if="donation?.status === 'draft'" @click="openEditItemModal(item)" class="action-btn edit" title="Edit">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                  <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
-                </svg>
-                </button> -->
                 <button v-if="donation?.status === 'draft'" @click="deleteItem(item)" class="action-btn delete" title="Delete">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  </svg>
                 </button>
                 <!-- Toggle distribution visibility -->
                 <button class="action-btn toggle-dist" @click="toggleDistributions(item.donationItemId)" title="Show distribution">
@@ -146,14 +109,12 @@
                     <div class="view-toggle">
                       <button
                         :class="['toggle-btn', { active: (distViewMode[item.donationItemId] || 'individual') === 'individual' }]"
-                        @click="toggleDistView(item.donationItemId, 'individual')"
-                      >
+                        @click="toggleDistView(item.donationItemId, 'individual')">
                         Individual
                       </button>
                       <button
                         :class="['toggle-btn', { active: (distViewMode[item.donationItemId] || 'individual') === 'group' }]"
-                        @click="toggleDistView(item.donationItemId, 'group')"
-                      >
+                        @click="toggleDistView(item.donationItemId, 'group')">
                         By Group
                       </button>
                     </div>
@@ -169,6 +130,7 @@
                             <th>{{ item.type === 'money' ? 'Amount' : 'Quantity' }}</th>
                             <th>Value</th>
                             <th>Returned?</th>
+                            <th>Evidence</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -179,6 +141,20 @@
                             <td>
                               <span v-if="dist.isReturned" class="returned">Yes ({{ dist.returnReason }})</span>
                               <span v-else>No</span>
+                            </td>
+                            <td>
+                              <button @click="openEvidenceModal(dist)" class="action-btn evidence" title="Upload Evidence">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                  <polyline points="7 10 12 15 17 10" />
+                                  <line x1="12" y1="15" x2="12" y2="3" />
+                                </svg>
+                              </button>
+                              <div v-if="dist.DonationDistributionEvidences?.length" class="evidence-list">
+                                <span v-for="ev in dist.DonationDistributionEvidences" :key="ev.evidenceId" class="evidence-file">
+                                  <a :href="ev.fileUrl" target="_blank">{{ ev.fileName }}</a>
+                                </span>
+                              </div>
                             </td>
                           </tr>
                         </tbody>
@@ -261,14 +237,47 @@
       @save="handleDistribute"
     />
 
+    <!-- Request Changes Modal -->
+    <div v-if="showRequestChangesModal" class="modal-overlay" @click.self="showRequestChangesModal = false">
+      <div class="modal">
+        <h3>Request Changes</h3>
+        <p>Add a comment explaining what needs to be changed.</p>
+        <textarea v-model="requestChangesComment" rows="3" placeholder="Your comment..."></textarea>
+        <div class="modal-actions">
+          <button @click="showRequestChangesModal = false" class="btn-secondary">Cancel</button>
+          <button @click="submitRequestChanges" :disabled="!requestChangesComment.trim() || submittingChanges" class="btn-primary">
+            {{ submittingChanges ? 'Sending...' : 'Send & Return to Draft' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Evidence Upload Modal -->
+    <div v-if="showEvidenceModal" class="modal-overlay" @click.self="showEvidenceModal = false">
+      <div class="modal">
+        <h3>Upload Evidence for {{ selectedDistribution?.Beneficiary?.name }}</h3>
+        <div class="form-group">
+          <input type="file" multiple @change="handleFileSelect" accept="image/*,.pdf" />
+        </div>
+        <div v-if="selectedFiles.length" class="selected-files">
+          <p>Selected files:</p>
+          <ul>
+            <li v-for="(file, idx) in selectedFiles" :key="idx">{{ file.name }}</li>
+          </ul>
+        </div>
+        <div v-if="uploadingEvidence" class="loading-spinner"></div>
+        <div class="modal-actions">
+          <button @click="showEvidenceModal = false" class="btn-secondary">Cancel</button>
+          <button @click="uploadEvidence" :disabled="!selectedFiles.length || uploadingEvidence" class="btn-primary">
+            {{ uploadingEvidence ? 'Uploading...' : 'Upload' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Toasts -->
     <div class="toast-container">
-      <div
-        v-for="toast in toasts"
-        :key="toast.id"
-        :class="['toast', `toast-${toast.type}`]"
-        @click="removeToast(toast.id)"
-      >
+      <div v-for="toast in toasts" :key="toast.id" :class="['toast', `toast-${toast.type}`]" @click="removeToast(toast.id)">
         {{ toast.message }}
       </div>
     </div>
@@ -288,7 +297,6 @@ import StatusBadge from './components/DonationItem/StatusBadge.vue'
 import AddItemModal from './components/DonationItem/AddItemModal.vue'
 import EditItemModal from './components/DonationItem/EditItemModal.vue'
 import DistributeItemModal from './components/Donation/DistributeItemModal.vue'
-
 
 const route = useRoute()
 const router = useRouter()
@@ -312,66 +320,23 @@ const editingItem = ref(null)
 const toasts = ref([])
 const expandedItems = ref([])
 
-const distViewMode = ref({}) // { [itemId]: 'individual' | 'group' }
-
-function toggleDistView(itemId, mode) {
-  distViewMode.value[itemId] = mode
-}
-// existing… then add:
-const groups = ref([])
-const loadGroups = async () => {
-  const res = await CharityService.getBeneficiaryGroups()
-  if (res.success) groups.value = res.data
-}
-
-// Group distributions by beneficiary's groupId
-function groupedDistributions(item) {
-  if (!item.DonationDistributions) return {}
-  const groups = {}
-  item.DonationDistributions.forEach(dist => {
-    const beneficiary = dist.Beneficiary
-    if (!beneficiary) return
-    const gId = beneficiary.groupId || 'unassigned'
-    if (!groups[gId]) {
-      groups[gId] = { totalValue: 0, totalQuantity: 0 }
-    }
-    groups[gId].totalValue += parseFloat(dist.value || 0)
-    groups[gId].totalQuantity += parseFloat(dist.quantity || 0)
-  })
-  return groups
-}
-
-function getGroupName(groupId) {
-  console.log(groupId)
-  if (!groupId || groupId === 'unassigned') return 'Unassigned'
-  const group = groups.value.find(g => g.groupId === parseInt(groupId))
-  return group ? `${group?.manager?.firstName} ${group?.manager?.lastName}  <${group.name}>` : 'Unassigned'
-}
-
-
-function toggleDistributions(itemId) {
-  const idx = expandedItems.value.indexOf(itemId)
-  if (idx > -1) {
-    expandedItems.value.splice(idx, 1)
-  } else {
-    expandedItems.value.push(itemId)
-    // set default view mode for newly expanded item
-    if (!distViewMode.value[itemId]) {
-      distViewMode.value[itemId] = 'individual'
-    }
-  }
-}
-
+const distViewMode = ref({})
+const showRequestChangesModal = ref(false)
+const requestChangesComment = ref('')
+const submittingChanges = ref(false)
+const showEvidenceModal = ref(false)
+const selectedDistribution = ref(null)
+const selectedFiles = ref([])
+const uploadingEvidence = ref(false)
 
 const beneficiaries = ref([])
 const showDistributeModal = ref(false)
 const distributingItem = ref(null)
+const distributingSaving = ref(false)
 
-const loadDependencies = async () => {
-  const bens = await CharityService.getBeneficiaries()
-  if (bens.success) beneficiaries.value = bens.data
-}
+const groups = ref([])
 
+// ── Helper functions ──
 const addToast = (msg, type='success') => {
   const id = Date.now()
   toasts.value.push({ id, message: msg, type })
@@ -379,12 +344,16 @@ const addToast = (msg, type='success') => {
 }
 const removeToast = (id) => toasts.value = toasts.value.filter(t => t.id !== id)
 
-// Permissions
+const formatDate = (d) => d ? new Date(d).toLocaleDateString() : 'N/A'
+const formatCurrency = (v) => v ? new Intl.NumberFormat('en-US',{style:'currency',currency:'ETB'}).format(v) : '0.00'
+const getTypeLabel = (t) => ({ money:'Money', goods:'Goods', service:'Service' })[t] || t
+
 const canSubmit = computed(() => donation.value?.status === 'draft')
-const canApprove = computed(() => donation.value?.status === 'pending' && ['admin','finance',"charity"].includes(authStore.user?.role))
+const canApprove = computed(() => donation.value?.status === 'pending' && ['admin','finance','charity'].includes(authStore.user?.role))
 const canDistribute = computed(() => donation.value?.status === 'approved')
 const canCancel = computed(() => donation.value?.status !== 'cancelled')
 
+// ── Load data ──
 const loadDonation = async () => {
   loading.value = true
   const res = await CharityService.getDonationById(donationId)
@@ -393,33 +362,38 @@ const loadDonation = async () => {
   loading.value = false
 }
 
+const loadDependencies = async () => {
+  const bens = await CharityService.getBeneficiaries()
+  if (bens.success) beneficiaries.value = bens.data
+}
+
+const loadGroups = async () => {
+  const res = await CharityService.getBeneficiaryGroups()
+  if (res.success) groups.value = res.data
+}
+
+// ── Status transitions ──
 const submitDonation = async () => {
   submitting.value = true
   const res = await CharityService.submitDonation(donationId)
-  if (res.success) {
-    addToast('Donation submitted for approval')
-    loadDonation()
-  } else addToast(res.error || 'Submit failed', 'error')
+  if (res.success) { addToast('Donation submitted for approval'); loadDonation() }
+  else addToast(res.error || 'Submit failed', 'error')
   submitting.value = false
 }
 
 const approveDonation = async () => {
   approving.value = true
   const res = await CharityService.approveDonation(donationId)
-  if (res.success) {
-    addToast('Donation approved')
-    loadDonation()
-  } else addToast(res.error || 'Approve failed', 'error')
+  if (res.success) { addToast('Donation approved'); loadDonation() }
+  else addToast(res.error || 'Approve failed', 'error')
   approving.value = false
 }
 
 const markDistributed = async () => {
   distributing.value = true
   const res = await CharityService.distributeDonation(donationId)
-  if (res.success) {
-    addToast('Marked as distributed')
-    loadDonation()
-  } else addToast(res.error || 'Distribute failed', 'error')
+  if (res.success) { addToast('Marked as distributed'); loadDonation() }
+  else addToast(res.error || 'Distribute failed', 'error')
   distributing.value = false
 }
 
@@ -428,35 +402,38 @@ const closeCancelModal = () => showCancelModal.value = false
 const cancelDonation = async () => {
   canceling.value = true
   const res = await CharityService.cancelDonation(donationId)
-  if (res.success) {
-    addToast('Donation cancelled')
-    loadDonation()
-    closeCancelModal()
-  } else addToast(res.error || 'Cancel failed', 'error')
+  if (res.success) { addToast('Donation cancelled'); loadDonation(); closeCancelModal() }
+  else addToast(res.error || 'Cancel failed', 'error')
   canceling.value = false
 }
 
-// Items
+// ── Request changes ──
+const submitRequestChanges = async () => {
+  if (!requestChangesComment.value.trim()) return
+  submittingChanges.value = true
+  const res = await CharityService.requestChanges(donationId, requestChangesComment.value.trim())
+  if (res.success) {
+    addToast('Changes requested. Donation returned to draft.')
+    showRequestChangesModal.value = false
+    requestChangesComment.value = ''
+    loadDonation()
+  } else {
+    addToast(res.error || 'Failed to request changes', 'error')
+  }
+  submittingChanges.value = false
+}
+
+// ── Items ──
 const openAddItemModal = () => showAddItemModal.value = true
 const closeAddItemModal = () => showAddItemModal.value = false
 const addItem = async ({ itemData, distributions }) => {
   savingItem.value = true
-  // 1. Create the donation item
   const res = await CharityService.addDonationItem(donationId, itemData)
-  if (!res.success) {
-    addToast(res.error || 'Failed to add item', 'error')
-    savingItem.value = false
-    return
-  }
-  // 2. If distributions are provided, immediately create them
+  if (!res.success) { addToast(res.error || 'Failed to add item', 'error'); savingItem.value = false; return }
   const newItemId = res.data.donationItemId
-  if (distributions && distributions.length > 0) {
+  if (distributions?.length) {
     const distRes = await CharityService.distributeItem(newItemId, distributions)
-    if (distRes.success) {
-      addToast('Item added and beneficiaries assigned')
-    } else {
-      addToast('Item added but assignment failed: ' + distRes.error, 'warning')
-    }
+    distRes.success ? addToast('Item added and beneficiaries assigned') : addToast('Item added but assignment failed: ' + distRes.error, 'warning')
   } else {
     addToast('Item added successfully')
   }
@@ -465,46 +442,90 @@ const addItem = async ({ itemData, distributions }) => {
   savingItem.value = false
 }
 
-const openEditItemModal = (item) => {
-  editingItem.value = { ...item }
-  showEditItemModal.value = true
-}
-const closeEditItemModal = () => {
-  showEditItemModal.value = false
-  editingItem.value = null
-}
+const openEditItemModal = (item) => { editingItem.value = { ...item }; showEditItemModal.value = true }
+const closeEditItemModal = () => { showEditItemModal.value = false; editingItem.value = null }
 const updateItem = async (itemData) => {
   savingItem.value = true
   const res = await CharityService.updateDonationItem(editingItem.value.donationItemId, itemData)
-  if (res.success) {
-    addToast('Item updated')
-    loadDonation()
-    closeEditItemModal()
-  } else addToast(res.error || 'Update failed', 'error')
+  if (res.success) { addToast('Item updated'); loadDonation(); closeEditItemModal() }
+  else addToast(res.error || 'Update failed', 'error')
   savingItem.value = false
 }
 
 const deleteItem = async (item) => {
   if (!confirm(`Delete item "${item.description}"?`)) return
   const res = await CharityService.deleteDonationItem(item.donationItemId)
-  if (res.success) {
-    addToast('Item deleted')
-    loadDonation()
-  } else addToast(res.error || 'Delete failed', 'error')
+  if (res.success) { addToast('Item deleted'); loadDonation() }
+  else addToast(res.error || 'Delete failed', 'error')
 }
 
-const formatDate = (d) => d ? new Date(d).toLocaleDateString() : 'N/A'
-const formatCurrency = (v) => v ? new Intl.NumberFormat('en-US',{style:'currency',currency:'ETB'}).format(v) : '0.00'
-const getTypeLabel = (t) => ({ money:'Money', goods:'Goods', service:'Service' })[t] || t
+// ── Distributions view toggle ──
+const toggleDistributions = (itemId) => {
+  const idx = expandedItems.value.indexOf(itemId)
+  if (idx > -1) expandedItems.value.splice(idx, 1)
+  else {
+    expandedItems.value.push(itemId)
+    if (!distViewMode.value[itemId]) distViewMode.value[itemId] = 'individual'
+  }
+}
+const toggleDistView = (itemId, mode) => distViewMode.value[itemId] = mode
 
+// ── Grouped distributions ──
+const groupedDistributions = (item) => {
+  if (!item.DonationDistributions) return {}
+  const groups = {}
+  item.DonationDistributions.forEach(dist => {
+    const beneficiary = dist.Beneficiary
+    if (!beneficiary) return
+    const gId = beneficiary.groupId || 'unassigned'
+    if (!groups[gId]) { groups[gId] = { totalValue: 0, totalQuantity: 0 } }
+    groups[gId].totalValue += parseFloat(dist.value || 0)
+    groups[gId].totalQuantity += parseFloat(dist.quantity || 0)
+  })
+  return groups
+}
 
-// Add loadGroups to onMounted dependencies
+const getGroupName = (groupId) => {
+  if (!groupId || groupId === 'unassigned') return 'Unassigned'
+  const group = groups.value.find(g => g.groupId === parseInt(groupId))
+  if (!group) return 'Unassigned'
+  const mgr = group.manager ? `${group.manager.firstName} ${group.manager.lastName}` : ''
+  return mgr ? `${mgr} <${group.name}>` : group.name
+}
+
+// ── Distribute (for approved donations) ──
+const handleDistribute = async (payload) => {
+  distributingSaving.value = true
+  const res = await CharityService.distributeItem(distributingItem.value.donationItemId, payload)
+  if (res.success) { addToast('Distributed successfully'); showDistributeModal.value = false; distributingItem.value = null; loadDonation() }
+  else addToast(res.error || 'Distribution failed', 'error')
+  distributingSaving.value = false
+}
+
+// ── Evidence upload ──
+const openEvidenceModal = (dist) => {
+  selectedDistribution.value = dist
+  selectedFiles.value = []
+  showEvidenceModal.value = true
+}
+const handleFileSelect = (event) => selectedFiles.value = Array.from(event.target.files)
+const uploadEvidence = async () => {
+  if (!selectedDistribution.value || !selectedFiles.value.length) return
+  uploadingEvidence.value = true
+  const formData = new FormData()
+  selectedFiles.value.forEach(file => formData.append('evidences', file))
+  const res = await CharityService.uploadEvidence(selectedDistribution.value.distributionId, formData)
+  uploadingEvidence.value = false
+  if (res.success) { addToast('Evidence uploaded successfully'); showEvidenceModal.value = false; loadDonation() }
+  else addToast(res.error || 'Upload failed', 'error')
+}
+
+// ── Mount ──
 onMounted(async () => {
   await loadDonation()
   await loadDependencies()
   await loadGroups()
 })
-
 </script>
 
 <style scoped>
@@ -585,4 +606,7 @@ onMounted(async () => {
   color: white;
   border-color: #6a11cb;
 }
+.btn-warning { background: #f59e0b; color: white; border: none; padding: 8px 16px; border-radius: 10px; cursor: pointer; }
+.action-btn.evidence { color: #8b5cf6; }
+.action-btn.evidence:hover { background: #8b5cf620; }
 </style>

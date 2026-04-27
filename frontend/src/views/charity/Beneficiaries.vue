@@ -86,7 +86,7 @@ const locations = ref([]);
 const loading = ref(false);
 const deleting = ref(false);
 
-const stats = ref({ total: 0, organizations: 0, groups: 0, individuals: 0 });
+const stats = ref({ total: 0, organizations: 0, individuals: 0 });
 
 const pagination = ref({ currentPage: 1, totalPages: 1 });
 const filters = ref({ search: '', type: '', groupId: '', locationId: '' });
@@ -161,13 +161,11 @@ const updateStats = (list) => {
   // To get accurate counts, we might need separate aggregation. For simplicity, we count current page only.
   // In a real app, you'd have a stats endpoint.
   const orgs = list.filter(b => b.type === 'organization').length;
-  const grps = list.filter(b => b.type === 'group').length;
   const inds = list.filter(b => b.type === 'individual').length;
   // We'll store page-level counts. For total stats across all pages, you'd need backend support.
   // We'll set to 0 as placeholder, but you can implement a backend /beneficiaries/stats route if needed.
   // For now, just show placeholder based on pagination total (not accurate breakdown).
   stats.value.organizations = orgs;
-  stats.value.groups = grps;
   stats.value.individuals = inds;
 };
 

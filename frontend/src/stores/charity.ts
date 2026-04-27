@@ -507,10 +507,16 @@ class CharityService {
     return { success: true, message: response.data.message }
   }
 
+  async requestChanges(donationId: number, comment: string) {
+    const response = await api.post(`/charity/donations/${donationId}/request-changes`, { comment });
+    return { success: true, message: response.data.message };
+  }
+
   async approveDonation(id: number, comment?: string) {
     const response = await api.post(`/charity/donations/${id}/approve`, { comment })
     return { success: true, message: response.data.message }
   }
+
 
   async distributeDonation(id: number) {
     const response = await api.post(`/charity/donations/${id}/distribute`)

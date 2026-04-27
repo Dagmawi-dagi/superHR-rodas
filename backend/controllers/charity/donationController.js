@@ -4,6 +4,7 @@ const {
   DonationApproval,
   DonationLog,
   DonationDistribution,
+  DonationDistributionEvidence,
   DonationCompany,
   Campaign,
   Beneficiary,
@@ -199,56 +200,40 @@ exports.getDonationById = async (req, res) => {
 
     const donation = await Donation.findByPk(id, {
       include: [
-        {
-          model: DonationCompany,
-          attributes: ["companyId", "name", "type", "contactInfo"],
-        },
-        {
-          model: Campaign,
-          attributes: [
-            "campaignId",
-            "title",
-            "description",
-            "category",
-            "targetAmount",
-          ],
-        },
+        { model: DonationCompany, attributes: ['companyId', 'name', 'type', 'contactInfo'] },
+        { model: Campaign, attributes: ['campaignId', 'title', 'description', 'category', 'targetAmount'] },
         {
           model: DonationItem,
           include: [
             {
-              model: DonationDistribution,
+              model: DonationDistribution,                  // nested under DonationItem
               include: [
                 {
                   model: Beneficiary,
-                  attributes: ["beneficiaryId", "name", "type", "groupId"],
+                  attributes: ['beneficiaryId', 'name', 'type', 'groupId']
                 },
-              ],
-            },
-          ],
+                {
+                  model: DonationDistributionEvidence       // evidence for each distribution
+                }
+              ]
+            }
+          ]
         },
         {
           model: DonationApproval,
-          include: [
-            {
-              model: Employee,
-              attributes: ["employeeId", "firstName", "lastName"],
-            },
-          ],
-          order: [["created_at", "DESC"]],
-        },
-      ],
+          include: [{ model: Employee, attributes: ['employeeId', 'firstName', 'lastName'] }],
+          order: [['created_at', 'DESC']]
+        }
+      ]
     });
 
     if (!donation) {
-      return res
-        .status(404)
-        .json({ success: false, error: "Donation not found" });
+      return res.status(404).json({ success: false, error: 'Donation not found' });
     }
 
     res.json({ success: true, data: donation });
   } catch (error) {
-    console.error("Get donation error:", error);
+    console.error('Get donation error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -505,6 +490,7 @@ exports.deleteDonationItem = async (req, res) => {
   }
 };
 
+
 // ------------------------------------------------------------------
 // SUBMIT FOR APPROVAL (draft → pending)
 // ------------------------------------------------------------------
@@ -571,6 +557,49 @@ exports.submitForApproval = async (req, res) => {
   }
 };
 
+
+// ------------------------------------------------------------------
+// APPROVER requestChanges 
+// ------------------------------------------------------------------
+
+
+exports.requestChanges = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+    const { comment } = req.body;
+    if (!comment || !comment.trim()) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Comment is required' });
+    }
+    if (!['admin', 'finance', 'charity'].includes(req.user.role)) {
+      await t.rollback();
+      return res.status(403).json({ success: false, error: 'Insufficient permissions' });
+    }
+    const donation = await Donation.findByPk(id, { transaction: t });
+    if (!donation) throw new Error('Donation not found');
+    if (donation.status !== 'pending') throw new Error('Donation must be pending');
+
+    await donation.update({ status: 'draft' }, { transaction: t });
+    await DonationApproval.create({
+      donationId: id,
+      approvedBy: req.user.userId,
+      status: 'rejected',
+      comment: comment.trim(),
+    }, { transaction: t });
+
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+    await logDonationAction(id, employeeId, 'REQUEST_CHANGES', { comment }, t);
+
+    await t.commit();
+    res.json({ success: true, message: 'Changes requested' });
+  } catch (error) {
+    await t.rollback();
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+
 // ------------------------------------------------------------------
 // APPROVE DONATION (pending → approved)
 // ------------------------------------------------------------------
@@ -580,7 +609,7 @@ exports.approveDonation = async (req, res) => {
     const { id } = req.params;
     const { comment } = req.body;
 
-    if (!["admin", "finance"].includes(req.user.role)) {
+    if (!["admin", "finance","charity"].includes(req.user.role)) {
       await t.rollback();
       return res
         .status(403)
@@ -774,6 +803,62 @@ exports.distributeItem = async (req, res) => {
   } catch (error) {
     await t.rollback();
     console.error("Distribute item error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+exports.uploadEvidence = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { distributionId } = req.params;
+    const files = req.files;
+
+    if (!files || files.length === 0) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'No files uploaded' });
+    }
+
+    // Find the distribution and its parent donation
+    const distribution = await DonationDistribution.findByPk(distributionId, {
+      include: [{ model: DonationItem, attributes: ['donationId'] }],
+      transaction: t
+    });
+    if (!distribution) {
+      await t.rollback();
+      return res.status(404).json({ success: false, error: 'Distribution not found' });
+    }
+
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+
+    const evidences = [];
+    for (const file of files) {
+      const evidence = await DonationDistributionEvidence.create({
+        distributionId: parseInt(distributionId),
+        fileUrl: `/uploads/documents/charityEvidences/${file.filename}`,
+        fileName: file.originalname,
+        fileType: file.mimetype,
+        uploadedBy: employeeId,
+      }, { transaction: t });
+      evidences.push(evidence);
+    }
+
+    // Log the action on the parent donation
+    const donationId = distribution.DonationItem.donationId;
+    await logDonationAction(donationId, employeeId, 'EVIDENCE_UPLOADED', {
+      distributionId,
+      fileCount: files.length,
+    }, t);
+
+    await t.commit();
+
+    res.json({
+      success: true,
+      message: `${evidences.length} evidence(s) uploaded`,
+      data: evidences,
+    });
+  } catch (error) {
+    await t.rollback();
+    console.error('Upload evidence error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

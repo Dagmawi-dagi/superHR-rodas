@@ -16,19 +16,18 @@
     <select v-model="localFilters.type" class="filter-select" @change="emitAll">
       <option value="">All Types</option>
       <option value="individual">Individual</option>
-      <option value="group">Group</option>
       <option value="organization">Organization</option>
     </select>
     <select v-model="localFilters.groupId" class="filter-select" @change="emitAll">
       <option value="">All Groups</option>
       <option v-for="group in groups" :key="group.groupId" :value="group.groupId">
-        {{ group.name }}
+          {{ `${group.manager.firstName} ${group.manager.lastName}  <${group.name}>`}}
       </option>
     </select>
     <select v-model="localFilters.locationId" class="filter-select" @change="emitAll">
       <option value="">All Locations</option>
       <option v-for="loc in locations" :key="loc.locationId" :value="loc.locationId">
-        {{ loc.region }} - {{ loc.city }}
+        {{ loc.region }} - {{ loc.city }} - {{loc.woreda}}
       </option>
     </select>
     <button class="btn-clear" @click="clearFilters">

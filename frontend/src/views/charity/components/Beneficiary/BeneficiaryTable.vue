@@ -26,19 +26,19 @@
           <td>{{ ben.DonationLocation ? `${ben.DonationLocation.region}, ${ben.DonationLocation.city}` : 'N/A' }}</td>
           <td>{{ ben.contactInfo?.phone || ben.contactInfo?.email || 'N/A' }}</td>
           <td class="actions-cell">
-            <button class="action-btn view" @click="$emit('view', ben)" title="View Details">
+            <button class="action-btn view" @click="$router.push(`/charity/beneficiaries/${ben?.beneficiaryId}/edit`)" title="View Details">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                 <circle cx="12" cy="12" r="3" />
               </svg>
             </button>
-            <button class="action-btn edit" @click="$emit('edit', ben)" title="Edit Beneficiary">
+            <!-- <button class="action-btn edit" @click="$router.push(`/charity/beneficiaries/${ben.BeneficiaryId}/edit`)" title="Edit Beneficiary">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                 <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
               </svg>
-            </button>
-            <button class="action-btn transfer" @click="$emit('transfer', ben)" title="Transfer Group">
+            </button>-->
+             <button class="action-btn transfer" @click="$emit('transfer', ben)" title="Transfer Group">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="17 1 21 5 17 9" />
                 <path d="M3 11V9a4 4 0 0 1 4-4h14" />

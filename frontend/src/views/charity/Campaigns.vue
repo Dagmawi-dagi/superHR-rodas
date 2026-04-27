@@ -145,7 +145,7 @@ const computeStats = (data) => {
   }
 }
 
-const viewCampaign = (c) => router.push(`/charity/campaigns/${c.campaignId}`)
+// const viewCampaign = (c) => router.push(`/charity/campaigns/${c.campaignId}`)
 const editCampaign = (c) => router.push(`/charity/campaigns/${c.campaignId}/edit`)
 
 // Extend
