@@ -175,7 +175,7 @@ const roleMenus = {
             badge: null,  
             dropdownMenu:[
                 {
-                    name: "companies", 
+                    name: "Donating companies", 
                     path: "/charity/companies", 
                     icon: "BuildingOffice2Icon", 
                 },
@@ -326,22 +326,22 @@ const roleMenus = {
             badge: null,  
             dropdownMenu:[
                 {
-                    name: "companies", 
+                    name: "Donating Companies", 
                     path: "/charity/companies", 
                     icon: "BuildingOffice2Icon", 
                 },
                 {
-                    name: "beneficiaries", 
+                    name: "Beneficiaries", 
                     path: "/charity/beneficiaries", 
                     icon: "UsersIcon", 
                 },
                 {
-                    name: "campaigns", 
+                    name: "Campaigns", 
                     path: "/charity/campaigns", 
                     icon: "SpeakerWaveIcon", 
                 },
                 {
-                    name: "donations", 
+                    name: "Donations", 
                     path: "/charity/donations", 
                     icon: "ArchiveBoxIcon", 
                 },

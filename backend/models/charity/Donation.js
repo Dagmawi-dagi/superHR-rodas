@@ -20,30 +20,19 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true,
         field: "donation_id",
       },
-      companyId: {
-        type: DataTypes.INTEGER,
-        field: "company_id",
-      },
-      campaignId: {
-        type: DataTypes.INTEGER,
-        field: "campaign_id",
-      },
-      donationDate: {
-        type: DataTypes.DATEONLY,
-        field: "donation_date",
-      },
+      companyId: { type: DataTypes.INTEGER, field: "company_id" },
+      campaignId: { type: DataTypes.INTEGER, field: "campaign_id" },
+      donationDate: { type: DataTypes.DATEONLY, field: "donation_date" },
       totalValue: {
         type: DataTypes.DECIMAL(15, 2),
         defaultValue: 0,
         field: "total_value",
       },
       status: {
-        type: DataTypes.ENUM("draft", "approved", "distributed", "cancelled"),
+        type: DataTypes.ENUM("draft", "pending", "approved", "distributed", "cancelled"),
         defaultValue: "draft",
       },
-      notes: {
-        type: DataTypes.TEXT,
-      },
+      notes: { type: DataTypes.TEXT },
     },
     {
       sequelize,

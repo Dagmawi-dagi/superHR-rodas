@@ -5,9 +5,8 @@ module.exports = (sequelize, DataTypes) => {
   class DonationItem extends Model {
     static associate(models) {
       DonationItem.belongsTo(models.Donation, { foreignKey: "donationId" });
-      DonationItem.hasMany(models.DonationDistribution, {
-        foreignKey: "donationItemId",
-      });
+      DonationItem.hasMany(models.DonationDistribution, {foreignKey: "donationItemId",});
+      DonationItem.hasMany(models.DonationDistributionEvidence, { foreignKey: "donationItemId" });
     }
   }
 
@@ -52,6 +51,10 @@ module.exports = (sequelize, DataTypes) => {
         field: "unassigned_deduction",
         defaultValue: 0,
       },
+        status: {
+    type: DataTypes.ENUM('pending', 'distributed'),
+    defaultValue: 'pending',
+  },
     },
     {
       sequelize,

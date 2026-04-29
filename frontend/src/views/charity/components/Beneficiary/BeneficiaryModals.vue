@@ -12,7 +12,7 @@
         <select v-model="transferTargetGroupId" class="form-select">
           <option value="">-- Choose Group --</option>
           <option v-for="g in groups" :key="g.groupId" :value="g.groupId">
-            {{ g.name }}
+            {{ `${g.manager.firstName} ${g.manager.lastName} <${g.name}>` }}
           </option>
         </select>
       </div>

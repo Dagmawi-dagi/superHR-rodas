@@ -91,13 +91,16 @@
                   {{ loc.region }}, {{ loc.city }} - {{ loc.woreda }}
                 </option>
               </select>
+              <button type="button" class="add-location-btn" @click="openLocationModal">
+                + Add New Location
+              </button>
             </div>
             <div class="form-field">
               <label>Beneficiary Group</label>
               <select v-model="form.groupId">
                 <option value="">Select group</option>
                 <option v-for="group in groups" :key="group.groupId" :value="group.groupId">
-                  {{ `${group.manager.firstName} ${group.manager.lastName}  <${group.name}>`}}
+                  {{ ` ${group.manager.firstName} ${group.manager.lastName} <${group.name}>` }}
                 </option>
               </select>
             </div>
@@ -114,10 +117,33 @@
       </div>
     </form>
 
-    <!-- Loading overlay -->
-    <div v-if="isSubmitting" class="loading-section">
-      <div class="loading-spinner"></div>
-      <p>Saving beneficiary...</p>
+    <!-- Add Location Modal -->
+    <div v-if="showLocationModal" class="modal-overlay" @click.self="showLocationModal = false">
+      <div class="modal">
+        <h3>Add New Location</h3>
+        <div class="form-group">
+          <label>Region <span class="req">*</span></label>
+          <input type="text" v-model="newLocation.region" placeholder="e.g. Addis Ababa" />
+        </div>
+        <div class="form-group">
+          <label>City <span class="req">*</span></label>
+          <input type="text" v-model="newLocation.city" placeholder="e.g. Addis Ababa" />
+        </div>
+        <div class="form-group">
+          <label>Woreda</label>
+          <input type="text" v-model="newLocation.woreda" placeholder="e.g. Bole" />
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <input type="text" v-model="newLocation.description" placeholder="Optional description" />
+        </div>
+        <div class="modal-actions">
+          <button @click="showLocationModal = false" class="btn-secondary">Cancel</button>
+          <button @click="createLocation" :disabled="!newLocation.region || !newLocation.city || savingLocation" class="btn-primary">
+            {{ savingLocation ? 'Saving...' : 'Save Location' }}
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Toasts -->
@@ -130,7 +156,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import CharityService from '@/stores/charity'
 
@@ -154,6 +180,16 @@ const form = ref({
 const errors = ref({})
 const locations = ref([])
 const groups = ref([])
+
+// Location modal state
+const showLocationModal = ref(false)
+const savingLocation = ref(false)
+const newLocation = ref({
+  region: '',
+  city: '',
+  woreda: '',
+  description: ''
+})
 
 // Toast helpers
 const addToast = (message, type = 'success') => {
@@ -202,7 +238,7 @@ const validateForm = () => {
   return Object.keys(newErrors).length === 0
 }
 
-// Create or update
+// Create or update beneficiary
 const handleSubmit = async () => {
   if (!validateForm()) return
 
@@ -236,6 +272,36 @@ const handleSubmit = async () => {
   isSubmitting.value = false
 }
 
+// Location modal actions
+const openLocationModal = () => {
+  newLocation.value = { region: '', city: '', woreda: '', description: '' }
+  showLocationModal.value = true
+}
+
+const createLocation = async () => {
+  if (!newLocation.value.region || !newLocation.value.city) return
+
+  savingLocation.value = true
+  const res = await CharityService.createLocation(newLocation.value)
+  savingLocation.value = false
+
+  if (res.success) {
+    addToast('Location added successfully')
+    // Refresh locations list
+    await loadLocations()
+    // Automatically select the new location
+    const newLoc = locations.value.find(
+      l => l.region === newLocation.value.region &&
+           l.city === newLocation.value.city &&
+           l.woreda === (newLocation.value.woreda || '')
+    )
+    if (newLoc) form.value.locationId = newLoc.locationId
+    showLocationModal.value = false
+  } else {
+    addToast(res.error || 'Failed to create location', 'error')
+  }
+}
+
 onMounted(async () => {
   await Promise.all([loadLocations(), loadGroups()])
   if (isEdit.value) {
@@ -245,7 +311,6 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* styles remain identical to your existing styles */
 .beneficiary-create {
   max-width: 900px;
   margin: 0 auto;
@@ -253,24 +318,8 @@ onMounted(async () => {
   background: #f5f7fb;
   min-height: 100vh;
 }
-.create-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 32px;
-}
-.back-btn {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  color: #475569;
-  text-decoration: none;
-}
+.create-header { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; }
+.back-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: white; border: 1px solid #e2e8f0; border-radius: 10px; color: #475569; text-decoration: none; }
 .back-btn svg { width: 18px; height: 18px; }
 .header-title h1 { font-size: 24px; font-weight: 600; color: #0f172a; margin: 0 0 4px; }
 .header-title p { font-size: 14px; color: #64748b; margin: 0; }
@@ -280,31 +329,14 @@ onMounted(async () => {
   flex-direction: column;
   gap: 20px;
 }
-.form-card {
-  background: white;
-  border-radius: 16px;
-  border: 1px solid #e9edf2;
-  overflow: hidden;
-}
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 20px;
-  background: #fafcfc;
-  border-bottom: 1px solid #e9edf2;
-}
+.form-card { background: white; border-radius: 16px; border: 1px solid #e9edf2; overflow: hidden; }
+.card-header { display: flex; align-items: center; gap: 10px; padding: 14px 20px; background: #fafcfc; border-bottom: 1px solid #e9edf2; }
 .card-header svg { width: 18px; height: 18px; color: #6366f1; }
 .card-header h3 { font-size: 15px; font-weight: 600; color: #1e293b; margin: 0; }
 .optional-badge { margin-left: auto; font-size: 11px; font-weight: 500; padding: 2px 8px; background: #e2e8f0; color: #64748b; border-radius: 20px; }
 .card-body { padding: 20px; }
 
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 16px;
-}
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 16px; }
 .form-row:last-child { margin-bottom: 0; }
 .form-field { display: flex; flex-direction: column; gap: 6px; }
 .form-field label { font-size: 13px; font-weight: 500; color: #334155; }
@@ -323,50 +355,47 @@ onMounted(async () => {
 .form-field select:focus { outline: none; border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.1); }
 .error { font-size: 11px; color: #ef4444; }
 
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-}
-.btn-outline {
-  padding: 10px 24px;
-  border-radius: 10px;
-  background: white;
-  border: 1px solid #e2e8f0;
-  color: #475569;
-  text-decoration: none;
+.add-location-btn {
+  margin-top: 6px;
+  padding: 6px 12px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
   cursor: pointer;
-  font-weight: 500;
+  color: #475569;
+  text-align: left;
+}
+.add-location-btn:hover {
+  background: #e2e8f0;
+}
+
+.form-actions { display: flex; justify-content: flex-end; gap: 12px; }
+.btn-outline {
+  padding: 10px 24px; border-radius: 10px; background: white; border: 1px solid #e2e8f0; color: #475569;
+  text-decoration: none; cursor: pointer; font-weight: 500;
 }
 .btn-outline:hover { background: #f8fafc; border-color: #cbd5e1; }
 .btn-primary {
-  padding: 10px 24px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #6a11cb, #7c3aed);
-  color: white;
-  border: none;
-  font-weight: 500;
-  cursor: pointer;
+  padding: 10px 24px; border-radius: 10px; background: linear-gradient(135deg, #6a11cb, #7c3aed);
+  color: white; border: none; font-weight: 500; cursor: pointer;
 }
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
-.loading-section { text-align: center; margin-top: 20px; }
-.loading-spinner {
-  width: 30px; height: 30px; border: 3px solid #e2e8f0;
-  border-top-color: #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
+.modal-overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index:1000; }
+.modal { background: white; border-radius: 16px; padding: 24px; width: 400px; max-width: 90%; }
+.modal h3 { margin-bottom: 16px; }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; color: #334155; }
+.form-group input { width: 100%; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; }
+.modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; }
 
-.toast-container {
-  position: fixed; bottom: 20px; right: 20px; z-index: 2000;
-  display: flex; flex-direction: column; gap: 8px;
-}
+.toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 2000; display: flex; flex-direction: column; gap: 8px; }
 .toast { padding: 12px 20px; border-radius: 10px; color: white; font-weight: 500; cursor: pointer; max-width: 350px; }
 .toast-success { background: #10b981; }
 .toast-error { background: #ef4444; }
-
-@media (max-width: 768px) {
-  .beneficiary-create { padding: 16px; }
-  .form-row { grid-template-columns: 1fr; }
-}
+.loading-section { text-align: center; margin-top: 20px; }
+.loading-spinner { width: 30px; height: 30px; border: 3px solid #e2e8f0; border-top-color: #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 768px) { .beneficiary-create { padding: 16px; } .form-row { grid-template-columns: 1fr; } }
 </style>

@@ -1,5 +1,3 @@
-
-
 <template>
   <div class="donation-detail" v-if="donation">
     <!-- Back header -->
@@ -20,7 +18,7 @@
         <button v-if="canSubmit" @click="submitDonation" class="btn-primary" :disabled="submitting">Submit for Approval</button>
         <button v-if="canApprove" @click="approveDonation" class="btn-primary" :disabled="approving">Approve</button>
         <button v-if="canApprove" @click="showRequestChangesModal = true" class="btn-warning" :disabled="submittingChanges">Request Changes</button>
-        <button v-if="canDistribute" @click="markDistributed" class="btn-primary" :disabled="distributing">Mark Distributed</button>
+        <button v-if="canDistribute" @click="markDistributed" class="btn-primary" :disabled="distributing"> {{distributing? 'Distributing':'Mark Distributed'}} </button>
         <button v-if="canCancel" @click="openCancelModal" class="btn-danger" :disabled="canceling">Cancel Donation</button>
       </div>
     </div>
@@ -80,24 +78,61 @@
               <td class="total-cell">{{ formatCurrency(item.totalValue) }}</td>
               <td>{{ item.type === 'money' ? (item.paymentMethod || 'bank') : '-' }}</td>
               <td class="actions-cell">
-                <button v-if="donation?.status === 'approved'" @click="distributingItem = item; showDistributeModal = true" class="action-btn distribute" title="Distribute">
+                <!-- Upload Evidence (only when approved) -->
+                <button
+                  v-if="donation?.status === 'approved'"
+                  @click="openEvidenceModalForItem(item)"
+                  class="action-btn evidence"
+                  title="Upload Evidence"
+                >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                    <polyline points="22 4 12 14.01 9 11.01" />
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
                 </button>
+                <!-- Mark Item Distributed (approved, not yet distributed) -->
+                <!-- Evidence warning if none uploaded -->
+                <span v-if="!item.DonationDistributionEvidences?.length && item.status !== 'distributed'  && donation.status !== 'draft' && donation.status === 'approved' && donation.status !== 'pending'"  
+                      class="evidence-warning" 
+                      title="Evidence required before distribution">
+                  ⚠️  
+                </span>
+
+                <!-- Mark Item Distributed (only enabled if evidence present) -->
+                <button
+                  v-if="donation?.status === 'approved' && item.status !== 'distributed'"
+                  @click="markItemAsDistributed(item)"
+                  class="action-btn distribute-item"
+                  :title="(!item.DonationDistributionEvidences?.length) ? 'Upload evidence first' : 'Mark Item Distributed'"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-2.25-1.313M21 7.5v2.25m0-2.25-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3 2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75 2.25-1.313M12 21.75V19.5m0 2.25-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
+                  </svg>
+
+                </button>
+                <span v-if="item.status === 'distributed'" class="distributed-badge" title="Distributed">✓</span>
+                <!-- Delete item (draft only) -->
                 <button v-if="donation?.status === 'draft'" @click="deleteItem(item)" class="action-btn delete" title="Delete">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                   </svg>
                 </button>
-                <!-- Toggle distribution visibility -->
+                <!-- Toggle distribution view -->
                 <button class="action-btn toggle-dist" @click="toggleDistributions(item.donationItemId)" title="Show distribution">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M9 18l6-6-6-6" v-if="!expandedItems.includes(item.donationItemId)" />
                     <path d="M6 9l6 6 6-6" v-else />
+                    
+                    
                   </svg>
+
+
                 </button>
+                <!-- Evidence count -->
+                <span v-if="item.DonationDistributionEvidences?.length" class="evidence-count">
+                  {{ item.DonationDistributionEvidences.length }} file(s)
+                </span>
               </td>
             </tr>
             <!-- Distribution details (expandable) -->
@@ -130,7 +165,6 @@
                             <th>{{ item.type === 'money' ? 'Amount' : 'Quantity' }}</th>
                             <th>Value</th>
                             <th>Returned?</th>
-                            <th>Evidence</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -141,20 +175,6 @@
                             <td>
                               <span v-if="dist.isReturned" class="returned">Yes ({{ dist.returnReason }})</span>
                               <span v-else>No</span>
-                            </td>
-                            <td>
-                              <button @click="openEvidenceModal(dist)" class="action-btn evidence" title="Upload Evidence">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                  <polyline points="7 10 12 15 17 10" />
-                                  <line x1="12" y1="15" x2="12" y2="3" />
-                                </svg>
-                              </button>
-                              <div v-if="dist.DonationDistributionEvidences?.length" class="evidence-list">
-                                <span v-for="ev in dist.DonationDistributionEvidences" :key="ev.evidenceId" class="evidence-file">
-                                  <a :href="ev.fileUrl" target="_blank">{{ ev.fileName }}</a>
-                                </span>
-                              </div>
                             </td>
                           </tr>
                         </tbody>
@@ -199,7 +219,7 @@
       </div>
     </div>
 
-    <!-- Status Transitions Modals -->
+    <!-- Status Transition Modals -->
     <!-- Cancel Modal -->
     <div v-if="showCancelModal" class="modal-overlay" @click.self="closeCancelModal">
       <div class="modal">
@@ -208,6 +228,44 @@
         <div class="modal-actions">
           <button @click="closeCancelModal" class="btn-secondary">No</button>
           <button @click="cancelDonation" class="btn-danger" :disabled="canceling">Yes, Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Request Changes Modal -->
+    <div v-if="showRequestChangesModal" class="modal-overlay" @click.self="showRequestChangesModal = false">
+      <div class="modal">
+        <h3>Request Changes</h3>
+        <p>Add a comment explaining what needs to be changed.</p>
+        <textarea v-model="requestChangesComment" rows="3" placeholder="Your comment..."></textarea>
+        <div class="modal-actions">
+          <button @click="showRequestChangesModal = false" class="btn-secondary">Cancel</button>
+          <button @click="submitRequestChanges" :disabled="!requestChangesComment.trim() || submittingChanges" class="btn-primary">
+            {{ submittingChanges ? 'Sending...' : 'Send & Return to Draft' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Evidence Upload Modal (per item) -->
+    <div v-if="showEvidenceModal" class="modal-overlay" @click.self="showEvidenceModal = false">
+      <div class="modal">
+        <h3>Upload Evidence for item: {{ selectedItem?.description || 'Item' }}</h3>
+        <div class="form-group">
+          <input type="file" multiple @change="handleFileSelect" accept="image/*,.pdf" />
+        </div>
+        <div v-if="selectedFiles.length" class="selected-files">
+          <p>Selected files:</p>
+          <ul>
+            <li v-for="(file, idx) in selectedFiles" :key="idx">{{ file.name }}</li>
+          </ul>
+        </div>
+        <div v-if="uploadingEvidence" class="loading-spinner"></div>
+        <div class="modal-actions">
+          <button @click="showEvidenceModal = false" class="btn-secondary">Cancel</button>
+          <button @click="uploadEvidence" :disabled="!selectedFiles.length || uploadingEvidence" class="btn-primary">
+            {{ uploadingEvidence ? 'Uploading...' : 'Upload' }}
+          </button>
         </div>
       </div>
     </div>
@@ -236,44 +294,6 @@
       @close="showDistributeModal = false; distributingItem = null"
       @save="handleDistribute"
     />
-
-    <!-- Request Changes Modal -->
-    <div v-if="showRequestChangesModal" class="modal-overlay" @click.self="showRequestChangesModal = false">
-      <div class="modal">
-        <h3>Request Changes</h3>
-        <p>Add a comment explaining what needs to be changed.</p>
-        <textarea v-model="requestChangesComment" rows="3" placeholder="Your comment..."></textarea>
-        <div class="modal-actions">
-          <button @click="showRequestChangesModal = false" class="btn-secondary">Cancel</button>
-          <button @click="submitRequestChanges" :disabled="!requestChangesComment.trim() || submittingChanges" class="btn-primary">
-            {{ submittingChanges ? 'Sending...' : 'Send & Return to Draft' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Evidence Upload Modal -->
-    <div v-if="showEvidenceModal" class="modal-overlay" @click.self="showEvidenceModal = false">
-      <div class="modal">
-        <h3>Upload Evidence for {{ selectedDistribution?.Beneficiary?.name }}</h3>
-        <div class="form-group">
-          <input type="file" multiple @change="handleFileSelect" accept="image/*,.pdf" />
-        </div>
-        <div v-if="selectedFiles.length" class="selected-files">
-          <p>Selected files:</p>
-          <ul>
-            <li v-for="(file, idx) in selectedFiles" :key="idx">{{ file.name }}</li>
-          </ul>
-        </div>
-        <div v-if="uploadingEvidence" class="loading-spinner"></div>
-        <div class="modal-actions">
-          <button @click="showEvidenceModal = false" class="btn-secondary">Cancel</button>
-          <button @click="uploadEvidence" :disabled="!selectedFiles.length || uploadingEvidence" class="btn-primary">
-            {{ uploadingEvidence ? 'Uploading...' : 'Upload' }}
-          </button>
-        </div>
-      </div>
-    </div>
 
     <!-- Toasts -->
     <div class="toast-container">
@@ -324,8 +344,10 @@ const distViewMode = ref({})
 const showRequestChangesModal = ref(false)
 const requestChangesComment = ref('')
 const submittingChanges = ref(false)
+
+// Evidence modal state (per item)
 const showEvidenceModal = ref(false)
-const selectedDistribution = ref(null)
+const selectedItem = ref(null)
 const selectedFiles = ref([])
 const uploadingEvidence = ref(false)
 
@@ -353,7 +375,7 @@ const canApprove = computed(() => donation.value?.status === 'pending' && ['admi
 const canDistribute = computed(() => donation.value?.status === 'approved')
 const canCancel = computed(() => donation.value?.status !== 'cancelled')
 
-// ── Load data ──
+// ── Data loading ──
 const loadDonation = async () => {
   loading.value = true
   const res = await CharityService.getDonationById(donationId)
@@ -372,7 +394,7 @@ const loadGroups = async () => {
   if (res.success) groups.value = res.data
 }
 
-// ── Status transitions ──
+// ── Status transitions (donation level) ──
 const submitDonation = async () => {
   submitting.value = true
   const res = await CharityService.submitDonation(donationId)
@@ -423,7 +445,7 @@ const submitRequestChanges = async () => {
   submittingChanges.value = false
 }
 
-// ── Items ──
+// ── Items management ──
 const openAddItemModal = () => showAddItemModal.value = true
 const closeAddItemModal = () => showAddItemModal.value = false
 const addItem = async ({ itemData, distributions }) => {
@@ -459,7 +481,7 @@ const deleteItem = async (item) => {
   else addToast(res.error || 'Delete failed', 'error')
 }
 
-// ── Distributions view toggle ──
+// ── Distribution view toggle ──
 const toggleDistributions = (itemId) => {
   const idx = expandedItems.value.indexOf(itemId)
   if (idx > -1) expandedItems.value.splice(idx, 1)
@@ -470,7 +492,7 @@ const toggleDistributions = (itemId) => {
 }
 const toggleDistView = (itemId, mode) => distViewMode.value[itemId] = mode
 
-// ── Grouped distributions ──
+// ── Grouped distributions (for group view) ──
 const groupedDistributions = (item) => {
   if (!item.DonationDistributions) return {}
   const groups = {}
@@ -493,8 +515,9 @@ const getGroupName = (groupId) => {
   return mgr ? `${mgr} <${group.name}>` : group.name
 }
 
-// ── Distribute (for approved donations) ──
+// ── Distribute (bulk for approved donations) ──
 const handleDistribute = async (payload) => {
+
   distributingSaving.value = true
   const res = await CharityService.distributeItem(distributingItem.value.donationItemId, payload)
   if (res.success) { addToast('Distributed successfully'); showDistributeModal.value = false; distributingItem.value = null; loadDonation() }
@@ -502,22 +525,30 @@ const handleDistribute = async (payload) => {
   distributingSaving.value = false
 }
 
-// ── Evidence upload ──
-const openEvidenceModal = (dist) => {
-  selectedDistribution.value = dist
+// ── Per-item evidence upload ──
+const openEvidenceModalForItem = (item) => {
+  selectedItem.value = item
   selectedFiles.value = []
   showEvidenceModal.value = true
 }
 const handleFileSelect = (event) => selectedFiles.value = Array.from(event.target.files)
 const uploadEvidence = async () => {
-  if (!selectedDistribution.value || !selectedFiles.value.length) return
+  if (!selectedItem.value || !selectedFiles.value.length) return
   uploadingEvidence.value = true
   const formData = new FormData()
-  selectedFiles.value.forEach(file => formData.append('evidences', file))
-  const res = await CharityService.uploadEvidence(selectedDistribution.value.distributionId, formData)
+  selectedFiles.value.forEach(file => formData.append('documents', file))
+  const res = await CharityService.uploadItemEvidence(selectedItem.value.donationItemId, formData)
   uploadingEvidence.value = false
   if (res.success) { addToast('Evidence uploaded successfully'); showEvidenceModal.value = false; loadDonation() }
   else addToast(res.error || 'Upload failed', 'error')
+}
+
+// ── Per-item mark distributed ──
+const markItemAsDistributed = async (item) => {
+  if (!confirm(`Mark "${item.description}" as distributed?`)) return
+  const res = await CharityService.markItemDistributed(item.donationItemId)
+  if (res.success) { addToast('Item marked as distributed'); loadDonation() }
+  else addToast(res.error || 'Failed', 'error')
 }
 
 // ── Mount ──
@@ -557,10 +588,14 @@ onMounted(async () => {
 .type-goods { background: #dcfce7; color: #166534; }
 .type-service { background: #fef3c7; color: #92400e; }
 .total-cell { font-weight: 600; }
-.actions-cell { display: flex; gap: 6px; }
+.actions-cell { display: flex; gap: 6px; align-items: center; }
 .action-btn { width: 28px; height: 28px; border-radius: 6px; display: flex; padding: 5px;align-items: center; justify-content: center; cursor: pointer; border: none; background: none; color: #64748b; }
 .action-btn.edit { background: #3b82f620; color: #3b82f6; }
 .action-btn.delete { background: #ef444420; color: #dc2626; }
+.action-btn.evidence { color: #8b5cf6; }
+.action-btn.distribute-item { color: #10b981; }
+.distributed-badge { color: #10b981; font-size: 18px; margin-left: 4px; }
+.evidence-count { font-size: 12px; color: #6a11cb; margin-left: 4px; }
 .empty-items { text-align: center; padding: 20px; color: #94a3b8; }
 .modal-overlay { position: fixed; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index:1000; }
 .modal { background: white; border-radius: 16px; padding: 24px; width: 400px; max-width: 90%; }
@@ -582,31 +617,16 @@ onMounted(async () => {
 .returned { color: #dc2626; font-size: 11px; }
 .unassigned { margin-top: 8px; color: #64748b; font-style: italic; }
 .no-dist { color: #94a3b8; font-size: 13px; }
-.dist-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-.view-toggle {
-  display: flex;
-  gap: 4px;
-}
-.toggle-btn {
-  padding: 4px 10px;
-  font-size: 11px;
-  border: 1px solid #cbd5e1;
-  background: white;
-  border-radius: 6px;
-  cursor: pointer;
-  color: #475569;
-}
-.toggle-btn.active {
-  background: #6a11cb;
-  color: white;
-  border-color: #6a11cb;
-}
+.dist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.view-toggle { display: flex; gap: 4px; }
+.toggle-btn { padding: 4px 10px; font-size: 11px; border: 1px solid #cbd5e1; background: white; border-radius: 6px; cursor: pointer; color: #475569; }
+.toggle-btn.active { background: #6a11cb; color: white; border-color: #6a11cb; }
 .btn-warning { background: #f59e0b; color: white; border: none; padding: 8px 16px; border-radius: 10px; cursor: pointer; }
-.action-btn.evidence { color: #8b5cf6; }
-.action-btn.evidence:hover { background: #8b5cf620; }
+.selected-files { margin-top: 10px; }
+.selected-files ul { padding-left: 20px; }
+.evidence-warning {
+  color: #d97706;
+  font-size: 14px;
+  margin-right: 4px;
+}
 </style>

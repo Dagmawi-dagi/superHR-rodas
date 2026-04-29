@@ -42,7 +42,19 @@ export interface DonationItem {
   totalValue: number
   paymentMethod?: 'bank' | 'cash'
   unassignedDeduction?: number
+  status?: 'pending' | 'distributed'
   DonationDistributions?: DonationDistribution[]
+  DonationDistributionEvidences?: DonationDistributionEvidence[]
+}
+
+export interface DonationDistributionEvidence {
+  evidenceId: number
+  donationItemId: number
+  fileUrl: string
+  fileName?: string
+  fileType?: string
+  uploadedBy?: number
+  createdAt?: string
 }
 
 export interface DonationDistribution {
@@ -155,25 +167,9 @@ export interface Pagination {
 
 class CharityService {
   // --------------------------------------------------------------------------
-  // PAGINATION HELPER
-  // --------------------------------------------------------------------------
-  private buildPaginationParams(params: Record<string, any>): string {
-    const query = new URLSearchParams()
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined && value !== null && value !== '' && value !== 'all') {
-        query.append(key, String(value))
-      }
-    })
-    return query.toString()
-  }
-
-  // --------------------------------------------------------------------------
   // COMPANIES
   // --------------------------------------------------------------------------
 
-  /**
-   * List companies with optional pagination, filters, sorting
-   */
   async getCompanies(params?: {
     page?: number
     size?: number
@@ -182,52 +178,70 @@ class CharityService {
     type?: string
     isActive?: boolean | string
     search?: string
-  }): Promise<{ success: boolean; data: Company[]; pagination: Pagination }> {
-    const query = this.buildPaginationParams({
-      page: params?.page,
-      size: params?.size,
-      sortBy: params?.sortBy,
-      sortOrder: params?.sortOrder,
-      type: params?.type,
-      isActive: params?.isActive,
-      search: params?.search
-    })
-    const url = `/charity/companies${query ? `?${query}` : ''}`
-    const response = await api.get(url)
-    return {
-      success: true,
-      data: response.data.data as Company[],
-      pagination: response.data.pagination as Pagination
+  }) {
+    try {
+      const query = new URLSearchParams()
+      Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '' && value !== 'all')
+          query.append(key, String(value))
+      })
+      const url = `/charity/companies${query.toString() ? `?${query}` : ''}`
+      const response = await api.get(url)
+      return {
+        success: true,
+        data: response.data.data as Company[],
+        pagination: response.data.pagination as Pagination
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Failed to fetch companies',
+        data: [],
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, pageSize: 10 }
+      }
     }
   }
 
   async getCompanyById(id: number) {
-    const response = await api.get(`/charity/companies/${id}`)
-    return { success: true, data: response.data.data as Company }
+    try {
+      const response = await api.get(`/charity/companies/${id}`)
+      return { success: true, data: response.data.data as Company }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to fetch company' }
+    }
   }
 
   async createCompany(data: Partial<Company>) {
-    const response = await api.post('/charity/companies', data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.post('/charity/companies', data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to create company' }
+    }
   }
 
   async updateCompany(id: number, data: Partial<Company>) {
-    const response = await api.put(`/charity/companies/${id}`, data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.put(`/charity/companies/${id}`, data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to update company' }
+    }
   }
 
   async deleteCompany(id: number) {
-    const response = await api.delete(`/charity/companies/${id}`)
-    return { success: true, message: response.data.message }
+    try {
+      const response = await api.delete(`/charity/companies/${id}`)
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to delete company' }
+    }
   }
 
   // --------------------------------------------------------------------------
   // CAMPAIGNS
   // --------------------------------------------------------------------------
 
-  /**
-   * List campaigns with pagination, filters, sorting
-   */
   async getCampaigns(params?: {
     page?: number
     size?: number
@@ -236,58 +250,91 @@ class CharityService {
     status?: string
     category?: string
     search?: string
-  }): Promise<{ success: boolean; data: Campaign[]; pagination: Pagination }> {
-    const query = this.buildPaginationParams({
-      page: params?.page,
-      size: params?.size,
-      sortBy: params?.sortBy,
-      sortOrder: params?.sortOrder,
-      status: params?.status,
-      category: params?.category,
-      search: params?.search
-    })
-    const url = `/charity/campaigns${query ? `?${query}` : ''}`
-    const response = await api.get(url)
-    return {
-      success: true,
-      data: response.data.data as Campaign[],
-      pagination: response.data.pagination as Pagination
+  }) {
+    try {
+      const query = new URLSearchParams()
+      Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '' && value !== 'all')
+          query.append(key, String(value))
+      })
+      const url = `/charity/campaigns${query.toString() ? `?${query}` : ''}`
+      const response = await api.get(url)
+      return {
+        success: true,
+        data: response.data.data as Campaign[],
+        pagination: response.data.pagination as Pagination
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Failed to fetch campaigns',
+        data: [],
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, pageSize: 10 }
+      }
     }
   }
 
   async getCampaignById(id: number) {
-    const response = await api.get(`/charity/campaigns/${id}`)
-    return { success: true, data: response.data.data as Campaign }
+    try {
+      const response = await api.get(`/charity/campaigns/${id}`)
+      return { success: true, data: response.data.data as Campaign }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to fetch campaign' }
+    }
   }
 
   async getCampaignProgress(id: number) {
-    const response = await api.get(`/charity/campaigns/${id}/progress`)
-    return { success: true, data: response.data.data }
+    try {
+      const response = await api.get(`/charity/campaigns/${id}/progress`)
+      return { success: true, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to fetch progress' }
+    }
   }
 
   async createCampaign(data: Partial<Campaign>) {
-    const response = await api.post('/charity/campaigns', data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.post('/charity/campaigns', data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to create campaign' }
+    }
   }
 
   async updateCampaign(id: number, data: Partial<Campaign>) {
-    const response = await api.put(`/charity/campaigns/${id}`, data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.put(`/charity/campaigns/${id}`, data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to update campaign' }
+    }
   }
 
   async deleteCampaign(id: number) {
-    const response = await api.delete(`/charity/campaigns/${id}`)
-    return { success: true, message: response.data.message }
+    try {
+      const response = await api.delete(`/charity/campaigns/${id}`)
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to delete campaign' }
+    }
   }
 
   async extendCampaign(id: number, newEndDate: string, reason?: string) {
-    const response = await api.post(`/charity/campaigns/${id}/extend`, { newEndDate, reason })
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.post(`/charity/campaigns/${id}/extend`, { newEndDate, reason })
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to extend campaign' }
+    }
   }
 
   async terminateCampaign(id: number, reason?: string) {
-    const response = await api.post(`/charity/campaigns/${id}/terminate`, { reason })
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.post(`/charity/campaigns/${id}/terminate`, { reason })
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to terminate campaign' }
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -295,28 +342,44 @@ class CharityService {
   // --------------------------------------------------------------------------
 
   async getLocations(params?: { region?: string; city?: string; search?: string }) {
-    const query = new URLSearchParams()
-    if (params?.region) query.append('region', params.region)
-    if (params?.city) query.append('city', params.city)
-    if (params?.search) query.append('search', params.search)
-    const url = `/charity/locations${query.toString() ? `?${query}` : ''}`
-    const response = await api.get(url)
-    return { success: true, data: response.data.data as Location[] }
+    try {
+      const query = new URLSearchParams()
+      if (params?.region) query.append('region', params.region)
+      if (params?.city) query.append('city', params.city)
+      if (params?.search) query.append('search', params.search)
+      const url = `/charity/locations${query.toString() ? `?${query}` : ''}`
+      const response = await api.get(url)
+      return { success: true, data: response.data.data as Location[] }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to fetch locations', data: [] }
+    }
   }
 
   async createLocation(data: Partial<Location>) {
-    const response = await api.post('/charity/locations', data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.post('/charity/locations', data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to create location' }
+    }
   }
 
   async updateLocation(id: number, data: Partial<Location>) {
-    const response = await api.put(`/charity/locations/${id}`, data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.put(`/charity/locations/${id}`, data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to update location' }
+    }
   }
 
   async deleteLocation(id: number) {
-    const response = await api.delete(`/charity/locations/${id}`)
-    return { success: true, message: response.data.message }
+    try {
+      const response = await api.delete(`/charity/locations/${id}`)
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to delete location' }
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -324,37 +387,54 @@ class CharityService {
   // --------------------------------------------------------------------------
 
   async getBeneficiaryGroups() {
-    const response = await api.get('/charity/beneficiary-groups')
-    return { success: true, data: response.data.data as BeneficiaryGroup[] }
+    try {
+      const response = await api.get('/charity/beneficiary-groups')
+      return { success: true, data: response.data.data as BeneficiaryGroup[] }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to fetch groups', data: [] }
+    }
   }
 
   async createBeneficiaryGroup(data: Partial<BeneficiaryGroup>) {
-    const response = await api.post('/charity/beneficiary-groups', data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.post('/charity/beneficiary-groups', data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to create group' }
+    }
   }
 
   async updateBeneficiaryGroup(id: number, data: Partial<BeneficiaryGroup>) {
-    const response = await api.put(`/charity/beneficiary-groups/${id}`, data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.put(`/charity/beneficiary-groups/${id}`, data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to update group' }
+    }
   }
 
   async deleteBeneficiaryGroup(id: number) {
-    const response = await api.delete(`/charity/beneficiary-groups/${id}`)
-    return { success: true, message: response.data.message }
+    try {
+      const response = await api.delete(`/charity/beneficiary-groups/${id}`)
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to delete group' }
+    }
   }
 
   async assignManagerToGroup(groupId: number, managerEmployeeId: number) {
-    const response = await api.post(`/charity/beneficiary-groups/${groupId}/assign-manager`, { managerEmployeeId })
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.post(`/charity/beneficiary-groups/${groupId}/assign-manager`, { managerEmployeeId })
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to assign manager' }
+    }
   }
 
   // --------------------------------------------------------------------------
   // BENEFICIARIES
   // --------------------------------------------------------------------------
 
-  /**
-   * List beneficiaries with pagination, filters, sorting
-   */
   async getBeneficiaries(params?: {
     page?: number
     size?: number
@@ -364,63 +444,88 @@ class CharityService {
     groupId?: number | string
     locationId?: number | string
     search?: string
-  }): Promise<{ success: boolean; data: Beneficiary[]; pagination: Pagination }> {
-    const query = this.buildPaginationParams({
-      page: params?.page,
-      size: params?.size,
-      sortBy: params?.sortBy,
-      sortOrder: params?.sortOrder,
-      type: params?.type,
-      groupId: params?.groupId,
-      locationId: params?.locationId,
-      search: params?.search
-    })
-    const url = `/charity/beneficiaries${query ? `?${query}` : ''}`
-    const response = await api.get(url)
-    return {
-      success: true,
-      data: response.data.data as Beneficiary[],
-      pagination: response.data.pagination as Pagination
+  }) {
+    try {
+      const query = new URLSearchParams()
+      Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '' && value !== 'all')
+          query.append(key, String(value))
+      })
+      const url = `/charity/beneficiaries${query.toString() ? `?${query}` : ''}`
+      const response = await api.get(url)
+      return {
+        success: true,
+        data: response.data.data as Beneficiary[],
+        pagination: response.data.pagination as Pagination
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Failed to fetch beneficiaries',
+        data: [],
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, pageSize: 10 }
+      }
     }
   }
 
   async getBeneficiaryById(id: number) {
-    const response = await api.get(`/charity/beneficiaries/${id}`)
-    return { success: true, data: response.data.data as Beneficiary }
+    try {
+      const response = await api.get(`/charity/beneficiaries/${id}`)
+      return { success: true, data: response.data.data as Beneficiary }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to fetch beneficiary' }
+    }
   }
 
   async createBeneficiary(data: Partial<Beneficiary>) {
-    const response = await api.post('/charity/beneficiaries', data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.post('/charity/beneficiaries', data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to create beneficiary' }
+    }
   }
 
   async updateBeneficiary(id: number, data: Partial<Beneficiary>) {
-    const response = await api.put(`/charity/beneficiaries/${id}`, data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.put(`/charity/beneficiaries/${id}`, data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to update beneficiary' }
+    }
   }
 
   async deleteBeneficiary(id: number) {
-    const response = await api.delete(`/charity/beneficiaries/${id}`)
-    return { success: true, message: response.data.message }
+    try {
+      const response = await api.delete(`/charity/beneficiaries/${id}`)
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to delete beneficiary' }
+    }
   }
 
   async transferBeneficiary(id: number, toGroupId: number, reason: string) {
-    const response = await api.post(`/charity/beneficiaries/${id}/transfer`, { toGroupId, reason })
-    return { success: true, message: response.data.message }
+    try {
+      const response = await api.post(`/charity/beneficiaries/${id}/transfer`, { toGroupId, reason })
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to transfer beneficiary' }
+    }
   }
 
   async getBeneficiaryTransfers(id: number) {
-    const response = await api.get(`/charity/beneficiaries/${id}/transfers`)
-    return { success: true, data: response.data.data }
+    try {
+      const response = await api.get(`/charity/beneficiaries/${id}/transfers`)
+      return { success: true, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to fetch transfers', data: [] }
+    }
   }
 
   // --------------------------------------------------------------------------
   // DONATIONS (CORE)
   // --------------------------------------------------------------------------
 
-  /**
-   * List donations with pagination, filters
-   */
   async getDonations(params?: {
     page?: number
     size?: number
@@ -430,29 +535,37 @@ class CharityService {
     startDate?: string
     endDate?: string
     search?: string
-  }): Promise<{ success: boolean; data: Donation[]; pagination: Pagination }> {
-    const query = this.buildPaginationParams({
-      page: params?.page,
-      size: params?.size,
-      status: params?.status,
-      companyId: params?.companyId,
-      campaignId: params?.campaignId,
-      startDate: params?.startDate,
-      endDate: params?.endDate,
-      search: params?.search
-    })
-    const url = `/charity/donations${query ? `?${query}` : ''}`
-    const response = await api.get(url)
-    return {
-      success: true,
-      data: response.data.data as Donation[],
-      pagination: response.data.pagination as Pagination
+  }) {
+    try {
+      const query = new URLSearchParams()
+      Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '' && value !== 'all')
+          query.append(key, String(value))
+      })
+      const url = `/charity/donations${query.toString() ? `?${query}` : ''}`
+      const response = await api.get(url)
+      return {
+        success: true,
+        data: response.data.data as Donation[],
+        pagination: response.data.pagination as Pagination
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Failed to fetch donations',
+        data: [],
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, pageSize: 10 }
+      }
     }
   }
 
   async getDonationById(id: number) {
-    const response = await api.get(`/charity/donations/${id}`)
-    return { success: true, data: response.data.data as Donation }
+    try {
+      const response = await api.get(`/charity/donations/${id}`)
+      return { success: true, data: response.data.data as Donation }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to fetch donation' }
+    }
   }
 
   async createDonation(data: {
@@ -461,18 +574,30 @@ class CharityService {
     donationDate: string
     notes?: string
   }) {
-    const response = await api.post('/charity/donations', data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.post('/charity/donations', data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to create donation' }
+    }
   }
 
   async updateDonation(id: number, data: Partial<Donation>) {
-    const response = await api.put(`/charity/donations/${id}`, data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.put(`/charity/donations/${id}`, data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to update donation' }
+    }
   }
 
   async cancelDonation(id: number) {
-    const response = await api.delete(`/charity/donations/${id}`)
-    return { success: true, message: response.data.message }
+    try {
+      const response = await api.delete(`/charity/donations/${id}`)
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to cancel donation' }
+    }
   }
 
   // Donation Items
@@ -483,8 +608,12 @@ class CharityService {
     unitValue: number
     paymentMethod?: string
   }) {
-    const response = await api.post(`/charity/donations/${donationId}/items`, data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.post(`/charity/donations/${donationId}/items`, data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to add item' }
+    }
   }
 
   async updateDonationItem(itemId: number, data: {
@@ -492,35 +621,67 @@ class CharityService {
     unitValue?: number
     description?: string
   }) {
-    const response = await api.put(`/charity/donations/items/${itemId}`, data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.put(`/charity/donations/items/${itemId}`, data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to update item' }
+    }
   }
 
   async deleteDonationItem(itemId: number) {
-    const response = await api.delete(`/charity/donations/items/${itemId}`)
-    return { success: true, message: response.data.message }
+    try {
+      const response = await api.delete(`/charity/donations/items/${itemId}`)
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to delete item' }
+    }
   }
 
   // Status Transitions
   async submitDonation(id: number) {
-    const response = await api.post(`/charity/donations/${id}/submit`)
-    return { success: true, message: response.data.message }
+    try {
+      const response = await api.post(`/charity/donations/${id}/submit`)
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to submit donation' }
+    }
   }
 
   async requestChanges(donationId: number, comment: string) {
-    const response = await api.post(`/charity/donations/${donationId}/request-changes`, { comment });
-    return { success: true, message: response.data.message };
+    try {
+      const response = await api.post(`/charity/donations/${donationId}/request-changes`, { comment })
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to request changes' }
+    }
   }
 
   async approveDonation(id: number, comment?: string) {
-    const response = await api.post(`/charity/donations/${id}/approve`, { comment })
-    return { success: true, message: response.data.message }
+    try {
+      const response = await api.post(`/charity/donations/${id}/approve`, { comment })
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to approve donation' }
+    }
   }
 
-
   async distributeDonation(id: number) {
-    const response = await api.post(`/charity/donations/${id}/distribute`)
-    return { success: true, message: response.data.message }
+    try {
+      const response = await api.post(`/charity/donations/${id}/distribute`)
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to distribute donation' }
+    }
+  }
+
+  async markItemDistributed(itemId: number) {
+    try {
+      const response = await api.post(`/charity/donations/items/${itemId}/distribute-single`)
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to mark item distributed' }
+    }
   }
 
   // Distributions
@@ -529,8 +690,12 @@ class CharityService {
     quantity: number
     value?: number
   }[]) {
-    const response = await api.post(`/charity/donations/items/${itemId}/distribute`, { distributions })
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.post(`/charity/donations/items/${itemId}/distribute`, { distributions })
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to distribute item' }
+    }
   }
 
   async getDistributions(params?: {
@@ -539,29 +704,57 @@ class CharityService {
     beneficiaryId?: number
     donationId?: number
   }) {
-    const query = this.buildPaginationParams({
-      page: params?.page,
-      size: params?.size,
-      beneficiaryId: params?.beneficiaryId,
-      donationId: params?.donationId
-    })
-    const url = `/charity/donations/distributions${query ? `?${query}` : ''}`
-    const response = await api.get(url)
-    return {
-      success: true,
-      data: response.data.data,
-      pagination: response.data.pagination as Pagination
+    try {
+      const query = new URLSearchParams()
+      Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '' && value !== 'all')
+          query.append(key, String(value))
+      })
+      const url = `/charity/donations/distributions${query.toString() ? `?${query}` : ''}`
+      const response = await api.get(url)
+      return {
+        success: true,
+        data: response.data.data,
+        pagination: response.data.pagination as Pagination
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Failed to fetch distributions',
+        data: [],
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, pageSize: 10 }
+      }
     }
   }
 
   async getDistributionById(distributionId: number) {
-    const response = await api.get(`/charity/donations/distributions/${distributionId}`)
-    return { success: true, data: response.data.data }
+    try {
+      const response = await api.get(`/charity/donations/distributions/${distributionId}`)
+      return { success: true, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to fetch distribution' }
+    }
   }
 
   async returnDistribution(distributionId: number, reason: string) {
-    const response = await api.post(`/charity/donations/distributions/${distributionId}/return`, { reason })
-    return { success: true, message: response.data.message }
+    try {
+      const response = await api.post(`/charity/donations/distributions/${distributionId}/return`, { reason })
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to return distribution' }
+    }
+  }
+
+  // Evidence uploads
+  async uploadItemEvidence(itemId: number, formData: FormData) {
+    try {
+      const response = await api.post(`/charity/donations/items/${itemId}/evidences`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to upload evidence' }
+    }
   }
 
   // Deductions (money items)
@@ -570,52 +763,86 @@ class CharityService {
     reason: string
     reassignedToBeneficiaryId?: number
   }) {
-    const response = await api.post(`/charity/donations/items/${itemId}/deductions`, data)
-    return { success: true, message: response.data.message, data: response.data.data }
+    try {
+      const response = await api.post(`/charity/donations/items/${itemId}/deductions`, data)
+      return { success: true, message: response.data.message, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to add deduction' }
+    }
   }
 
   async getItemDeductions(itemId: number) {
-    const response = await api.get(`/charity/donations/items/${itemId}/deductions`)
-    return { success: true, data: response.data.data }
+    try {
+      const response = await api.get(`/charity/donations/items/${itemId}/deductions`)
+      return { success: true, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to fetch deductions', data: [] }
+    }
   }
 
   // Approvals & Logs
   async getApprovalHistory(donationId: number) {
-    const response = await api.get(`/charity/donations/${donationId}/approvals`)
-    return { success: true, data: response.data.data as DonationApproval[] }
+    try {
+      const response = await api.get(`/charity/donations/${donationId}/approvals`)
+      return { success: true, data: response.data.data as DonationApproval[] }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to fetch approval history', data: [] }
+    }
   }
 
   async getDonationLogs(donationId: number, params?: {
     page?: number
     size?: number
   }) {
-    const query = this.buildPaginationParams({
-      page: params?.page,
-      size: params?.size
-    })
-    const url = `/charity/donations/${donationId}/logs${query ? `?${query}` : ''}`
-    const response = await api.get(url)
-    return {
-      success: true,
-      data: response.data.data,
-      pagination: response.data.pagination as Pagination
+    try {
+      const query = new URLSearchParams()
+      Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '' && value !== 'all')
+          query.append(key, String(value))
+      })
+      const url = `/charity/donations/${donationId}/logs${query.toString() ? `?${query}` : ''}`
+      const response = await api.get(url)
+      return {
+        success: true,
+        data: response.data.data,
+        pagination: response.data.pagination as Pagination
+      }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Failed to fetch logs',
+        data: [],
+        pagination: { totalItems: 0, totalPages: 1, currentPage: 1, pageSize: 10 }
+      }
     }
   }
 
   // Statistics
   async getDonationStats() {
-    const response = await api.get('/charity/donations/stats/summary')
-    return { success: true, data: response.data.data }
+    try {
+      const response = await api.get('/charity/donations/stats/summary')
+      return { success: true, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to fetch stats' }
+    }
   }
 
   async getDonationsByCampaign() {
-    const response = await api.get('/charity/donations/stats/by-campaign')
-    return { success: true, data: response.data.data }
+    try {
+      const response = await api.get('/charity/donations/stats/by-campaign')
+      return { success: true, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to fetch donations by campaign', data: [] }
+    }
   }
 
   async getDonationsByCompany() {
-    const response = await api.get('/charity/donations/stats/by-company')
-    return { success: true, data: response.data.data }
+    try {
+      const response = await api.get('/charity/donations/stats/by-company')
+      return { success: true, data: response.data.data }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to fetch donations by company', data: [] }
+    }
   }
 
   // --------------------------------------------------------------------------

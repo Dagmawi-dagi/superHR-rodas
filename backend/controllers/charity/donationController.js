@@ -63,6 +63,18 @@ const logDonationAction = async (
   );
 };
 
+const getEmployeeIdFromUserId = async (userId) => {
+  if (!userId) return null;
+  const employee = await Employee.findOne({
+    where: { userId },
+    attributes: ['employeeId']
+  });
+  return employee ? employee.employeeId : null;
+};
+
+// ------------------------------------------------------------------
+// CREATE DONATION (status: draft)
+// ------------------------------------------------------------------
 // ------------------------------------------------------------------
 // CREATE DONATION (status: draft)
 // ------------------------------------------------------------------
@@ -71,6 +83,7 @@ exports.createDonation = async (req, res) => {
   try {
     const { companyId, campaignId, donationDate, notes } = req.body;
 
+    // Basic field presence
     if (!companyId || !campaignId || !donationDate) {
       await t.rollback();
       return res.status(400).json({
@@ -79,22 +92,60 @@ exports.createDonation = async (req, res) => {
       });
     }
 
-    const Donation_Company = await DonationCompany.findByPk(companyId, { transaction: t });
-    if (!Donation_Company) {
+    // Company existence
+    const company = await DonationCompany.findByPk(companyId, { transaction: t });
+    if (!company) {
       await t.rollback();
-      return res
-        .status(404)
-        .json({ success: false, error: "Donation_Company not found" });
+      return res.status(404).json({ success: false, error: "Company (donor) not found" });
     }
 
+    // NEW: Company must be active
+    if (!company.isActive) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Company "${company.name}" is currently inactive. Donations can only be made to active companies.`,
+      });
+    }
+
+    // Campaign existence with full details
     const campaign = await Campaign.findByPk(campaignId, { transaction: t });
     if (!campaign) {
       await t.rollback();
-      return res
-        .status(404)
-        .json({ success: false, error: "Campaign not found" });
+      return res.status(404).json({ success: false, error: "Campaign not found" });
     }
 
+    // 1. Campaign must be active
+    if (campaign.status !== "active") {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Campaign "${campaign.title}" is not active (current status: ${campaign.status}). Only active campaigns can receive donations.`,
+      });
+    }
+
+    // 2. Donation date must be within campaign start/end dates
+    const campaignStart = campaign.startDate ? new Date(campaign.startDate) : null;
+    const campaignEnd = campaign.endDate ? new Date(campaign.endDate) : null;
+    const donationDateObj = new Date(donationDate);
+
+    if (campaignStart && donationDateObj < campaignStart) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Donation date (${donationDate}) is before the campaign start date (${campaign.startDate}).`,
+      });
+    }
+
+    if (campaignEnd && donationDateObj > campaignEnd) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `Donation date (${donationDate}) is after the campaign end date (${campaign.endDate}).`,
+      });
+    }
+
+    // Create the donation
     const donation = await Donation.create(
       {
         companyId,
@@ -104,18 +155,19 @@ exports.createDonation = async (req, res) => {
         status: "draft",
         totalValue: 0,
       },
-      { transaction: t },
+      { transaction: t }
     );
 
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
     await logDonationAction(
       donation.donationId,
-      req.user.userId,
+      employeeId,
       "CREATE",
       {
-        DonationCompany: DonationCompany.name,
+        company: company.name,
         campaign: campaign.title,
       },
-      t,
+      t
     );
 
     await t.commit();
@@ -206,16 +258,13 @@ exports.getDonationById = async (req, res) => {
           model: DonationItem,
           include: [
             {
-              model: DonationDistribution,                  // nested under DonationItem
+              model: DonationDistribution,
               include: [
-                {
-                  model: Beneficiary,
-                  attributes: ['beneficiaryId', 'name', 'type', 'groupId']
-                },
-                {
-                  model: DonationDistributionEvidence       // evidence for each distribution
-                }
+                { model: Beneficiary, attributes: ['beneficiaryId', 'name', 'type', 'groupId'] }
               ]
+            },
+            {
+              model: DonationDistributionEvidence   // direct under DonationItem, not under DonationDistribution
             }
           ]
         },
@@ -322,28 +371,22 @@ exports.addDonationItem = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { id } = req.params;
-    const { type, description, quantity, unitValue } = req.body;
+    const { type, description, quantity, unitValue, paymentMethod } = req.body;
 
     const donation = await Donation.findByPk(id, { transaction: t });
     if (!donation) {
       await t.rollback();
-      return res
-        .status(404)
-        .json({ success: false, error: "Donation not found" });
+      return res.status(404).json({ success: false, error: "Donation not found" });
     }
 
     if (donation.status !== "draft") {
       await t.rollback();
-      return res
-        .status(400)
-        .json({ success: false, error: "Cannot add items after submission" });
+      return res.status(400).json({ success: false, error: "Cannot add items after submission" });
     }
 
     if (!type || quantity === undefined || unitValue === undefined) {
       await t.rollback();
-      return res
-        .status(400)
-        .json({ success: false, error: "type, quantity, unitValue required" });
+      return res.status(400).json({ success: false, error: "type, quantity, unitValue required" });
     }
 
     const totalValue = parseFloat(quantity) * parseFloat(unitValue);
@@ -356,18 +399,15 @@ exports.addDonationItem = async (req, res) => {
         quantity,
         unitValue,
         totalValue,
+        // ✅ Capture payment method (only used for money type, but can be saved for any)
+        paymentMethod: type === "money" ? (paymentMethod || "bank") : null,
       },
-      { transaction: t },
+      { transaction: t }
     );
 
     await recalculateDonationTotal(id, t);
-    await logDonationAction(
-      id,
-      req.user.userId,
-      "ADD_ITEM",
-      { itemId: item.donationItemId },
-      t,
-    );
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+    await logDonationAction(id, employeeId, "ADD_ITEM", { itemId: item.donationItemId }, t);
 
     await t.commit();
 
@@ -390,7 +430,7 @@ exports.updateDonationItem = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { itemId } = req.params;
-    const { quantity, unitValue, description } = req.body;
+    const { quantity, unitValue, description, paymentMethod } = req.body;
 
     const item = await DonationItem.findByPk(itemId, {
       include: [{ model: Donation, attributes: ["status"] }],
@@ -404,37 +444,29 @@ exports.updateDonationItem = async (req, res) => {
 
     if (item.Donation.status !== "draft") {
       await t.rollback();
-      return res
-        .status(400)
-        .json({ success: false, error: "Donation is not editable" });
+      return res.status(400).json({ success: false, error: "Donation is not editable" });
     }
 
     const updates = {};
     if (quantity !== undefined) updates.quantity = quantity;
     if (unitValue !== undefined) updates.unitValue = unitValue;
     if (description !== undefined) updates.description = description;
+    // Allow updating payment method (only meaningful for money items)
+    if (paymentMethod !== undefined) {
+      updates.paymentMethod = paymentMethod;
+    }
 
+    // Recalculate total if quantity/unitValue changed
     if (quantity !== undefined || unitValue !== undefined) {
-      const qty =
-        quantity !== undefined
-          ? parseFloat(quantity)
-          : parseFloat(item.quantity);
-      const val =
-        unitValue !== undefined
-          ? parseFloat(unitValue)
-          : parseFloat(item.unitValue);
+      const qty = quantity !== undefined ? parseFloat(quantity) : parseFloat(item.quantity);
+      const val = unitValue !== undefined ? parseFloat(unitValue) : parseFloat(item.unitValue);
       updates.totalValue = qty * val;
     }
 
     await item.update(updates, { transaction: t });
     await recalculateDonationTotal(item.donationId, t);
-    await logDonationAction(
-      item.donationId,
-      req.user.userId,
-      "UPDATE_ITEM",
-      { itemId },
-      t,
-    );
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+    await logDonationAction(item.donationId, employeeId, "UPDATE_ITEM", { itemId }, t);
 
     await t.commit();
     res.json({ success: true, message: "Item updated", data: item });
@@ -580,15 +612,17 @@ exports.requestChanges = async (req, res) => {
     if (!donation) throw new Error('Donation not found');
     if (donation.status !== 'pending') throw new Error('Donation must be pending');
 
+    // Get the actual employee ID linked to the logged-in user
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+
     await donation.update({ status: 'draft' }, { transaction: t });
     await DonationApproval.create({
       donationId: id,
-      approvedBy: req.user.userId,
+      approvedBy: employeeId,   // now using employee ID, not user ID
       status: 'rejected',
       comment: comment.trim(),
     }, { transaction: t });
 
-    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
     await logDonationAction(id, employeeId, 'REQUEST_CHANGES', { comment }, t);
 
     await t.commit();
@@ -678,29 +712,57 @@ exports.distributeDonation = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const donation = await Donation.findByPk(id, { transaction: t });
+    const donation = await Donation.findByPk(id, {
+      include: {
+        model: DonationItem,
+        include: [ { model: DonationDistributionEvidence, attributes: ['evidenceId'] } ]
+      },
+      transaction: t
+    });
+
     if (!donation) {
       await t.rollback();
-      return res
-        .status(404)
-        .json({ success: false, error: "Donation not found" });
+      return res.status(404).json({ success: false, error: 'Donation not found' });
     }
 
-    if (donation.status !== "approved") {
+    if (donation.status !== 'approved') {
       await t.rollback();
-      return res
-        .status(400)
-        .json({ success: false, error: "Donation must be approved first" });
+      return res.status(400).json({ success: false, error: 'Donation must be approved first' });
     }
 
-    await donation.update({ status: "distributed" }, { transaction: t });
-    await logDonationAction(id, req.user.userId, "DISTRIBUTE", {}, t);
+    // ***** Evidence check for all items *****
+    const itemsWithoutEvidence = [];
+    for (const item of donation.DonationItems) {
+      if (!item.DonationDistributionEvidences || item.DonationDistributionEvidences.length === 0) {
+        itemsWithoutEvidence.push(item.description || `Item #${item.donationItemId}`);
+      }
+    }
+
+    if (itemsWithoutEvidence.length > 0) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `The following items are missing evidence: ${itemsWithoutEvidence.join(', ')}. Please upload evidence before distribution.`
+      });
+    }
+
+    // Mark donation as distributed
+    await donation.update({ status: 'distributed' }, { transaction: t });
+
+    // Optionally mark all items as distributed (if we want to be consistent)
+    await DonationItem.update(
+      { status: 'distributed' },
+      { where: { donationId: id }, transaction: t }
+    );
+
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+    await logDonationAction(id, employeeId, 'DISTRIBUTE', {}, t);
 
     await t.commit();
-    res.json({ success: true, message: "Donation marked as distributed" });
+    res.json({ success: true, message: 'Donation marked as distributed' });
   } catch (error) {
     await t.rollback();
-    console.error("Distribute error:", error);
+    console.error('Distribute error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -810,7 +872,7 @@ exports.distributeItem = async (req, res) => {
 exports.uploadEvidence = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { distributionId } = req.params;
+    const { itemId } = req.params; // now itemId, not distributionId
     const files = req.files;
 
     if (!files || files.length === 0) {
@@ -818,14 +880,13 @@ exports.uploadEvidence = async (req, res) => {
       return res.status(400).json({ success: false, error: 'No files uploaded' });
     }
 
-    // Find the distribution and its parent donation
-    const distribution = await DonationDistribution.findByPk(distributionId, {
-      include: [{ model: DonationItem, attributes: ['donationId'] }],
+    const item = await DonationItem.findByPk(itemId, {
+      include: [{ model: Donation, attributes: ['donationId', 'status'] }],
       transaction: t
     });
-    if (!distribution) {
+    if (!item || item.Donation.status !== 'approved') {
       await t.rollback();
-      return res.status(404).json({ success: false, error: 'Distribution not found' });
+      return res.status(400).json({ success: false, error: 'Donation must be approved' });
     }
 
     const employeeId = await getEmployeeIdFromUserId(req.user.userId);
@@ -833,7 +894,7 @@ exports.uploadEvidence = async (req, res) => {
     const evidences = [];
     for (const file of files) {
       const evidence = await DonationDistributionEvidence.create({
-        distributionId: parseInt(distributionId),
+        donationItemId: parseInt(itemId),
         fileUrl: `/uploads/documents/charityEvidences/${file.filename}`,
         fileName: file.originalname,
         fileType: file.mimetype,
@@ -842,26 +903,86 @@ exports.uploadEvidence = async (req, res) => {
       evidences.push(evidence);
     }
 
-    // Log the action on the parent donation
-    const donationId = distribution.DonationItem.donationId;
-    await logDonationAction(donationId, employeeId, 'EVIDENCE_UPLOADED', {
-      distributionId,
+    await logDonationAction(item.Donation.donationId, employeeId, 'EVIDENCE_UPLOADED', {
+      itemId,
       fileCount: files.length,
     }, t);
 
     await t.commit();
-
-    res.json({
-      success: true,
-      message: `${evidences.length} evidence(s) uploaded`,
-      data: evidences,
-    });
+    res.json({ success: true, message: `${evidences.length} evidence(s) uploaded`, data: evidences });
   } catch (error) {
     await t.rollback();
     console.error('Upload evidence error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+
+exports.markItemDistributed = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { itemId } = req.params;
+
+    // Fetch item with its donation and existing evidence count
+    const item = await DonationItem.findByPk(itemId, {
+      include: [
+        { model: Donation, attributes: ['donationId', 'status'] },
+        { model: DonationDistributionEvidence, attributes: ['evidenceId'] } // just to check existence
+      ],
+      transaction: t
+    });
+
+    if (!item || item.Donation.status !== 'approved') {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Donation must be approved' });
+    }
+
+    if (item.status === 'distributed') {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Item already distributed' });
+    }
+
+    // ***** Evidence check *****
+    if (!item.DonationDistributionEvidences || item.DonationDistributionEvidences.length === 0) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `No evidence uploaded for item "${item.description}". Please upload evidence before distribution.`
+      });
+    }
+
+    // Mark item as distributed
+    await item.update({ status: 'distributed' }, { transaction: t });
+
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+    await logDonationAction(item.Donation.donationId, employeeId, 'ITEM_DISTRIBUTED', {
+      itemId,
+      itemDescription: item.description,
+    }, t);
+
+    // If all items are distributed, auto-mark donation as distributed
+    const allItems = await DonationItem.findAll({
+      where: { donationId: item.donationId },
+      transaction: t
+    });
+    const allDistributed = allItems.every(i => i.status === 'distributed');
+    if (allDistributed) {
+      await Donation.update(
+        { status: 'distributed' },
+        { where: { donationId: item.donationId }, transaction: t }
+      );
+      await logDonationAction(item.donationId, employeeId, 'DISTRIBUTE', {}, t);
+    }
+
+    await t.commit();
+    res.json({ success: true, message: 'Item marked as distributed' });
+  } catch (error) {
+    await t.rollback();
+    console.error('Mark item distributed error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 
 // ------------------------------------------------------------------
 // GET DISTRIBUTIONS LIST

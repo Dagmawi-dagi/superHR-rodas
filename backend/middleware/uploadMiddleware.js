@@ -48,7 +48,7 @@ const getDocumentFolder = (documentType) => {
     'cv': 'cv_resumes',
     'degree': 'degrees',
     'guarantee_letter': 'guarantees',
-    'charity_evidence': 'charityEvidences'
+    'charityEvidences': 'charityEvidences'
   };
   return folders[documentType] || 'others';
 };
@@ -62,6 +62,7 @@ const documentStorage = multer.diskStorage({
     cb(null, dir);
   },
   filename: (req, file, cb) => {  // ✅ FIXED: (req, file, cb) not (req, res, cb)
+    console.log(file)
     const employeeCode = req.body.employeeCode || req.params.id || Date.now();
     const documentType = req.params.type || req.body.documentType || 'document';
     const ext = path.extname(file.originalname);

@@ -4,13 +4,9 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class DonationDistribution extends Model {
     static associate(models) {
-      DonationDistribution.belongsTo(models.DonationItem, {
-        foreignKey: "donationItemId",
-      });
-      DonationDistribution.belongsTo(models.Beneficiary, {
-        foreignKey: "beneficiaryId",
-      });
-      DonationDistribution.hasMany(models.DonationDistributionEvidence, { foreignKey: 'distribution_id' });
+      DonationDistribution.belongsTo(models.DonationItem, { foreignKey: "donationItemId" });
+      DonationDistribution.belongsTo(models.Beneficiary, { foreignKey: "beneficiaryId" });
+      // No longer associated with DonationDistributionEvidence
     }
   }
 
@@ -22,21 +18,10 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true,
         field: "distribution_id",
       },
-      donationItemId: {
-        type: DataTypes.INTEGER,
-        field: "donation_item_id",
-      },
-      beneficiaryId: {
-        type: DataTypes.INTEGER,
-        field: "beneficiary_id",
-      },
-      quantity: {
-        type: DataTypes.DECIMAL(10, 2),
-      },
-      value: {
-        type: DataTypes.DECIMAL(15, 2),
-      },
-      // NEW FIELDS
+      donationItemId: { type: DataTypes.INTEGER, field: "donation_item_id" },
+      beneficiaryId: { type: DataTypes.INTEGER, field: "beneficiary_id" },
+      quantity: { type: DataTypes.DECIMAL(10, 2) },
+      value: { type: DataTypes.DECIMAL(15, 2) },
       isReturned: { type: DataTypes.BOOLEAN, defaultValue: false, field: "is_returned" },
       returnReason: { type: DataTypes.TEXT, field: "return_reason" },
       returnedAt: { type: DataTypes.DATE, field: "returned_at" },

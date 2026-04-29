@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const donationController = require("../../controllers/charity/donationController");
-const { authMiddleware,uploadMultipleDocuments } = require("../../middleware/authMiddleware");
+const { authMiddleware } = require("../../middleware/authMiddleware");
+const { uploadMultipleDocuments } = require("../../middleware/uploadMiddleware");
 
 router.use(authMiddleware());
 
@@ -15,7 +16,8 @@ router.put("/:id", donationController.updateDonation);
 router.delete("/:id", donationController.cancelDonation);
 router.post('/:id/request-changes', donationController.requestChanges);
 // Evidence upload for a distribution
-router.post('/distributions/:distributionId/evidences',  (req, res, next) => { req.params.type = 'charityEvidences'; next(); },donationController.uploadEvidence);
+router.post('/items/:itemId/evidences',  (req, res, next) => { req.params.type = 'charityEvidences'; next(); },uploadMultipleDocuments,donationController.uploadEvidence);
+router.post('/items/:itemId/distribute-single', donationController.markItemDistributed);
 // ------------------------------------------------------------------
 // DONATION ITEMS
 // ------------------------------------------------------------------

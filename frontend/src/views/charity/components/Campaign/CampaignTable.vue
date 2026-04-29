@@ -29,17 +29,25 @@
             </span>
           </td>
           <td class="actions-cell">
-            <!-- <button class="action-btn view" @click="$emit('view', c)" title="View">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
-            </button> -->
             <button class="action-btn edit" @click="$emit('edit', c)" title="Edit">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" /></svg>
             </button>
             <button v-if="c.status === 'active'" class="action-btn extend" @click="$emit('extend', c)" title="Extend">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>
             </button>
-            <button v-if="c.status === 'active' || c.status === 'planned'" class="action-btn terminate" @click="$emit('terminate', c)" title="Terminate">
+            <!-- <button v-if="c.status === 'active' || c.status === 'planned'" class="action-btn terminate" @click="$emit('terminate', c)" title="Terminate">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
+            </button> -->
+            <!-- NEW: Change Status button -->
+            <button
+              v-if="getAllowedTransitions(c.status).length > 0"
+              class="action-btn change-status"
+              @click="$emit('change-status', c)"
+              title="Change Status"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2v20M2 12h20" />
+              </svg>
             </button>
           </td>
         </tr>
@@ -71,11 +79,22 @@ const props = defineProps({
   campaigns: { type: Array, default: () => [] },
   pagination: { type: Object, default: () => ({ currentPage: 1, totalPages: 1 }) }
 })
-defineEmits(['view', 'edit', 'extend', 'terminate', 'go-to-page', 'clear-filters'])
+defineEmits(['view', 'edit', 'extend', 'terminate', 'go-to-page','change-status', 'clear-filters'])
 
 const getStatusLabel = (s) => CharityService.getStatusLabel(s)
 const formatCurrency = (val) => val ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'ETB' }).format(val) : 'N/A'
 const formatDate = (d) => d ? new Date(d).toLocaleDateString() : ''
+
+// Allowed transitions based on current status
+const getAllowedTransitions = (status) => {
+  const map = {
+    planned: ['active', 'cancelled'],
+    active: ['completed', 'cancelled'],
+    completed: [],               // maybe allow 'active'?
+    cancelled: ['planned']
+  }
+  return map[status] || []
+}
 </script>
 
 <style scoped>
@@ -102,4 +121,8 @@ const formatDate = (d) => d ? new Date(d).toLocaleDateString() : ''
 .empty-state-content svg { width: 48px; height: 48px; margin-bottom: 16px; opacity: 0.5; }
 .empty-state-content h3 { font-size: 16px; margin-bottom: 8px; }
 .empty-state-content button { margin-top: 12px; padding: 8px 16px; border-radius: 8px; border: 1px solid #e2e8f0; background: white; cursor: pointer; }
+.action-btn.change-status {
+  background: #8b5cf620;
+  color: #7c3aed;
+}
 </style>
