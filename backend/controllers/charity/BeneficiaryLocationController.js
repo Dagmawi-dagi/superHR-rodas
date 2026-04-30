@@ -1,4 +1,4 @@
-const { DonationLocation, sequelize } = require("../../models");
+const { BeneficiaryLocation, sequelize } = require("../../models");
 const { Op } = require("sequelize");
 
 // ------------------------------------------------------------------
@@ -19,7 +19,7 @@ exports.getAllLocations = async (req, res) => {
       ];
     }
 
-    const locations = await DonationLocation.findAll({
+    const locations = await BeneficiaryLocation.findAll({
       where,
       order: [
         ["region", "ASC"],
@@ -41,7 +41,7 @@ exports.getLocationById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const location = await DonationLocation.findByPk(id);
+    const location = await BeneficiaryLocation.findByPk(id);
     if (!location) {
       return res
         .status(404)
@@ -68,7 +68,7 @@ exports.createLocation = async (req, res) => {
         .json({ success: false, error: "Region and city are required" });
     }
 
-    const location = await DonationLocation.create({
+    const location = await BeneficiaryLocation.create({
       region,
       city,
       woreda,
@@ -77,11 +77,11 @@ exports.createLocation = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "DonationLocation created",
+      message: "BeneficiaryLocation created",
       data: location,
     });
   } catch (error) {
-    console.error("Create DonationLocation error:", error);
+    console.error("Create BeneficiaryLocation error:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -94,11 +94,11 @@ exports.updateLocation = async (req, res) => {
     const { id } = req.params;
     const { region, city, woreda, description } = req.body;
 
-    const location = await DonationLocation.findByPk(id);
+    const location = await BeneficiaryLocation.findByPk(id);
     if (!location) {
       return res
         .status(404)
-        .json({ success: false, error: "DonationLocation not found" });
+        .json({ success: false, error: "BeneficiaryLocation not found" });
     }
 
     const updates = {};
@@ -123,19 +123,19 @@ exports.deleteLocation = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const location = await DonationLocation.findByPk(id);
+    const location = await BeneficiaryLocation.findByPk(id);
     if (!location) {
       return res
         .status(404)
-        .json({ success: false, error: "DonationLocation not found" });
+        .json({ success: false, error: "BeneficiaryLocation not found" });
     }
 
     // Consider checking if location is referenced by beneficiaries
     await location.destroy();
 
-    res.json({ success: true, message: "DonationLocation deleted" });
+    res.json({ success: true, message: "BeneficiaryLocation deleted" });
   } catch (error) {
-    console.error("Delete DonationLocation error:", error);
+    console.error("Delete BeneficiaryLocation error:", error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

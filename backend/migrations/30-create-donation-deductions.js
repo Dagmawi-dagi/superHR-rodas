@@ -9,7 +9,8 @@ module.exports = {
       reassigned_to_beneficiary_id: { type: Sequelize.INTEGER, references: { model: 'beneficiaries', key: 'beneficiary_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
       deduction_date: { type: Sequelize.DATEONLY, defaultValue: Sequelize.NOW },
       created_by: { type: Sequelize.INTEGER, references: { model: 'employees', key: 'employee_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
-      created_at: { type: Sequelize.DATE, allowNull: false }
+      created_at: { type: Sequelize.DATE, allowNull: false },
     });
   },
   async down(queryInterface) { await queryInterface.dropTable('donation_deductions'); }
+};

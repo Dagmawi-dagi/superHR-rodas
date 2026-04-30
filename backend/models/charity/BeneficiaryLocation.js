@@ -2,15 +2,15 @@
 const { Model } = require("sequelize");
 
 module.exports = (sequelize, DataTypes) => {
-  class DonationLocation extends Model {
+  class BeneficiaryLocation extends Model {
     static associate(models) {
-      DonationLocation.hasMany(models.Beneficiary, {
+      BeneficiaryLocation.hasMany(models.Beneficiary, {
         foreignKey: "locationId",
       });
     }
   }
 
-  DonationLocation.init(
+  BeneficiaryLocation.init(
     {
       locationId: {
         type: DataTypes.INTEGER,
@@ -25,11 +25,13 @@ module.exports = (sequelize, DataTypes) => {
     },
     {
       sequelize,
-      modelName: "DonationLocation",
-      tableName: "donation_locations",
+      modelName: "BeneficiaryLocation",
+      tableName: "beneficiary_locations",
       timestamps: false,
+      paranoid: true, 
+      deletedAt: "deleted_at"
     },
   );
 
-  return DonationLocation;
+  return BeneficiaryLocation;
 };

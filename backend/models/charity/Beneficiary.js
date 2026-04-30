@@ -5,7 +5,7 @@ module.exports = (sequelize, DataTypes) => {
   class Beneficiary extends Model {
     static associate(models) {
       Beneficiary.hasMany(models.DonationDistribution, { foreignKey: "beneficiary_id"});
-      Beneficiary.belongsTo(models.DonationLocation, { foreignKey: "location_id",});
+      Beneficiary.belongsTo(models.BeneficiaryLocation, { foreignKey: "location_id",});
       Beneficiary.belongsTo(models.BeneficiaryGroup, { foreignKey: "group_id" });
       Beneficiary.hasMany(models.BeneficiaryTransfer, { foreignKey: "beneficiary_id" });
     }
@@ -48,6 +48,9 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       createdAt: "created_at",
       updatedAt: "updated_at",
+      deletedAt: "deleted_at",
+      paranoid: true, 
+      
     },
   );
 

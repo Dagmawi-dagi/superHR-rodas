@@ -22,7 +22,9 @@
               <input v-model="form.description" placeholder="e.g., Blankets" />
             </div>
           </div>
-          <div class="form-row">
+
+          <!-- For Goods & Service: show Quantity + Unit Value -->
+          <div class="form-row" v-if="form.type !== 'money'">
             <div class="form-group">
               <label>Quantity / Total Units</label>
               <input type="number" step="0.01" v-model.number="form.quantity" required />
@@ -32,6 +34,16 @@
               <input type="number" step="0.01" v-model.number="form.unitValue" required />
             </div>
           </div>
+
+          <!-- For Money: show only Amount -->
+          <div class="form-row" v-if="form.type === 'money'">
+            <div class="form-group full-width">
+              <label>Amount <span class="req">*</span></label>
+              <input type="number" step="0.01" v-model.number="form.unitValue" required />
+              <small class="help-text">Total amount of money being donated.</small>
+            </div>
+          </div>
+
           <div v-if="form.type === 'money'" class="form-group">
             <label>Payment Method</label>
             <select v-model="form.paymentMethod">
@@ -40,11 +52,11 @@
             </select>
           </div>
           <div class="computed-total">
-            <strong>Item Total:</strong> {{ formatCurrency(totalItemValue) }}
+            <strong>Item Total:</strong>
+            {{ form.type === 'money' ? formatCurrency(form.unitValue) : formatCurrency(form.quantity * form.unitValue) }}
           </div>
         </div>
 
-        <!-- ============ Group Assignment (Bulk) ============ -->
         <!-- ============ Group Assignment (Bulk) ============ -->
         <div class="section">
           <h4>Assign by Beneficiary Group</h4>
@@ -77,13 +89,14 @@
           >
             Assign to Selected Groups ({{ selectedGroupIds.length }})
           </button>
+            <span class="help">Or manually add beneficiaries</span>
+          
         </div>
 
         <!-- ============ Individual Assignment ============ -->
         <div class="section">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <h4 style="margin:0;">Individual Assignment</h4>
-            <span class="help">Or manually add beneficiaries</span>
           </div>
           <div v-for="(row, index) in distributionRows" :key="index" class="dist-row">
             <div class="field beneficiary">
@@ -193,9 +206,12 @@ const totalAssignedQuantity = computed(() => {
 })
 
 const exceedsTotal = computed(() => {
-  if (form.type === 'money') return totalAssignedValue.value > totalItemValue.value
-  return totalAssignedQuantity.value > form.quantity
-})
+  const epsilon = 0.001; // tolerance for floating point errors
+  if (form.type === 'money') {
+    return totalAssignedValue.value - totalItemValue.value > epsilon;
+  }
+  return totalAssignedQuantity.value - parseFloat(form.quantity) > epsilon;
+});
 
 const isValid = computed(() => {
   if (!form.type || !form.quantity || !form.unitValue) return false
@@ -217,38 +233,57 @@ function removeDistributionRow(index) {
 
 // ------ Bulk assign from group ------
 function assignFromGroups() {
-  if (selectedGroupIds.value.length === 0) return
+  if (selectedGroupIds.value.length === 0) return;
 
-  // Gather all members from all selected groups
-  const selectedIds = selectedGroupIds.value.map(id => parseInt(id))
-  const allMembers = beneficiariesList.value.filter(b => selectedIds.includes(b.groupId))
+  const selectedIds = selectedGroupIds.value.map(id => parseInt(id));
+  const allMembers = beneficiariesList.value.filter(b => selectedIds.includes(b.groupId));
 
   if (allMembers.length === 0) {
-    alert('No beneficiaries found in selected groups.')
-    return
+    alert('No beneficiaries found in selected groups.');
+    return;
   }
 
-  // Clear existing rows
-  distributionRows.value = []
+  distributionRows.value = [];
 
   if (form.type === 'money') {
-    const amountPerPerson = totalItemValue.value / allMembers.length
-    allMembers.forEach(member => {
+    const total = totalItemValue.value; // this is unitValue (since money item: qty=1, unitValue=amount)
+    const perPerson = total / allMembers.length;
+    // Round to 2 decimal places
+    const roundedPerPerson = Math.floor(perPerson * 100) / 100;
+    let remaining = total - roundedPerPerson * allMembers.length;
+
+    allMembers.forEach((member, index) => {
+      let amount = roundedPerPerson;
+      // Distribute the remaining cents to the first few beneficiaries
+      if (remaining >= 0.01) {
+        amount = Math.round((amount + 0.01) * 100) / 100;
+        remaining = Math.round((remaining - 0.01) * 100) / 100;
+      }
       distributionRows.value.push({
         beneficiaryId: member.beneficiaryId,
         quantity: 0,
-        value: amountPerPerson
-      })
-    })
+        value: amount,
+      });
+    });
   } else {
-    const qtyPerPerson = parseFloat(form.quantity) / allMembers.length
-    allMembers.forEach(member => {
+    const totalQty = parseFloat(form.quantity);
+    const perPersonQty = totalQty / allMembers.length;
+    // Round to 2 decimal places
+    const roundedPerPerson = Math.floor(perPersonQty * 100) / 100;
+    let remainingQty = totalQty - roundedPerPerson * allMembers.length;
+
+    allMembers.forEach((member, index) => {
+      let qty = roundedPerPerson;
+      if (remainingQty >= 0.01) {
+        qty = Math.round((qty + 0.01) * 100) / 100;
+        remainingQty = Math.round((remainingQty - 0.01) * 100) / 100;
+      }
       distributionRows.value.push({
         beneficiaryId: member.beneficiaryId,
-        quantity: qtyPerPerson,
-        value: 0
-      })
-    })
+        quantity: qty,
+        value: 0,
+      });
+    });
   }
 }
 
@@ -259,7 +294,7 @@ function handleSubmit() {
   const itemData = {
     type: form.type,
     description: form.description,
-    quantity: Number(form.quantity),
+    quantity: form.type === 'money' ? 1 : Number(form.quantity),
     unitValue: Number(form.unitValue),
     paymentMethod: form.type === 'money' ? form.paymentMethod : undefined
   }

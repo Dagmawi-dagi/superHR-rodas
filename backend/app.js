@@ -52,7 +52,7 @@ const donationRoutes = require("./routes/charity/donationRoutes")
 const donationCompanyRoutes = require("./routes/charity/donationCompanyRoutes")
 const campaignRoutes = require("./routes/charity/campaignRoutes")
 const beneficiaryRoutes = require("./routes/charity/beneficiaryRoutes")
-const donationLocationRoutes = require("./routes/charity/donationLocationRoutes")
+const beneficiaryLocationRoutes = require("./routes/charity/beneficiaryLocationRoutes")
 const beneficiaryGroupRoutes = require("./routes/charity/beneficiaryGroupRoutes")
 // ============================================================================
 // GLOBAL MIDDLEWARE
@@ -103,7 +103,7 @@ app.use("/api/charity/donations", donationRoutes);
 app.use("/api/charity/companies",donationCompanyRoutes);
 app.use("/api/charity/campaigns", campaignRoutes);
 app.use("/api/charity/beneficiaries",beneficiaryRoutes);
-app.use("/api/charity/locations",donationLocationRoutes);
+app.use("/api/charity/locations",beneficiaryLocationRoutes);
 app.use('/api/charity/beneficiary-groups', beneficiaryGroupRoutes);
 // ============================================================================
 // HEALTH CHECK ENDPOINT

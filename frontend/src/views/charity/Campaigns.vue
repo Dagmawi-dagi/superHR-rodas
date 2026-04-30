@@ -230,11 +230,22 @@ const closeStatusModal = () => {
 
 const applyStatusChange = async () => {
   if (!selectedNewStatus.value || !campaignToModify.value) return
+
+  // If marking as completed, ask for confirmation first
+  if (selectedNewStatus.value === 'completed') {
+    if (!window.confirm(
+      `Are you sure you want to mark "${campaignToModify.value.title}" as completed? This action cannot be undone.`
+    )) {
+      return
+    }
+  }
+
   savingStatus.value = true
   const res = await CharityService.updateCampaign(campaignToModify.value.campaignId, {
     status: selectedNewStatus.value
   })
   savingStatus.value = false
+
   if (res.success) {
     addToast(`Campaign status changed to ${getStatusLabel(selectedNewStatus.value)}`)
     closeStatusModal()

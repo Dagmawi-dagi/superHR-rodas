@@ -73,7 +73,7 @@
             <tr>
               <td><span :class="['type-badge', `type-${item.type}`]">{{ getTypeLabel(item.type) }}</span></td>
               <td>{{ item.description || '-' }}</td>
-              <td>{{ item.quantity }}</td>
+              <td>{{ item.type === 'money' ? '-' : formatCurrency(item.unitValue) }}</td>
               <td>{{ formatCurrency(item.unitValue) }}</td>
               <td class="total-cell">{{ formatCurrency(item.totalValue) }}</td>
               <td>{{ item.type === 'money' ? (item.paymentMethod || 'bank') : '-' }}</td>

@@ -30,6 +30,24 @@ Manages donations from companies to beneficiaries through campaigns. Includes be
 All endpoints are prefixed with `/api/charity` and require authentication unless otherwise noted.  
 Role restrictions are noted where applicable.
 
+
+| Model
+| --------	Table	Soft‑Delete (paranoid)
+| DonationCompany	donation_companies	Yes – paranoid: true, timestamps: true
+| Campaign	campaigns	Yes
+| BeneficiaryGroup	beneficiary_groups	Yes
+| BeneficiaryLocation	beneficiary_locations	No (simple lookup, soft delete not critical)
+| Beneficiary	beneficiaries	Yes
+| BeneficiaryTransfer	beneficiary_transfers	No (history record)
+| Donation	donations	No (status flow handles cancellation)
+| DonationItem	donation_items	Yes (preserve item history)
+| DonationDistribution	donation_distributions	Yes
+| DonationDistributionEvidence	donation_distribution_evidences	No (files can be hard deleted if needed)
+| DonationApproval	donation_approvals	No
+| DonationLog	donation_logs	No
+| DonationDeduction	donation_deductions	No
+
+
 ---
 
 ### Companies
@@ -41,6 +59,8 @@ Role restrictions are noted where applicable.
 | POST   | `/companies` | Create a new company | `admin` |
 | PUT    | `/companies/:id` | Update company information | `admin` |
 | DELETE | `/companies/:id` | Soft delete (set inactive) | `admin` |
+
+
 
 ---
 

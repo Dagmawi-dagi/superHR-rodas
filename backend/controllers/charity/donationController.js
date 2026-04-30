@@ -1166,7 +1166,10 @@ exports.getDonationStats = async (req, res) => {
     const recentDonations = await Donation.findAll({
       limit: 5,
       order: [['created_at', 'DESC']],
-      include: [{ model: DonationCompany, attributes: ['name'] }]
+      include: [
+        { model: DonationCompany, attributes: ['name'] },
+        { model: Campaign, attributes: ['campaignId', 'title', 'description', 'category', 'targetAmount'] },
+      ]
     });
 
     res.json({

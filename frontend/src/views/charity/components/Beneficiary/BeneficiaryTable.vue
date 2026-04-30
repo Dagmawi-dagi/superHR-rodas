@@ -23,7 +23,7 @@
             <span :class="['type-badge', `type-${ben.type}`]">{{ ben.type }}</span>
           </td>
           <td>{{ ben.BeneficiaryGroup ? `${ben.BeneficiaryGroup.name} - ${ ben.BeneficiaryGroup.manager.firstName} ${ ben.BeneficiaryGroup.manager.lastName }`: 'Unassigned' }}</td>
-          <td>{{ ben.DonationLocation ? `${ben.DonationLocation.region}, ${ben.DonationLocation.city}` : 'N/A' }}</td>
+          <td>{{ ben.BeneficiaryLocation ? `${ben.BeneficiaryLocation.region}, ${ben.BeneficiaryLocation.city}` : 'N/A' }}</td>
           <td>{{ ben.contactInfo?.phone || ben.contactInfo?.email || 'N/A' }}</td>
           <td class="actions-cell">
             <button class="action-btn view" @click="$router.push(`/charity/beneficiaries/${ben?.beneficiaryId}/edit`)" title="View Details">
