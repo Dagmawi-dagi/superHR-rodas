@@ -18,10 +18,21 @@
         </svg>
       </div>
       <div class="stat-content ">
-        <span class="stat-label">Total Value</span>
+        <span class="stat-label">Approved + Distributed value</span>
         <span class="stat-value">{{ formatCurrency(stats.totalValue) }}</span>
       </div>
     </div>
+    <div class="stat-card">
+    <div class="stat-icon  !p-3">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#fff" class="size-6">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+      </svg>
+    </div>
+  <div class="stat-content">
+    <span class="stat-label">Returned Value</span>
+    <span class="stat-value">{{ formatCurrency(stats.returnedValue || 0) }}</span>
+  </div>
+</div>
     <div class="stat-card">
       <div class="stat-icon !p-3">
        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#fff" class="size-6">

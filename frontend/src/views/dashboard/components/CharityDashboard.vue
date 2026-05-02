@@ -22,7 +22,7 @@
           <span class="stat-trend">{{ stats.draft || 0 }} drafts pending</span>
         </div>
       </div>
-      <div class="stat-card">
+      <!-- <div class="stat-card">
         <div class="stat-icon !p-3">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#fff" class="size-6">
           <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 0 1-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 0 0 3 15h-.75M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm3 0h.008v.008H18V10.5Zm-12 0h.008v.008H6V10.5Z" />
@@ -30,11 +30,11 @@
 
         </div>
         <div class="stat-content">
-          <h3>Total Value</h3>
-          <p class="stat-number">{{ formatCurrency(stats.totalValue) }}</p>
-          <span class="stat-trend">Approved: {{ formatCurrency(stats.approvedValue || 0) }}</span>
+          <h3>Gross Value</h3>
+          <p class="stat-number">{{formatCurrency(stats.grossValue + stats.cancelledValue)}}</p>
+          <span class="stat-trend">Approve + Distributed: {{ formatCurrency(stats.totalValue || 0) }}</span>
         </div>
-      </div>
+      </div> -->
       <div class="stat-card">
         <div class="stat-icon !p-3">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#fff" class="size-6">
@@ -59,6 +59,18 @@
           <h3>Active Campaigns</h3>
           <p class="stat-number">{{ stats.activeCampaigns }}</p>
           <span class="stat-trend">{{ stats.totalCampaigns }} total</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon !p-3">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#fff" class="size-6">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
+          </svg>
+        </div>
+        <div class="stat-content">
+          <h3>Returned Value</h3>
+          <p class="stat-number">{{ formatCurrency(stats.returnedValue) }}</p>
+          <!-- <span class="stat-trend">Gross: {{ formatCurrency(stats.grossValue) }}</span> -->
         </div>
       </div>
     </div>
@@ -91,6 +103,28 @@
           </div>
         </div>
       </div>
+      <!-- Donations by Value -->
+<div class="section">
+  <h2>Donations by Value</h2>
+  <div class="value-breakdown">
+    <div class="value-item">
+      <span class="value-label">Approved + Distributed </span>
+      <span class="value-amount">{{ formatCurrency(stats.totalValue) }}</span>
+    </div>
+    <div class="value-item">
+      <span class="value-label">Cancelled</span>
+      <span class="value-amount">{{ formatCurrency(stats.cancelledValue) }}</span>
+    </div>
+    <div class="value-item">
+      <span class="value-label">Returned</span>
+      <span class="value-amount">{{ formatCurrency(stats.returnedValue) }}</span>
+    </div>
+    <div class="value-item total">
+      <span class="value-label">Gross Total</span>
+      <span class="value-amount">{{ formatCurrency(stats.grossValue + stats.cancelledValue) }}</span>
+    </div>
+  </div>
+</div>
     </div>
 
     <!-- Recent Activity -->
@@ -130,7 +164,10 @@ const stats = ref({
   beneficiaryCount: 0,
   groupCount: 0,
   activeCampaigns: 0,
-  totalCampaigns: 0
+  totalCampaigns: 0,
+  grossValue:0,
+  returnedValue:0,
+  cancelledValue:0
 })
 
 const recentDonations = ref([])
@@ -174,6 +211,10 @@ const fetchDashboardData = async () => {
     stats.value.valueGoods = d.valueByType?.['goods'] || 0
     stats.value.valueService = d.valueByType?.['service'] || 0
     recentDonations.value = d.recentDonations || []
+    stats.value.cancelledValue = d.cancelledValue || 0;
+    stats.value.returnedValue = d.returnedValue || 0;
+    stats.value.grossValue = d.grossValue || 0;
+    stats.value.totalValue = d.totalValue || 0;
   }
 
   // Beneficiaries
@@ -412,5 +453,39 @@ onMounted(() => fetchDashboardData())
   .charts-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.value-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.value-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.value-item:last-child {
+  border-bottom: none;
+}
+
+.value-label {
+  font-size: 14px;
+  color: #475569;
+}
+
+.value-amount {
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 16px;
+}
+
+.value-item.total {
+  font-weight: 700;
+  color: #0f172a;
 }
 </style>

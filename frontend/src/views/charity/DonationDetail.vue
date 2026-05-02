@@ -42,6 +42,10 @@
           <span class="label">Total Value</span>
           <span class="value">{{ formatCurrency(donation.totalValue) }}</span>
         </div>
+        <div class="summary-item" v-if="donation.status === 'distributed'">
+          <span class="label">Returned</span>
+          <span class="value">{{ formatCurrency(returnedAmount) }}</span>
+        </div>
       </div>
       <div class="summary-notes" v-if="donation.notes">
         <span class="label">Notes</span>
@@ -73,8 +77,16 @@
             <tr>
               <td><span :class="['type-badge', `type-${item.type}`]">{{ getTypeLabel(item.type) }}</span></td>
               <td>{{ item.description || '-' }}</td>
-              <td>{{ item.type === 'money' ? '-' : formatCurrency(item.unitValue) }}</td>
-              <td>{{ formatCurrency(item.unitValue) }}</td>
+              <td>
+                <!-- Money → total amount; Goods/Service → quantity -->
+                <span v-if="item.type === 'money'">{{ formatCurrency(item.totalValue) }}</span>
+                <span v-else>{{ item.quantity }}</span>
+              </td>
+              <td>
+                <!-- Money → hide unit value (meaningless); Goods/Service → unit price -->
+                <span v-if="item.type === 'money'">-</span>
+                <span v-else>{{ formatCurrency(item.unitValue) }}</span>
+              </td>
               <td class="total-cell">{{ formatCurrency(item.totalValue) }}</td>
               <td>{{ item.type === 'money' ? (item.paymentMethod || 'bank') : '-' }}</td>
               <td class="actions-cell">
@@ -113,26 +125,70 @@
                 </button>
                 <span v-if="item.status === 'distributed'" class="distributed-badge" title="Distributed">✓</span>
                 <!-- Delete item (draft only) -->
+
+                <button v-if="donation?.status === 'draft'" @click="openEditItemModal(item)" class="action-btn edit" title="Edit">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
+                  </svg>
+                </button>
+
                 <button v-if="donation?.status === 'draft'" @click="deleteItem(item)" class="action-btn delete" title="Delete">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                   </svg>
                 </button>
+
                 <!-- Toggle distribution view -->
                 <button class="action-btn toggle-dist" @click="toggleDistributions(item.donationItemId)" title="Show distribution">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M9 18l6-6-6-6" v-if="!expandedItems.includes(item.donationItemId)" />
                     <path d="M6 9l6 6 6-6" v-else />
-                    
-                    
                   </svg>
-
-
                 </button>
+
                 <!-- Evidence count -->
-                <span v-if="item.DonationDistributionEvidences?.length" class="evidence-count">
+                <!-- <span v-if="item.DonationDistributionEvidences?.length" class="evidence-count">
                   {{ item.DonationDistributionEvidences.length }} file(s)
-                </span>
+                </span> -->
+
+                <!-- <div v-if="item.DonationDistributionEvidences?.length" class="evidence-files">
+                  <span class="evidence-count">{{ item.DonationDistributionEvidences.length }} file(s)</span>
+                  <div class="evidence-links">
+                    <a
+                      v-for="ev in item.DonationDistributionEvidences"
+                      :key="ev.evidenceId"
+                      :href="getFileUrl(ev.fileUrl)"
+                      target="_blank"
+                      class="evidence-link"
+                      :title="ev.fileName"
+                    >
+                      {{ ev.fileName }}
+                    </a>
+                  </div>
+                </div> -->
+
+  <!-- Evidence display -->
+  <div v-if="item.DonationDistributionEvidences?.length" class="evidence-container">
+    <button @click="toggleEvidence(item.donationItemId)" class="action-btn evidence" title="View Evidence">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+      </svg>
+    </button>
+
+    <div v-if="expandedEvidence.includes(item.donationItemId)" class="evidence-list">
+      <a
+        v-for="ev in item.DonationDistributionEvidences"
+        :key="ev.evidenceId"
+        :href="getFileUrl(ev.fileUrl)"
+        target="_blank"
+        class="evidence-item"
+      >
+        {{ ev.fileName }}
+      </a>
+    </div>
+  </div>
+
               </td>
             </tr>
             <!-- Distribution details (expandable) -->
@@ -174,7 +230,16 @@
                             <td>{{ formatCurrency(dist.value) }}</td>
                             <td>
                               <span v-if="dist.isReturned" class="returned">Yes ({{ dist.returnReason }})</span>
-                              <span v-else>No</span>
+                              <span v-else>No
+                                  <button
+                                    v-if="donation?.status === 'approved'"
+                                    @click="openReturnModal(dist)"
+                                    class="return-btn"
+                                    title="Mark as returned"
+                                  >
+                                    ↩
+                                  </button>
+                              </span>
                             </td>
                           </tr>
                         </tbody>
@@ -270,22 +335,33 @@
       </div>
     </div>
 
+    <!-- Return Distribution Modal -->
+    <div v-if="showReturnModal" class="modal-overlay" @click.self="showReturnModal = false">
+      <div class="modal">
+        <h3>Mark Distribution as Returned</h3>
+        <p>
+          Returning distribution for <strong>{{ returningDist?.Beneficiary?.name }}</strong>
+        </p>
+        <textarea v-model="returnReason" rows="2" placeholder="Reason for return (required)"></textarea>
+        <div class="modal-actions">
+          <button @click="showReturnModal = false" class="btn-secondary">Cancel</button>
+          <button @click="confirmReturn" :disabled="!returnReason.trim() || returning" class="btn-danger">
+            {{ returning ? 'Returning...' : 'Confirm Return' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Add/Edit Item Modals -->
     <AddItemModal
       v-if="showAddItemModal"
       :donation-id="donationId"
       :saving="savingItem"
+      :item-to-edit="editingItem"
       @close="closeAddItemModal"
-      @save="addItem"
+      @save="handleItemSave"
     />
-    <EditItemModal
-      v-if="showEditItemModal"
-      :show="showEditItemModal"
-      :item="editingItem"
-      @close="closeEditItemModal"
-      @save="updateItem"
-      :saving="savingItem"
-    />
+    
     <DistributeItemModal
       v-if="showDistributeModal && distributingItem"
       :item="distributingItem"
@@ -315,7 +391,6 @@ import CharityService from '@/stores/charity'
 import { useAuthStore } from '@/stores/auth'
 import StatusBadge from './components/DonationItem/StatusBadge.vue'
 import AddItemModal from './components/DonationItem/AddItemModal.vue'
-import EditItemModal from './components/DonationItem/EditItemModal.vue'
 import DistributeItemModal from './components/Donation/DistributeItemModal.vue'
 
 const route = useRoute()
@@ -364,16 +439,123 @@ const addToast = (msg, type='success') => {
   toasts.value.push({ id, message: msg, type })
   setTimeout(() => removeToast(id), 5000)
 }
+
+
+// ── Return distribution state ──
+const showReturnModal = ref(false)
+const returningDist = ref(null)
+const returnReason = ref('')
+const returning = ref(false)
+
+const openReturnModal = (dist) => {
+  returningDist.value = dist
+  returnReason.value = ''
+  showReturnModal.value = true
+}
+
+const confirmReturn = async () => {
+  if (!returningDist.value || !returnReason.value.trim()) return
+  returning.value = true
+  const res = await CharityService.returnDistribution(
+    returningDist.value.distributionId,
+    returnReason.value.trim()
+  )
+  returning.value = false
+  if (res.success) {
+    addToast('Distribution marked as returned')
+    showReturnModal.value = false
+    loadDonation()
+  } else {
+    addToast(res.error || 'Failed to return distribution', 'error')
+  }
+}
+
 const removeToast = (id) => toasts.value = toasts.value.filter(t => t.id !== id)
 
 const formatDate = (d) => d ? new Date(d).toLocaleDateString() : 'N/A'
 const formatCurrency = (v) => v ? new Intl.NumberFormat('en-US',{style:'currency',currency:'ETB'}).format(v) : '0.00'
 const getTypeLabel = (t) => ({ money:'Money', goods:'Goods', service:'Service' })[t] || t
+const getFileUrl = (relativePath) => {
+  if (!relativePath) return '#';
+  if (relativePath.startsWith('http')) return relativePath;
 
+  // Use the backend origin (localhost:3001)
+  const BACKEND_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+  return `${BACKEND_BASE}${relativePath}`;
+};
+const expandedEvidence = ref([]);
+const toggleEvidence = (itemId) => {
+  const idx = expandedEvidence.value.indexOf(itemId);
+  if (idx > -1) expandedEvidence.value.splice(idx, 1);
+  else expandedEvidence.value.push(itemId);
+};
+
+// ── Computed: total returned amount ──
+const returnedAmount = computed(() => {
+  if (!donation.value?.DonationItems) return 0;
+  let total = 0;
+  donation.value.DonationItems.forEach(item => {
+    item.DonationDistributions?.forEach(dist => {
+      if (dist.isReturned) total += parseFloat(dist.value || 0);
+    });
+  });
+  return total;
+});
 const canSubmit = computed(() => donation.value?.status === 'draft')
 const canApprove = computed(() => donation.value?.status === 'pending' && ['admin','finance','charity'].includes(authStore.user?.role))
 const canDistribute = computed(() => donation.value?.status === 'approved')
 const canCancel = computed(() => donation.value?.status !== 'cancelled')
+
+const handleItemSave = async ({ itemData, distributions }) => {
+  savingItem.value = true
+  try {
+    if (editingItem.value) {
+      // 1. Update the item itself
+      const updateRes = await CharityService.updateDonationItem(editingItem.value.donationItemId, itemData)
+      if (!updateRes.success) {
+        addToast(updateRes.error || 'Failed to update item', 'error')
+        savingItem.value = false
+        return
+      }
+      // 2. Delete old distributions
+      const deleteRes = await CharityService.deleteItemDistributions(editingItem.value.donationItemId)
+      if (!deleteRes.success) {
+        addToast('Failed to clear old distributions', 'error')
+      }
+      // 3. Create new distributions (if any)
+      if (distributions.length > 0) {
+        const distRes = await CharityService.distributeItem(editingItem.value.donationItemId, distributions)
+        if (distRes.success) {
+          addToast('Item updated successfully')
+        } else {
+          addToast('Item updated but distribution assignment failed: ' + distRes.error, 'warning')
+        }
+      } else {
+        addToast('Item updated (no beneficiaries assigned)')
+      }
+    } else {
+      // Add new item (existing logic)
+      const res = await CharityService.addDonationItem(donationId, itemData)
+      if (!res.success) {
+        addToast(res.error || 'Failed to add item', 'error')
+        savingItem.value = false
+        return
+      }
+      const newItemId = res.data.donationItemId
+      if (distributions.length > 0) {
+        const distRes = await CharityService.distributeItem(newItemId, distributions)
+        distRes.success ? addToast('Item added and beneficiaries assigned') : addToast('Item added but assignment failed: ' + distRes.error, 'warning')
+      } else {
+        addToast('Item added successfully')
+      }
+    }
+    loadDonation()
+  } catch (err) {
+    addToast('Unexpected error', 'error')
+  }
+  savingItem.value = false
+  closeAddItemModal()
+}
 
 // ── Data loading ──
 const loadDonation = async () => {
@@ -446,8 +628,18 @@ const submitRequestChanges = async () => {
 }
 
 // ── Items management ──
-const openAddItemModal = () => showAddItemModal.value = true
-const closeAddItemModal = () => showAddItemModal.value = false
+const openAddItemModal = () => {
+  editingItem.value = null
+  showAddItemModal.value = true
+}
+const openEditItemModal = (item) => {
+  editingItem.value = { ...item }
+  showAddItemModal.value = true
+}
+const closeAddItemModal = () => {
+  showAddItemModal.value = false
+  editingItem.value = null
+}
 const addItem = async ({ itemData, distributions }) => {
   savingItem.value = true
   const res = await CharityService.addDonationItem(donationId, itemData)
@@ -464,8 +656,6 @@ const addItem = async ({ itemData, distributions }) => {
   savingItem.value = false
 }
 
-const openEditItemModal = (item) => { editingItem.value = { ...item }; showEditItemModal.value = true }
-const closeEditItemModal = () => { showEditItemModal.value = false; editingItem.value = null }
 const updateItem = async (itemData) => {
   savingItem.value = true
   const res = await CharityService.updateDonationItem(editingItem.value.donationItemId, itemData)
@@ -628,5 +818,74 @@ onMounted(async () => {
   color: #d97706;
   font-size: 14px;
   margin-right: 4px;
+}
+.evidence-files {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.evidence-count {
+  font-size: 11px;
+  color: #6a11cb;
+  font-weight: 600;
+}
+.evidence-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.evidence-link {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: #ede9fe;
+  color: #7c3aed;
+  border-radius: 4px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.evidence-link:hover {
+  background: #ddd6fe;
+  text-decoration: underline;
+}
+.evidence-container {
+  position: relative;
+}
+.evidence-list {
+  position: absolute;
+  top: 28px;
+  right: 0;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  z-index: 10;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.evidence-item {
+  font-size: 12px;
+  color: #7c3aed;
+  text-decoration: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.evidence-item:hover {
+  background: #f1f5f9;
+}
+.return-btn {
+  margin-left: 4px;
+  background: #fef3c7;
+  border: none;
+  color: #b45309;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+.return-btn:hover {
+  background: #fde68a;
 }
 </style>

@@ -26,20 +26,28 @@ const getPagination = (page, size, defaultLimit = 10, maxLimit = 100) => {
 // RECALCULATE DONATION TOTAL
 // ------------------------------------------------------------------
 const recalculateDonationTotal = async (donationId, transaction = null) => {
+  // Sum all item total values
   const items = await DonationItem.findAll({
     where: { donationId },
-    attributes: ["totalValue"],
+    attributes: ['totalValue'],
     transaction,
   });
-  const total = items.reduce(
-    (sum, item) => sum + parseFloat(item.totalValue || 0),
-    0,
-  );
+  const total = items.reduce((sum, item) => sum + parseFloat(item.totalValue || 0), 0);
+
+  // Subtract returned distribution values
+  const returnedSum = await DonationDistribution.sum('value', {
+    where: { isReturned: true },
+    include: [{ model: DonationItem, attributes: [], where: { donationId } }],
+    transaction,
+  }) || 0;
+
+  const effectiveTotal = total - parseFloat(returnedSum);
+
   await Donation.update(
-    { totalValue: total },
+    { totalValue: effectiveTotal },
     { where: { donationId }, transaction },
   );
-  return total;
+  return effectiveTotal;
 };
 
 // ------------------------------------------------------------------
@@ -869,6 +877,35 @@ exports.distributeItem = async (req, res) => {
   }
 };
 
+
+exports.deleteItemDistributions = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { itemId } = req.params;
+
+    const item = await DonationItem.findByPk(itemId, {
+      include: [{ model: Donation, attributes: ['status'] }],
+      transaction: t
+    });
+
+    if (!item || item.Donation.status !== 'draft') {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Item can only be modified when donation is draft' });
+    }
+
+    await DonationDistribution.destroy({ where: { donationItemId: itemId }, transaction: t });
+
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+    await logDonationAction(item.donationId, employeeId, 'DELETE_ITEM_DISTRIBUTIONS', { itemId }, t);
+
+    await t.commit();
+    res.json({ success: true, message: 'Distributions cleared for item' });
+  } catch (error) {
+    await t.rollback();
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 exports.uploadEvidence = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -1141,9 +1178,18 @@ exports.getDonationStats = async (req, res) => {
   try {
     const totalDonations = await Donation.count();
 
+    // Net total value (already excludes returned)
     const totalValue = await Donation.sum('total_value', {
       where: { status: { [Op.ne]: 'cancelled' } }
     }) || 0;
+
+    // Total returned value across all donations
+    const returnedValue = await DonationDistribution.sum('value', {
+      where: { isReturned: true }
+    }) || 0;
+
+    // Gross value before returns
+    const grossValue = parseFloat(totalValue) + parseFloat(returnedValue);
 
     const statusCounts = await Donation.findAll({
       attributes: [
@@ -1166,17 +1212,16 @@ exports.getDonationStats = async (req, res) => {
     const recentDonations = await Donation.findAll({
       limit: 5,
       order: [['created_at', 'DESC']],
-      include: [
-        { model: DonationCompany, attributes: ['name'] },
-        { model: Campaign, attributes: ['campaignId', 'title', 'description', 'category', 'targetAmount'] },
-      ]
+      include: [{ model: DonationCompany, attributes: ['name'] }]
     });
 
     res.json({
       success: true,
       data: {
         totalDonations,
-        totalValue,
+        totalValue,           // net
+        grossValue,           // net + returned
+        returnedValue,        // total returned
         statusBreakdown: statusCounts.reduce((acc, curr) => {
           acc[curr.status] = parseInt(curr.dataValues?.count ?? curr.count);
           return acc;
@@ -1292,18 +1337,100 @@ exports.returnDistribution = async (req, res) => {
   try {
     const { distributionId } = req.params;
     const { reason } = req.body;
-    const distribution = await DonationDistribution.findByPk(distributionId, { transaction: t });
+
+    const distribution = await DonationDistribution.findByPk(distributionId, {
+      include: [{ model: DonationItem, attributes: ['donationId'] }],
+      transaction: t
+    });
+
     if (!distribution) throw new Error('Distribution not found');
     if (distribution.isReturned) throw new Error('Already returned');
+
     distribution.isReturned = true;
     distribution.returnReason = reason;
     distribution.returnedAt = new Date();
     await distribution.save({ transaction: t });
-    // Optional: restore available quantity logic
+
+    // Recalculate donation total (subtracts returned value)
+    await recalculateDonationTotal(distribution.DonationItem.donationId, t);
+
     await t.commit();
     res.json({ success: true, message: 'Distribution returned' });
   } catch (error) {
     await t.rollback();
     res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+exports.getDonationStats = async (req, res) => {
+  try {
+    const totalDonations = await Donation.count();
+
+    // Net total value (already subtracts returns, excludes cancelled)
+    const totalValue = await Donation.sum('total_value', {
+      where: { status: { [Op.notIn]: ['cancelled'] } }
+    }) || 0;
+
+    // Total returned value (across all donations)
+    const returnedValue = await DonationDistribution.sum('value', {
+      where: { isReturned: true }
+    }) || 0;
+
+    // Total value of cancelled donations
+    const cancelledValue = await Donation.sum('total_value', {
+      where: { status: 'cancelled' }
+    }) || 0;
+
+    // Gross distributed value (before returns)
+    const grossValue = parseFloat(totalValue) + parseFloat(returnedValue);
+
+    // Status counts
+    const statusCounts = await Donation.findAll({
+      attributes: [
+        'status',
+        [sequelize.fn('COUNT', sequelize.col('donation_id')), 'count']
+      ],
+      group: ['status'],
+      raw: true
+    });
+
+    // Value by type
+    const byType = await DonationItem.findAll({
+      attributes: [
+        'type',
+        [sequelize.fn('SUM', sequelize.col('total_value')), 'total']
+      ],
+      group: ['type'],
+      raw: true
+    });
+
+    const recentDonations = await Donation.findAll({
+      limit: 5,
+      order: [['created_at', 'DESC']],
+      include: [{ model: DonationCompany, attributes: ['name'] }]
+    });
+
+    res.json({
+      success: true,
+      data: {
+        totalDonations,
+        totalValue,            // net distributed
+        grossValue,            // distributed before returns
+        returnedValue,         // total returned
+        cancelledValue,        // total cancelled
+        statusBreakdown: statusCounts.reduce((acc, curr) => {
+          acc[curr.status] = parseInt(curr.dataValues?.count ?? curr.count);
+          return acc;
+        }, {}),
+        valueByType: byType.reduce((acc, curr) => {
+          acc[curr.type] = parseFloat(curr.dataValues?.total ?? curr.total);
+          return acc;
+        }, {}),
+        recentDonations
+      }
+    });
+  } catch (error) {
+    console.error('Donation stats error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 };

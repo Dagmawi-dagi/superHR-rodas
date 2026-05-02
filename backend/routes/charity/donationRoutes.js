@@ -24,7 +24,7 @@ router.post('/items/:itemId/distribute-single', donationController.markItemDistr
 router.post("/:id/items", donationController.addDonationItem);
 router.put("/items/:itemId", donationController.updateDonationItem);
 router.delete("/items/:itemId", donationController.deleteDonationItem);
-
+router.delete("/items/:itemId/distributions", donationController.deleteItemDistributions);
 // ------------------------------------------------------------------
 // STATUS TRANSITIONS
 // ------------------------------------------------------------------

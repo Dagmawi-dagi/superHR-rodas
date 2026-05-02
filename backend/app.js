@@ -29,6 +29,7 @@ const uploadDirs = [
   "uploads/documents/cv_resumes",
   "uploads/documents/degrees",
   "uploads/documents/guarantees",
+  'uploads/documents/charityEvidences'
 ];
 
 // Serve static files from uploads directory

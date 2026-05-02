@@ -1,7 +1,7 @@
 <template>
   <div class="modal-overlay" @click.self="$emit('close')">
     <div class="modal" style="max-width: 850px; max-height: 90vh; overflow-y: auto;">
-      <h3>Add Donation Item &amp; Assign Beneficiaries</h3>
+      <h3>{{ isEdit ? 'Edit Donation Item' : 'Add Donation Item &amp; Assign Beneficiaries' }}</h3>
       
       <form @submit.prevent="handleSubmit">
         <!-- ============ Item Details ============ -->
@@ -10,7 +10,7 @@
           <div class="form-row">
             <div class="form-group">
               <label>Type <span class="req">*</span></label>
-              <select v-model="form.type" required>
+              <select v-model="form.type" required :disabled="isEdit">
                 <option value="">Select</option>
                 <option value="money">Money</option>
                 <option value="goods">Goods</option>
@@ -23,7 +23,6 @@
             </div>
           </div>
 
-          <!-- For Goods & Service: show Quantity + Unit Value -->
           <div class="form-row" v-if="form.type !== 'money'">
             <div class="form-group">
               <label>Quantity / Total Units</label>
@@ -35,7 +34,6 @@
             </div>
           </div>
 
-          <!-- For Money: show only Amount -->
           <div class="form-row" v-if="form.type === 'money'">
             <div class="form-group full-width">
               <label>Amount <span class="req">*</span></label>
@@ -71,14 +69,10 @@
               class="checkbox-label"
             >
               <span class="custom-checkbox">
-                <input
-                  type="checkbox"
-                  :value="group.groupId"
-                  v-model="selectedGroupIds"
-                />
+                <input type="checkbox" :value="group.groupId" v-model="selectedGroupIds" />
                 <span class="checkmark"></span>
               </span>
-              <span>{{ `${group?.manager.firstName} ${group?.manager.lastName}  <${group?.name}>` }}</span>
+              <span>{{ group?.manager?.firstName }} {{ group?.manager?.lastName }} &lt;{{ group?.name }}&gt;</span>
             </label>
           </div>
           <button
@@ -89,8 +83,7 @@
           >
             Assign to Selected Groups ({{ selectedGroupIds.length }})
           </button>
-            <span class="help">Or manually add beneficiaries</span>
-          
+          <span class="help">Or manually add beneficiaries</span>
         </div>
 
         <!-- ============ Individual Assignment ============ -->
@@ -122,9 +115,7 @@
             </div>
             <button type="button" class="remove-row" @click="removeDistributionRow(index)">×</button>
           </div>
-<!--           <button type="button" class="btn-secondary" @click="addDistributionRow">
-            + Add Beneficiary
-          </button> -->
+          <button type="button" class="btn-secondary" @click="addDistributionRow">+ Add Beneficiary</button>
           <div class="dist-summary">
             <span>
               <strong>{{ form.type === 'money' ? 'Total Assigned:' : 'Total Quantity Assigned:' }}</strong>
@@ -137,11 +128,10 @@
           </div>
         </div>
 
-        <!-- ============ Actions ============ -->
         <div class="modal-actions">
           <button type="button" @click="$emit('close')" class="btn-outline">Cancel</button>
           <button type="submit" class="btn-primary" :disabled="!isValid || saving">
-            {{ saving ? 'Saving...' : 'Add Item & Assign' }}
+            {{ saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Item & Assign' }}
           </button>
         </div>
       </form>
@@ -150,23 +140,22 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import CharityService from '@/stores/charity'
 
 const props = defineProps({
   donationId: Number,
-  saving: Boolean
+  saving: Boolean,
+  itemToEdit: Object   // if present, we are editing an existing item
 })
 
 const emit = defineEmits(['close', 'save'])
 
-// All beneficiaries (loaded once)
-const beneficiariesList = ref([])
+const isEdit = computed(() => !!props.itemToEdit)
 
-// All groups
+const beneficiariesList = ref([])
 const groups = ref([])
-// Selected group for bulk assignment
-const selectedGroupIds = ref([])   // multi-select
+const selectedGroupIds = ref([])
 
 const loadData = async () => {
   const [benRes, groupRes] = await Promise.all([
@@ -177,7 +166,6 @@ const loadData = async () => {
   if (groupRes.success) groups.value = groupRes.data
 }
 
-// ------ Item form ------
 const form = reactive({
   type: 'goods',
   description: '',
@@ -186,8 +174,52 @@ const form = reactive({
   paymentMethod: 'bank'
 })
 
-// ------ Distribution rows ------
 const distributionRows = ref([])
+
+watch(() => props.itemToEdit, (item) => {
+  if (item) {
+    form.type = item.type
+    form.description = item.description || ''
+    if (item.type === 'money') {
+      form.quantity = 1
+      form.unitValue = parseFloat(item.totalValue) || 0
+    } else {
+      form.quantity = parseFloat(item.quantity) || 1
+      form.unitValue = parseFloat(item.unitValue) || 0
+    }
+    form.paymentMethod = item.paymentMethod || 'bank'
+
+    // Load existing distributions into rows
+    if (item.DonationDistributions && item.DonationDistributions.length) {
+      distributionRows.value = item.DonationDistributions.map(dist => ({
+        beneficiaryId: dist.beneficiaryId,
+        quantity: parseFloat(dist.quantity) || 0,
+        value: parseFloat(dist.value) || 0
+      }))
+
+      // Pre‑select groups that already have beneficiaries
+      const groupIds = new Set()
+      item.DonationDistributions.forEach(dist => {
+        if (dist.Beneficiary?.groupId) {
+          groupIds.add(dist.Beneficiary.groupId)
+        }
+      })
+      selectedGroupIds.value = Array.from(groupIds)
+    } else {
+      distributionRows.value = []
+      selectedGroupIds.value = []
+    }
+  } else {
+    // Reset for add mode
+    form.type = 'goods'
+    form.description = ''
+    form.quantity = 1
+    form.unitValue = 0
+    form.paymentMethod = 'bank'
+    distributionRows.value = []
+    selectedGroupIds.value = []
+  }
+}, { immediate: true })
 
 const totalItemValue = computed(() => {
   return parseFloat(form.quantity) * parseFloat(form.unitValue)
@@ -206,12 +238,10 @@ const totalAssignedQuantity = computed(() => {
 })
 
 const exceedsTotal = computed(() => {
-  const epsilon = 0.001; // tolerance for floating point errors
-  if (form.type === 'money') {
-    return totalAssignedValue.value - totalItemValue.value > epsilon;
-  }
-  return totalAssignedQuantity.value - parseFloat(form.quantity) > epsilon;
-});
+  const epsilon = 0.001
+  if (form.type === 'money') return totalAssignedValue.value - totalItemValue.value > epsilon
+  return totalAssignedQuantity.value - parseFloat(form.quantity) > epsilon
+})
 
 const isValid = computed(() => {
   if (!form.type || !form.quantity || !form.unitValue) return false
@@ -222,72 +252,51 @@ const isValid = computed(() => {
   return allRowsValid && !exceedsTotal.value
 })
 
-// ------ Row management ------
 function addDistributionRow() {
   distributionRows.value.push({ beneficiaryId: '', quantity: 0, value: 0 })
 }
-
 function removeDistributionRow(index) {
   distributionRows.value.splice(index, 1)
 }
 
-// ------ Bulk assign from group ------
 function assignFromGroups() {
-  if (selectedGroupIds.value.length === 0) return;
-
-  const selectedIds = selectedGroupIds.value.map(id => parseInt(id));
-  const allMembers = beneficiariesList.value.filter(b => selectedIds.includes(b.groupId));
-
+  if (selectedGroupIds.value.length === 0) return
+  const selectedIds = selectedGroupIds.value.map(id => parseInt(id))
+  const allMembers = beneficiariesList.value.filter(b => selectedIds.includes(b.groupId))
   if (allMembers.length === 0) {
-    alert('No beneficiaries found in selected groups.');
-    return;
+    alert('No beneficiaries found in selected groups.')
+    return
   }
-
-  distributionRows.value = [];
-
+  distributionRows.value = []
   if (form.type === 'money') {
-    const total = totalItemValue.value; // this is unitValue (since money item: qty=1, unitValue=amount)
-    const perPerson = total / allMembers.length;
-    // Round to 2 decimal places
-    const roundedPerPerson = Math.floor(perPerson * 100) / 100;
-    let remaining = total - roundedPerPerson * allMembers.length;
-
+    const total = totalItemValue.value
+    const perPerson = total / allMembers.length
+    const roundedPerPerson = Math.floor(perPerson * 100) / 100
+    let remaining = total - roundedPerPerson * allMembers.length
     allMembers.forEach((member, index) => {
-      let amount = roundedPerPerson;
-      // Distribute the remaining cents to the first few beneficiaries
+      let amount = roundedPerPerson
       if (remaining >= 0.01) {
-        amount = Math.round((amount + 0.01) * 100) / 100;
-        remaining = Math.round((remaining - 0.01) * 100) / 100;
+        amount = Math.round((amount + 0.01) * 100) / 100
+        remaining = Math.round((remaining - 0.01) * 100) / 100
       }
-      distributionRows.value.push({
-        beneficiaryId: member.beneficiaryId,
-        quantity: 0,
-        value: amount,
-      });
-    });
+      distributionRows.value.push({ beneficiaryId: member.beneficiaryId, quantity: 0, value: amount })
+    })
   } else {
-    const totalQty = parseFloat(form.quantity);
-    const perPersonQty = totalQty / allMembers.length;
-    // Round to 2 decimal places
-    const roundedPerPerson = Math.floor(perPersonQty * 100) / 100;
-    let remainingQty = totalQty - roundedPerPerson * allMembers.length;
-
+    const totalQty = parseFloat(form.quantity)
+    const perPersonQty = totalQty / allMembers.length
+    const roundedPerPerson = Math.floor(perPersonQty * 100) / 100
+    let remainingQty = totalQty - roundedPerPerson * allMembers.length
     allMembers.forEach((member, index) => {
-      let qty = roundedPerPerson;
+      let qty = roundedPerPerson
       if (remainingQty >= 0.01) {
-        qty = Math.round((qty + 0.01) * 100) / 100;
-        remainingQty = Math.round((remainingQty - 0.01) * 100) / 100;
+        qty = Math.round((qty + 0.01) * 100) / 100
+        remainingQty = Math.round((remainingQty - 0.01) * 100) / 100
       }
-      distributionRows.value.push({
-        beneficiaryId: member.beneficiaryId,
-        quantity: qty,
-        value: 0,
-      });
-    });
+      distributionRows.value.push({ beneficiaryId: member.beneficiaryId, quantity: qty, value: 0 })
+    })
   }
 }
 
-// ------ Submit ------
 function handleSubmit() {
   if (!isValid.value) return
 
@@ -302,13 +311,16 @@ function handleSubmit() {
   const distributions = distributionRows.value.map(row => {
     const dist = { beneficiaryId: row.beneficiaryId }
     if (form.type === 'money') {
-      dist.quantity = 1
-      dist.value = parseFloat(row.value)
+        // row.value = monetary amount assigned to this beneficiary
+        // unitValue = total monetary amount of the donation item
+        const fraction = parseFloat(row.value) / parseFloat(form.unitValue);
+        dist.quantity = fraction;          // e.g., 0.375 for 750 ETB out of 2000 ETB
+        dist.value = parseFloat(row.value); // actual monetary value
     } else {
-      dist.quantity = parseFloat(row.quantity)
-      dist.value = parseFloat(row.quantity) * parseFloat(form.unitValue)
+        dist.quantity = parseFloat(row.quantity);
+        dist.value = parseFloat(row.quantity) * parseFloat(form.unitValue);
     }
-    return dist
+      return dist
   })
 
   emit('save', { itemData, distributions })
@@ -318,6 +330,8 @@ const formatCurrency = (v) => v ? new Intl.NumberFormat('en-US', { style: 'curre
 
 onMounted(loadData)
 </script>
+
+
 
 <style scoped>
 /* Keep all existing styles from previous version, add a few new ones */

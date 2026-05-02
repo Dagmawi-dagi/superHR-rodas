@@ -697,6 +697,16 @@ class CharityService {
       return { success: false, error: error.response?.data?.error || 'Failed to distribute item' }
     }
   }
+  
+async deleteItemDistributions(itemId: number) {
+  try {
+    const response = await api.delete(`/charity/donations/items/${itemId}/distributions`)
+    return { success: true, message: response.data.message }
+  } catch (error: any) {
+    return { success: false, error: error.response?.data?.error || 'Failed to clear item distributions' }
+  }
+}
+
 
   async getDistributions(params?: {
     page?: number

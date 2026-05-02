@@ -94,7 +94,8 @@ const kpiStats = ref({
   totalDonations: 0,
   totalValue: 0,
   statusBreakdown: {},
-  valueByType: {}
+  valueByType: {},
+  returnedValue:0
 });
 const loading = ref(false);
 const canceling = ref(false);
