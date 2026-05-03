@@ -7,66 +7,71 @@ module.exports = (sequelize, DataTypes) => {
       DonationItem.belongsTo(models.Donation, { foreignKey: "donationId" });
       DonationItem.hasMany(models.DonationDistribution, {foreignKey: "donationItemId",});
       DonationItem.hasMany(models.DonationDistributionEvidence, { foreignKey: "donationItemId" });
+      DonationItem.hasMany(models.DonationItemInterval, { foreignKey: "donationItemId" });
     }
   }
 
-  DonationItem.init(
-    {
-      donationItemId: {
-        type: DataTypes.INTEGER,
-        autoIncrement: true,
-        primaryKey: true,
-        field: "donation_item_id",
-      },
-      donationId: {
-        type: DataTypes.INTEGER,
-        field: "donation_id",
-      },
-      type: {
-        type: DataTypes.ENUM("money", "goods", "service"),
-        allowNull: false,
-      },
-      description: {
-        type: DataTypes.STRING(255),
-      },
-      quantity: {
-        type: DataTypes.DECIMAL(10, 2),
-      },
-      unitValue: {
-        type: DataTypes.DECIMAL(15, 2),
-        field: "unit_value",
-      },
-      totalValue: {
-        type: DataTypes.DECIMAL(15, 2),
-        field: "total_value",
-      },
-      // NEW FIELDS
-      paymentMethod: {
-        type: DataTypes.ENUM("bank", "cash"),
-        field: "payment_method",
-        defaultValue: "bank",
-      },
-      unassignedDeduction: {
-        type: DataTypes.DECIMAL(15, 2),
-        field: "unassigned_deduction",
-        defaultValue: 0,
-      },
-        status: {
-    type: DataTypes.ENUM('pending', 'distributed'),
-    defaultValue: 'pending',
+DonationItem.init(
+  {
+    donationItemId: {
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
+      primaryKey: true,
+      field: "donation_item_id",
+    },
+    donationId: {
+      type: DataTypes.INTEGER,
+      field: "donation_id",
+    },
+    type: {
+      type: DataTypes.ENUM("money", "goods", "service"),
+      allowNull: false,
+    },
+    description: {
+      type: DataTypes.STRING(255),
+    },
+    quantity: {
+      type: DataTypes.DECIMAL(10, 2),
+    },
+    unitValue: {
+      type: DataTypes.DECIMAL(15, 2),
+      field: "unit_value",
+    },
+    totalValue: {
+      type: DataTypes.DECIMAL(15, 2),
+      field: "total_value",
+    },
+    paymentMethod: {
+      type: DataTypes.ENUM("bank", "cash"),
+      field: "payment_method",
+      defaultValue: "bank",
+    },
+    unassignedDeduction: {
+      type: DataTypes.DECIMAL(15, 2),
+      field: "unassigned_deduction",
+      defaultValue: 0,
+    },
+    status: {
+      type: DataTypes.ENUM('pending', 'distributed'),
+      defaultValue: 'pending',
+    },
+    isRecurring: {                     // ← moved OUT of the status block
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      field: "is_recurring",
+    },
   },
-    },
-    {
-      sequelize,
-      modelName: "DonationItem",
-      tableName: "donation_items",
-      timestamps: true,
-      createdAt: "created_at",
-      updatedAt: "updated_at",
-      paranoid: true, 
-      deletedAt: "deleted_at"
-    },
-  );
+  {
+    sequelize,
+    modelName: "DonationItem",
+    tableName: "donation_items",
+    timestamps: true,
+    createdAt: "created_at",
+    updatedAt: "updated_at",
+    paranoid: true, 
+    deletedAt: "deleted_at"
+  }
+);
 
   return DonationItem;
 };

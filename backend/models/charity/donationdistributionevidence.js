@@ -6,6 +6,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       DonationDistributionEvidence.belongsTo(models.DonationItem, { foreignKey: "donationItemId" });
       DonationDistributionEvidence.belongsTo(models.Employee, { foreignKey: "uploadedBy" });
+      DonationDistributionEvidence.belongsTo(models.DonationItemInterval, { foreignKey: "intervalId" });
     }
   }
 
@@ -21,6 +22,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         field: "donation_item_id",
       },
+      intervalId: {
+        type: DataTypes.INTEGER,
+        field: "interval_id",
+        },
       fileUrl: {
         type: DataTypes.STRING(255),
         allowNull: false,

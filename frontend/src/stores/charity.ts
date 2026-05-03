@@ -601,21 +601,21 @@ class CharityService {
   }
 
   // Donation Items
-  async addDonationItem(donationId: number, data: {
-    type: string
-    description?: string
-    quantity: number
-    unitValue: number
-    paymentMethod?: string
-  }) {
-    try {
-      const response = await api.post(`/charity/donations/${donationId}/items`, data)
-      return { success: true, message: response.data.message, data: response.data.data }
-    } catch (error: any) {
-      return { success: false, error: error.response?.data?.error || 'Failed to add item' }
-    }
+ async addDonationItem(donationId: number, data: {
+  type: string
+  description?: string
+  quantity: number
+  unitValue: number
+  paymentMethod?: string
+  interval?: any
+}) {
+  try {
+    const response = await api.post(`/charity/donations/${donationId}/items`, data)
+    return { success: true, message: response.data.message, data: response.data.data }
+  } catch (error: any) {
+    return { success: false, error: error.response?.data?.error || 'Failed to add item' }
   }
-
+}
   async updateDonationItem(itemId: number, data: {
     quantity?: number
     unitValue?: number
@@ -855,6 +855,36 @@ async deleteItemDistributions(itemId: number) {
     }
   }
 
+async distributeItemForInterval(itemId: number, intervalId: number, data: { distributions: any[] }) {
+  try {
+    const response = await api.post(`/charity/donations/items/${itemId}/distribute/${intervalId}`, data);
+    return { success: true, data: response.data.data, message: response.data.message };
+  } catch (error: any) {
+    return { success: false, error: error.response?.data?.error || 'Failed to distribute for interval' };
+  }
+}
+
+async uploadIntervalEvidence(itemId: number, intervalId: number, formData: FormData) {
+  try {
+    const response = await api.post(`/charity/donations/items/${itemId}/intervals/${intervalId}/evidences`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return { success: true, message: response.data.message, data: response.data.data };
+  } catch (error: any) {
+    return { success: false, error: error.response?.data?.error || 'Failed to upload evidence for interval' };
+  }
+}
+
+    async updateDonationItemInterval(itemId: number, interval: any) {
+  try {
+    const response = await api.put(`/charity/donations/items/${itemId}/interval`, { interval });
+    return { success: true, message: response.data.message };
+  } catch (error: any) {
+    return { success: false, error: error.response?.data?.error || 'Failed to update interval' };
+  }
+}
+
+
   // --------------------------------------------------------------------------
   // UTILITY METHODS
   // --------------------------------------------------------------------------
@@ -902,5 +932,7 @@ async deleteItemDistributions(itemId: number) {
     })
   }
 }
+
+
 
 export default new CharityService()

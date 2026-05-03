@@ -69,6 +69,10 @@
             <th>Unit Value</th>
             <th>Total</th>
             <th>Payment</th>
+            <th>Recurring</th>
+            <th>Intervals</th>
+            <th>Start Date</th>
+            <th>End Date</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -78,17 +82,34 @@
               <td><span :class="['type-badge', `type-${item.type}`]">{{ getTypeLabel(item.type) }}</span></td>
               <td>{{ item.description || '-' }}</td>
               <td>
-                <!-- Money → total amount; Goods/Service → quantity -->
                 <span v-if="item.type === 'money'">{{ formatCurrency(item.totalValue) }}</span>
                 <span v-else>{{ item.quantity }}</span>
               </td>
               <td>
-                <!-- Money → hide unit value (meaningless); Goods/Service → unit price -->
                 <span v-if="item.type === 'money'">-</span>
                 <span v-else>{{ formatCurrency(item.unitValue) }}</span>
               </td>
               <td class="total-cell">{{ formatCurrency(item.totalValue) }}</td>
               <td>{{ item.type === 'money' ? (item.paymentMethod || 'bank') : '-' }}</td>
+              
+<!-- Recurring? -->
+<td>
+  <span v-if="item.isRecurring">✓</span>
+  <span v-else>-</span>
+</td>
+<!-- Interval Count -->
+<td>
+  {{ item.DonationItemIntervals?.[0]?.intervalCount || '-' }}
+</td>
+<!-- Start Date -->
+<td>
+  {{ item.DonationItemIntervals?.[0]?.startDate || '-' }}
+</td>
+<!-- End Date -->
+<td>
+  {{ item.DonationItemIntervals?.[0]?.endDate || '-' }}
+</td>
+
               <td class="actions-cell">
                 <!-- Upload Evidence (only when approved) -->
                 <button
@@ -103,7 +124,6 @@
                     <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
                 </button>
-                <!-- Mark Item Distributed (approved, not yet distributed) -->
                 <!-- Evidence warning if none uploaded -->
                 <span v-if="!item.DonationDistributionEvidences?.length && item.status !== 'distributed'  && donation.status !== 'draft' && donation.status === 'approved' && donation.status !== 'pending'"  
                       class="evidence-warning" 
@@ -121,11 +141,10 @@
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-2.25-1.313M21 7.5v2.25m0-2.25-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3 2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75 2.25-1.313M12 21.75V19.5m0 2.25-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
                   </svg>
-
                 </button>
                 <span v-if="item.status === 'distributed'" class="distributed-badge" title="Distributed">✓</span>
-                <!-- Delete item (draft only) -->
 
+                <!-- Edit item (draft only) -->
                 <button v-if="donation?.status === 'draft'" @click="openEditItemModal(item)" class="action-btn edit" title="Edit">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -133,6 +152,7 @@
                   </svg>
                 </button>
 
+                <!-- Delete item (draft only) -->
                 <button v-if="donation?.status === 'draft'" @click="deleteItem(item)" class="action-btn delete" title="Delete">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -147,53 +167,39 @@
                   </svg>
                 </button>
 
-                <!-- Evidence count -->
-                <!-- <span v-if="item.DonationDistributionEvidences?.length" class="evidence-count">
-                  {{ item.DonationDistributionEvidences.length }} file(s)
-                </span> -->
+                <!-- Toggle intervals view (only for recurring items) -->
+                <button v-if="item.isRecurring" class="action-btn toggle-interval" @click="toggleIntervalView(item.donationItemId)" title="View Intervals">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 18l6-6-6-6" v-if="!expandedIntervals.includes(item.donationItemId)" />
+                    <path d="M6 9l6 6 6-6" v-else />
+                  </svg>
+                </button>
 
-                <!-- <div v-if="item.DonationDistributionEvidences?.length" class="evidence-files">
-                  <span class="evidence-count">{{ item.DonationDistributionEvidences.length }} file(s)</span>
-                  <div class="evidence-links">
+                <!-- Evidence display -->
+                <div v-if="item.DonationDistributionEvidences?.length" class="evidence-container">
+                  <button @click="toggleEvidence(item.donationItemId)" class="action-btn evidence" title="View Evidence">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
+                    </svg>
+                  </button>
+                  <div v-if="expandedEvidence.includes(item.donationItemId)" class="evidence-list">
                     <a
                       v-for="ev in item.DonationDistributionEvidences"
                       :key="ev.evidenceId"
                       :href="getFileUrl(ev.fileUrl)"
                       target="_blank"
-                      class="evidence-link"
-                      :title="ev.fileName"
+                      class="evidence-item"
                     >
                       {{ ev.fileName }}
                     </a>
                   </div>
-                </div> -->
-
-  <!-- Evidence display -->
-  <div v-if="item.DonationDistributionEvidences?.length" class="evidence-container">
-    <button @click="toggleEvidence(item.donationItemId)" class="action-btn evidence" title="View Evidence">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-        <path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-      </svg>
-    </button>
-
-    <div v-if="expandedEvidence.includes(item.donationItemId)" class="evidence-list">
-      <a
-        v-for="ev in item.DonationDistributionEvidences"
-        :key="ev.evidenceId"
-        :href="getFileUrl(ev.fileUrl)"
-        target="_blank"
-        class="evidence-item"
-      >
-        {{ ev.fileName }}
-      </a>
-    </div>
-  </div>
-
+                </div>
               </td>
+
             </tr>
             <!-- Distribution details (expandable) -->
             <tr v-if="expandedItems.includes(item.donationItemId)">
-              <td colspan="7" class="dist-detail-cell">
+              <td colspan="11" class="dist-detail-cell">
                 <div class="dist-detail">
                   <div class="dist-header">
                     <h4>Assigned Beneficiaries</h4>
@@ -276,6 +282,24 @@
                 </div>
               </td>
             </tr>
+            <!-- Interval details (new) -->
+            <tr v-if="expandedIntervals.includes(item.donationItemId) && item.isRecurring">
+              <td colspan="11" class="interval-detail-cell">
+                <div class="interval-detail">
+                  <h4>Intervals for {{ item.description || 'Item' }}</h4>
+                  <div v-if="item.DonationItemIntervals?.length">
+                    <div v-for="interval in item.DonationItemIntervals" :key="interval.intervalId" class="interval-row">
+                      <span class="interval-info">
+                        {{ interval.intervalType }} ({{ interval.intervalCount }}x) – {{ interval.startDate }} to {{ interval.endDate }} – Status: {{ interval.status }}
+                      </span>
+                      <button v-if="donation?.status === 'approved' && interval.status !== 'completed'" @click="openIntervalDistributionModal(interval, item)" class="btn-sm">Distribute</button>
+                      <button v-if="donation?.status === 'approved'" @click="openIntervalEvidenceModal(interval, item)" class="btn-sm">Evidence</button>
+                    </div>
+                  </div>
+                  <p v-else>No intervals defined.</p>
+                </div>
+              </td>
+            </tr>
           </template>
         </tbody>
       </table>
@@ -352,6 +376,61 @@
       </div>
     </div>
 
+    <!-- Interval Distribution Modal -->
+    <div v-if="showIntervalDistModal" class="modal-overlay" @click.self="showIntervalDistModal = false">
+      <div class="modal" style="max-width:600px">
+        <h3>Distribute for Interval</h3>
+        <p>{{ selectedInterval?.intervalType }} – {{ selectedInterval?.startDate }} to {{ selectedInterval?.endDate }}</p>
+        <div class="form-group">
+          <label>Distribution Date</label>
+          <input type="date" v-model="distributionDate" :min="selectedInterval?.startDate" :max="selectedInterval?.endDate" required />
+        </div>
+        <div v-for="(row, idx) in intervalDistRows" :key="idx" class="dist-row">
+          <div class="field beneficiary">
+            <label>Beneficiary</label>
+            <select v-model="row.beneficiaryId">
+              <option value="">Select</option>
+              <option v-for="b in beneficiaries" :key="b.beneficiaryId" :value="b.beneficiaryId">{{ b.name }} ({{ b.type }})</option>
+            </select>
+          </div>
+          <div class="field quantity">
+            <label>Quantity</label>
+            <input type="number" v-model.number="row.quantity" min="0" step="0.01" required />
+          </div>
+          <button @click="removeIntervalRow(idx)" class="btn-icon">×</button>
+        </div>
+        <button @click="addIntervalRow" class="btn-secondary">+ Add</button>
+        <div class="modal-actions">
+          <button @click="showIntervalDistModal = false" class="btn-secondary">Cancel</button>
+          <button @click="submitIntervalDistribution" :disabled="!distributionDate || !intervalDistRows.length || distributingInterval" class="btn-primary">{{ distributingInterval ? 'Distributing...' : 'Distribute' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interval Evidence Modal -->
+    <div v-if="showIntervalEvidenceModal" class="modal-overlay" @click.self="showIntervalEvidenceModal = false">
+      <div class="modal">
+        <h3>Upload Evidence for Interval</h3>
+        <p>{{ selectedInterval?.intervalType }} – {{ selectedInterval?.startDate }}</p>
+        <div class="form-group">
+          <input type="file" multiple @change="handleIntervalFileSelect" accept="image/*,.pdf" />
+        </div>
+        <div v-if="intervalFiles.length" class="selected-files">
+          <p>Selected files:</p>
+          <ul>
+            <li v-for="(file, idx) in intervalFiles" :key="idx">{{ file.name }}</li>
+          </ul>
+        </div>
+        <div v-if="uploadingIntervalEvidence" class="loading-spinner"></div>
+        <div class="modal-actions">
+          <button @click="showIntervalEvidenceModal = false" class="btn-secondary">Cancel</button>
+          <button @click="uploadIntervalEvidence" :disabled="!intervalFiles.length || uploadingIntervalEvidence" class="btn-primary">
+            {{ uploadingIntervalEvidence ? 'Uploading...' : 'Upload' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Add/Edit Item Modals -->
     <AddItemModal
       v-if="showAddItemModal"
@@ -414,6 +493,7 @@ const editingItem = ref(null)
 
 const toasts = ref([])
 const expandedItems = ref([])
+const expandedIntervals = ref([])
 
 const distViewMode = ref({})
 const showRequestChangesModal = ref(false)
@@ -433,13 +513,16 @@ const distributingSaving = ref(false)
 
 const groups = ref([])
 
-// ── Helper functions ──
-const addToast = (msg, type='success') => {
-  const id = Date.now()
-  toasts.value.push({ id, message: msg, type })
-  setTimeout(() => removeToast(id), 5000)
-}
+// ── Interval state ──
+const showIntervalDistModal = ref(false)
+const selectedInterval = ref(null)
+const distributionDate = ref('')
+const distributingInterval = ref(false)
+const intervalDistRows = ref([])
 
+const showIntervalEvidenceModal = ref(false)
+const intervalFiles = ref([])
+const uploadingIntervalEvidence = ref(false)
 
 // ── Return distribution state ──
 const showReturnModal = ref(false)
@@ -447,29 +530,12 @@ const returningDist = ref(null)
 const returnReason = ref('')
 const returning = ref(false)
 
-const openReturnModal = (dist) => {
-  returningDist.value = dist
-  returnReason.value = ''
-  showReturnModal.value = true
+// ── Helper functions ──
+const addToast = (msg, type='success') => {
+  const id = Date.now()
+  toasts.value.push({ id, message: msg, type })
+  setTimeout(() => removeToast(id), 5000)
 }
-
-const confirmReturn = async () => {
-  if (!returningDist.value || !returnReason.value.trim()) return
-  returning.value = true
-  const res = await CharityService.returnDistribution(
-    returningDist.value.distributionId,
-    returnReason.value.trim()
-  )
-  returning.value = false
-  if (res.success) {
-    addToast('Distribution marked as returned')
-    showReturnModal.value = false
-    loadDonation()
-  } else {
-    addToast(res.error || 'Failed to return distribution', 'error')
-  }
-}
-
 const removeToast = (id) => toasts.value = toasts.value.filter(t => t.id !== id)
 
 const formatDate = (d) => d ? new Date(d).toLocaleDateString() : 'N/A'
@@ -478,17 +544,15 @@ const getTypeLabel = (t) => ({ money:'Money', goods:'Goods', service:'Service' }
 const getFileUrl = (relativePath) => {
   if (!relativePath) return '#';
   if (relativePath.startsWith('http')) return relativePath;
-
-  // Use the backend origin (localhost:3001)
   const BACKEND_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
   return `${BACKEND_BASE}${relativePath}`;
-};
+}
 const expandedEvidence = ref([]);
 const toggleEvidence = (itemId) => {
   const idx = expandedEvidence.value.indexOf(itemId);
   if (idx > -1) expandedEvidence.value.splice(idx, 1);
   else expandedEvidence.value.push(itemId);
-};
+}
 
 // ── Computed: total returned amount ──
 const returnedAmount = computed(() => {
@@ -501,61 +565,11 @@ const returnedAmount = computed(() => {
   });
   return total;
 });
+
 const canSubmit = computed(() => donation.value?.status === 'draft')
 const canApprove = computed(() => donation.value?.status === 'pending' && ['admin','finance','charity'].includes(authStore.user?.role))
 const canDistribute = computed(() => donation.value?.status === 'approved')
 const canCancel = computed(() => donation.value?.status !== 'cancelled')
-
-const handleItemSave = async ({ itemData, distributions }) => {
-  savingItem.value = true
-  try {
-    if (editingItem.value) {
-      // 1. Update the item itself
-      const updateRes = await CharityService.updateDonationItem(editingItem.value.donationItemId, itemData)
-      if (!updateRes.success) {
-        addToast(updateRes.error || 'Failed to update item', 'error')
-        savingItem.value = false
-        return
-      }
-      // 2. Delete old distributions
-      const deleteRes = await CharityService.deleteItemDistributions(editingItem.value.donationItemId)
-      if (!deleteRes.success) {
-        addToast('Failed to clear old distributions', 'error')
-      }
-      // 3. Create new distributions (if any)
-      if (distributions.length > 0) {
-        const distRes = await CharityService.distributeItem(editingItem.value.donationItemId, distributions)
-        if (distRes.success) {
-          addToast('Item updated successfully')
-        } else {
-          addToast('Item updated but distribution assignment failed: ' + distRes.error, 'warning')
-        }
-      } else {
-        addToast('Item updated (no beneficiaries assigned)')
-      }
-    } else {
-      // Add new item (existing logic)
-      const res = await CharityService.addDonationItem(donationId, itemData)
-      if (!res.success) {
-        addToast(res.error || 'Failed to add item', 'error')
-        savingItem.value = false
-        return
-      }
-      const newItemId = res.data.donationItemId
-      if (distributions.length > 0) {
-        const distRes = await CharityService.distributeItem(newItemId, distributions)
-        distRes.success ? addToast('Item added and beneficiaries assigned') : addToast('Item added but assignment failed: ' + distRes.error, 'warning')
-      } else {
-        addToast('Item added successfully')
-      }
-    }
-    loadDonation()
-  } catch (err) {
-    addToast('Unexpected error', 'error')
-  }
-  savingItem.value = false
-  closeAddItemModal()
-}
 
 // ── Data loading ──
 const loadDonation = async () => {
@@ -640,28 +654,60 @@ const closeAddItemModal = () => {
   showAddItemModal.value = false
   editingItem.value = null
 }
-const addItem = async ({ itemData, distributions }) => {
-  savingItem.value = true
-  const res = await CharityService.addDonationItem(donationId, itemData)
-  if (!res.success) { addToast(res.error || 'Failed to add item', 'error'); savingItem.value = false; return }
-  const newItemId = res.data.donationItemId
-  if (distributions?.length) {
-    const distRes = await CharityService.distributeItem(newItemId, distributions)
-    distRes.success ? addToast('Item added and beneficiaries assigned') : addToast('Item added but assignment failed: ' + distRes.error, 'warning')
-  } else {
-    addToast('Item added successfully')
-  }
-  loadDonation()
-  closeAddItemModal()
-  savingItem.value = false
-}
 
-const updateItem = async (itemData) => {
+const handleItemSave = async ({ itemData, distributions, interval }) => {
   savingItem.value = true
-  const res = await CharityService.updateDonationItem(editingItem.value.donationItemId, itemData)
-  if (res.success) { addToast('Item updated'); loadDonation(); closeEditItemModal() }
-  else addToast(res.error || 'Update failed', 'error')
+  try {
+    if (editingItem.value) {
+      // Update the item itself
+      const updateRes = await CharityService.updateDonationItem(editingItem.value.donationItemId, itemData)
+      if (!updateRes.success) {
+        addToast(updateRes.error || 'Failed to update item', 'error')
+        savingItem.value = false
+        return
+      }
+      // Update interval (create/delete as needed)
+      await CharityService.updateDonationItemInterval(editingItem.value.donationItemId, interval || null)
+      // Replace distributions
+      const deleteRes = await CharityService.deleteItemDistributions(editingItem.value.donationItemId)
+      if (!deleteRes.success) {
+        addToast('Failed to clear old distributions', 'error')
+      }
+      if (distributions.length > 0) {
+        const distRes = await CharityService.distributeItem(editingItem.value.donationItemId, distributions)
+        if (distRes.success) {
+          addToast('Item updated successfully')
+        } else {
+          addToast('Item updated but distribution assignment failed: ' + distRes.error, 'warning')
+        }
+      } else {
+        addToast('Item updated (no beneficiaries assigned)')
+      }
+    } else {
+      // New item
+      const res = await CharityService.addDonationItem(donationId, {
+        ...itemData,
+        interval: interval || undefined,
+      })
+      if (!res.success) {
+        addToast(res.error || 'Failed to add item', 'error')
+        savingItem.value = false
+        return
+      }
+      const newItemId = res.data.donationItemId
+      if (distributions.length > 0) {
+        const distRes = await CharityService.distributeItem(newItemId, distributions)
+        distRes.success ? addToast('Item added and beneficiaries assigned') : addToast('Item added but assignment failed: ' + distRes.error, 'warning')
+      } else {
+        addToast('Item added successfully')
+      }
+    }
+    loadDonation()
+  } catch (err) {
+    addToast('Unexpected error', 'error')
+  }
   savingItem.value = false
+  closeAddItemModal()
 }
 
 const deleteItem = async (item) => {
@@ -707,7 +753,6 @@ const getGroupName = (groupId) => {
 
 // ── Distribute (bulk for approved donations) ──
 const handleDistribute = async (payload) => {
-
   distributingSaving.value = true
   const res = await CharityService.distributeItem(distributingItem.value.donationItemId, payload)
   if (res.success) { addToast('Distributed successfully'); showDistributeModal.value = false; distributingItem.value = null; loadDonation() }
@@ -741,6 +786,95 @@ const markItemAsDistributed = async (item) => {
   else addToast(res.error || 'Failed', 'error')
 }
 
+// ── Return distribution ──
+const openReturnModal = (dist) => {
+  returningDist.value = dist
+  returnReason.value = ''
+  showReturnModal.value = true
+}
+const confirmReturn = async () => {
+  if (!returningDist.value || !returnReason.value.trim()) return
+  returning.value = true
+  const res = await CharityService.returnDistribution(
+    returningDist.value.distributionId,
+    returnReason.value.trim()
+  )
+  returning.value = false
+  if (res.success) {
+    addToast('Distribution marked as returned')
+    showReturnModal.value = false
+    loadDonation()
+  } else {
+    addToast(res.error || 'Failed to return distribution', 'error')
+  }
+}
+
+// ── Interval toggle ──
+const toggleIntervalView = (itemId) => {
+  const idx = expandedIntervals.value.indexOf(itemId)
+  if (idx > -1) expandedIntervals.value.splice(idx, 1)
+  else expandedIntervals.value.push(itemId)
+}
+
+// ── Interval distribution ──
+const openIntervalDistributionModal = (interval, item) => {
+  selectedInterval.value = interval
+  selectedItem.value = item // keep reference to item for evidence
+  distributionDate.value = ''
+  intervalDistRows.value = [{ beneficiaryId: '', quantity: 0 }]
+  showIntervalDistModal.value = true
+}
+
+const addIntervalRow = () => intervalDistRows.value.push({ beneficiaryId: '', quantity: 0 })
+const removeIntervalRow = (idx) => intervalDistRows.value.splice(idx, 1)
+
+const submitIntervalDistribution = async () => {
+  if (!selectedInterval.value || !distributionDate.value) return
+  const payload = intervalDistRows.value.map(r => ({
+    beneficiaryId: r.beneficiaryId,
+    quantity: r.quantity,
+  }))
+  distributingInterval.value = true
+  const res = await CharityService.distributeItemForInterval(
+    selectedItem.value?.donationItemId,
+    selectedInterval.value.intervalId,
+    { distributions: payload }
+  )
+  distributingInterval.value = false
+  if (res.success) {
+    addToast('Distribution successful')
+    showIntervalDistModal.value = false
+    loadDonation()
+  } else {
+    addToast(res.error || 'Failed', 'error')
+  }
+}
+
+// ── Interval evidence ──
+const openIntervalEvidenceModal = (interval, item) => {
+  selectedInterval.value = interval
+  selectedItem.value = item
+  intervalFiles.value = []
+  showIntervalEvidenceModal.value = true
+}
+const handleIntervalFileSelect = (event) => intervalFiles.value = Array.from(event.target.files)
+const uploadIntervalEvidence = async () => {
+  if (!selectedItem.value || !selectedInterval.value || !intervalFiles.value.length) return
+  uploadingIntervalEvidence.value = true
+  const formData = new FormData()
+  intervalFiles.value.forEach(file => formData.append('documents', file))
+  // Note: the backend endpoint for interval evidence must accept intervalId as param
+  const res = await CharityService.uploadIntervalEvidence(selectedItem.value.donationItemId, selectedInterval.value.intervalId, formData)
+  uploadingIntervalEvidence.value = false
+  if (res.success) {
+    addToast('Evidence uploaded successfully')
+    showIntervalEvidenceModal.value = false
+    loadDonation()
+  } else {
+    addToast(res.error || 'Upload failed', 'error')
+  }
+}
+
 // ── Mount ──
 onMounted(async () => {
   await loadDonation()
@@ -750,7 +884,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.donation-detail { padding: 16px; max-width: 1000px; margin: 0 auto; background: #f5f7fb; min-height: 100vh; }
+.donation-detail { padding: 16px; max-width: 1200px; margin: 0 auto; background: #f5f7fb; min-height: 100vh; }
 .page-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
 .back-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: white; border: 1px solid #e2e8f0; border-radius: 10px; color: #475569; text-decoration: none; }
 .back-btn svg { width: 18px; height: 18px; }
@@ -888,4 +1022,12 @@ onMounted(async () => {
 .return-btn:hover {
   background: #fde68a;
 }
+.toggle-interval { color: #8b5cf6; }
+.interval-detail-cell { background: #fafbfc; padding: 12px; }
+.interval-detail h4 { margin-bottom: 8px; }
+.interval-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid #e2e8f0; }
+.interval-info { flex: 1; font-size: 13px; }
+.btn-sm { padding: 4px 10px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer; }
+.btn-icon { background: none; border: none; color: #ef4444; font-size: 18px; cursor: pointer; }
+
 </style>

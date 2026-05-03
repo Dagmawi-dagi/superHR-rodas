@@ -7,6 +7,7 @@ module.exports = (sequelize, DataTypes) => {
       DonationDistribution.belongsTo(models.DonationItem, { foreignKey: "donationItemId" });
       DonationDistribution.belongsTo(models.Beneficiary, { foreignKey: "beneficiaryId" });
       // No longer associated with DonationDistributionEvidence
+      DonationDistribution.belongsTo(models.DonationItemInterval, { foreignKey: "intervalId" });
     }
   }
 
@@ -17,6 +18,10 @@ module.exports = (sequelize, DataTypes) => {
         autoIncrement: true,
         primaryKey: true,
         field: "distribution_id",
+      },
+      intervalId: {
+        type: DataTypes.INTEGER,
+        field: "interval_id",
       },
       donationItemId: { type: DataTypes.INTEGER, field: "donation_item_id" },
       beneficiaryId: { type: DataTypes.INTEGER, field: "beneficiary_id" },

@@ -18,6 +18,18 @@ router.post('/:id/request-changes', donationController.requestChanges);
 // Evidence upload for a distribution
 router.post('/items/:itemId/evidences',  (req, res, next) => { req.params.type = 'charityEvidences'; next(); },uploadMultipleDocuments,donationController.uploadEvidence);
 router.post('/items/:itemId/distribute-single', donationController.markItemDistributed);
+// Distribute for a specific interval (recurring items)
+router.post("/items/:itemId/distribute/:intervalId", donationController.distributeItemForInterval);
+router.post(
+  "/items/:itemId/intervals/:intervalId/evidences",
+  (req, res, next) => {
+    req.params.type = "charityEvidences";
+    next();
+  },
+  uploadMultipleDocuments,
+  donationController.uploadIntervalEvidence
+);
+router.put('/items/:itemId/interval', donationController.updateDonationItemInterval);
 // ------------------------------------------------------------------
 // DONATION ITEMS
 // ------------------------------------------------------------------

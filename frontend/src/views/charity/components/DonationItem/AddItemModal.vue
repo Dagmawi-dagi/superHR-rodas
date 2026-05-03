@@ -49,9 +49,56 @@
               <option value="cash">Cash</option>
             </select>
           </div>
-          <div class="computed-total">
+
+          <!-- ============ Recurring / Interval ============ -->
+          <div class="form-row">
+            <div class="form-group">
+              <label class="checkbox-label">
+                Recurring ?
+                <span class="custom-checkbox">
+                  <input type="checkbox" :value="form.isRecurring" v-model="form.isRecurring" />
+                  <span class="checkmark"></span>
+                </span>
+              </label>
+            </div>
+          </div>
+          <template v-if="form.isRecurring">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Interval</label>
+                <select v-model="form.intervalType">
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Number of intervals</label>
+                <input type="number" v-model.number="form.intervalCount" min="1" required />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Start Date</label>
+                <input type="date" v-model="form.intervalStartDate" required />
+              </div>
+              <div class="form-group">
+                <label>Computed End Date</label>
+                <input :value="computedEndDate" disabled />
+              </div>
+            </div>
+            <div class="computed-total" style="font-weight:600; margin-top:8px;">
+              <strong>Grand Total (over all intervals):</strong>
+              {{ formatCurrency(grandTotal) }}
+            </div>
+            <div class="computed-total">
+              <strong>Per‑Interval Value:</strong>
+              {{ formatCurrency(perIntervalValue) }}
+            </div>
+          </template>
+          <div v-else class="computed-total">
             <strong>Item Total:</strong>
-            {{ form.type === 'money' ? formatCurrency(form.unitValue) : formatCurrency(form.quantity * form.unitValue) }}
+            {{ formatCurrency(perIntervalValue) }}
           </div>
         </div>
 
@@ -122,8 +169,8 @@
               {{ form.type === 'money' ? formatCurrency(totalAssignedValue) : totalAssignedQuantity }}
             </span>
             <span v-if="exceedsTotal" class="error">Exceeds item total!</span>
-            <span v-else-if="totalAssignedValue < totalItemValue && distributionRows.length > 0" class="warning">
-              (Remaining: {{ formatCurrency(totalItemValue - totalAssignedValue) }})
+            <span v-else-if="totalAssignedValue < perIntervalValue && distributionRows.length > 0" class="warning">
+              (Remaining: {{ formatCurrency(perIntervalValue - totalAssignedValue) }})
             </span>
           </div>
         </div>
@@ -171,11 +218,16 @@ const form = reactive({
   description: '',
   quantity: 1,
   unitValue: 0,
-  paymentMethod: 'bank'
+  paymentMethod: 'bank',
+  isRecurring: false,
+  intervalType: 'monthly',
+  intervalCount: 1,
+  intervalStartDate: '',
 })
 
 const distributionRows = ref([])
 
+// ── Watch for editing ──
 watch(() => props.itemToEdit, (item) => {
   if (item) {
     form.type = item.type
@@ -197,17 +249,27 @@ watch(() => props.itemToEdit, (item) => {
         value: parseFloat(dist.value) || 0
       }))
 
-      // Pre‑select groups that already have beneficiaries
       const groupIds = new Set()
       item.DonationDistributions.forEach(dist => {
-        if (dist.Beneficiary?.groupId) {
-          groupIds.add(dist.Beneficiary.groupId)
-        }
+        if (dist.Beneficiary?.groupId) groupIds.add(dist.Beneficiary.groupId)
       })
       selectedGroupIds.value = Array.from(groupIds)
     } else {
       distributionRows.value = []
       selectedGroupIds.value = []
+    }
+
+    // ── Handle recurring fields ──
+    form.isRecurring = !!item.isRecurring
+    if (item.isRecurring && item.DonationItemIntervals?.length) {
+      const interval = item.DonationItemIntervals[0]  // assume one interval per item for now
+      form.intervalType = interval.intervalType
+      form.intervalCount = interval.intervalCount
+      form.intervalStartDate = interval.startDate
+    } else {
+      form.intervalType = 'monthly'
+      form.intervalCount = 1
+      form.intervalStartDate = ''
     }
   } else {
     // Reset for add mode
@@ -216,13 +278,35 @@ watch(() => props.itemToEdit, (item) => {
     form.quantity = 1
     form.unitValue = 0
     form.paymentMethod = 'bank'
+    form.isRecurring = false
+    form.intervalType = 'monthly'
+    form.intervalCount = 1
+    form.intervalStartDate = ''
     distributionRows.value = []
     selectedGroupIds.value = []
   }
 }, { immediate: true })
 
-const totalItemValue = computed(() => {
+// ── Computed values ──
+const perIntervalValue = computed(() => {
   return parseFloat(form.quantity) * parseFloat(form.unitValue)
+})
+
+const grandTotal = computed(() => {
+  return form.isRecurring ? perIntervalValue.value * form.intervalCount : perIntervalValue.value
+})
+
+const computedEndDate = computed(() => {
+  if (!form.intervalStartDate) return ''
+  let date = new Date(form.intervalStartDate)
+  if (form.intervalType === 'daily') {
+    date.setDate(date.getDate() + form.intervalCount - 1)
+  } else if (form.intervalType === 'weekly') {
+    date.setDate(date.getDate() + form.intervalCount * 7 - 1)
+  } else if (form.intervalType === 'monthly') {
+    date.setMonth(date.getMonth() + form.intervalCount)
+  }
+  return date.toISOString().split('T')[0]
 })
 
 const totalAssignedValue = computed(() => {
@@ -232,6 +316,21 @@ const totalAssignedValue = computed(() => {
   }, 0)
 })
 
+// Reset quantity and unit value whenever type changes
+watch(() => form.type, (newType, oldType) => {
+  if (newType !== oldType) {
+    // Reset basic values
+    form.quantity = 1;
+    form.unitValue = 0;
+    // If switching to Money, ensure payment method is set
+    if (newType === 'money') {
+      form.paymentMethod = form.paymentMethod || 'bank';
+    }
+    // Optionally clear distribution rows if needed
+    // distributionRows.value = [];
+  }
+});
+
 const totalAssignedQuantity = computed(() => {
   if (form.type === 'money') return 0
   return distributionRows.value.reduce((sum, row) => sum + (parseFloat(row.quantity) || 0), 0)
@@ -239,12 +338,14 @@ const totalAssignedQuantity = computed(() => {
 
 const exceedsTotal = computed(() => {
   const epsilon = 0.001
-  if (form.type === 'money') return totalAssignedValue.value - totalItemValue.value > epsilon
-  return totalAssignedQuantity.value - parseFloat(form.quantity) > epsilon
+  if (form.type === 'money') return totalAssignedValue.value > perIntervalValue.value + epsilon
+  return totalAssignedQuantity.value > parseFloat(form.quantity) + epsilon
 })
 
 const isValid = computed(() => {
   if (!form.type || !form.quantity || !form.unitValue) return false
+  // For recurring, must have start date
+  if (form.isRecurring && !form.intervalStartDate) return false
   if (distributionRows.value.length === 0) return false
   const allRowsValid = distributionRows.value.every(r => {
     return r.beneficiaryId && (form.type === 'money' ? parseFloat(r.value) > 0 : parseFloat(r.quantity) > 0)
@@ -268,11 +369,11 @@ function assignFromGroups() {
     return
   }
   distributionRows.value = []
+  const totalValue = perIntervalValue.value  // use per-interval total
   if (form.type === 'money') {
-    const total = totalItemValue.value
-    const perPerson = total / allMembers.length
+    const perPerson = totalValue / allMembers.length
     const roundedPerPerson = Math.floor(perPerson * 100) / 100
-    let remaining = total - roundedPerPerson * allMembers.length
+    let remaining = totalValue - roundedPerPerson * allMembers.length
     allMembers.forEach((member, index) => {
       let amount = roundedPerPerson
       if (remaining >= 0.01) {
@@ -305,31 +406,41 @@ function handleSubmit() {
     description: form.description,
     quantity: form.type === 'money' ? 1 : Number(form.quantity),
     unitValue: Number(form.unitValue),
-    paymentMethod: form.type === 'money' ? form.paymentMethod : undefined
+    paymentMethod: form.type === 'money' ? form.paymentMethod : undefined,
   }
 
+  // Build distributions
   const distributions = distributionRows.value.map(row => {
     const dist = { beneficiaryId: row.beneficiaryId }
     if (form.type === 'money') {
-        // row.value = monetary amount assigned to this beneficiary
-        // unitValue = total monetary amount of the donation item
-        const fraction = parseFloat(row.value) / parseFloat(form.unitValue);
-        dist.quantity = fraction;          // e.g., 0.375 for 750 ETB out of 2000 ETB
-        dist.value = parseFloat(row.value); // actual monetary value
+      const fraction = parseFloat(row.value) / parseFloat(form.unitValue)
+      dist.quantity = fraction
+      dist.value = parseFloat(row.value)
     } else {
-        dist.quantity = parseFloat(row.quantity);
-        dist.value = parseFloat(row.quantity) * parseFloat(form.unitValue);
+      dist.quantity = parseFloat(row.quantity)
+      dist.value = parseFloat(row.quantity) * parseFloat(form.unitValue)
     }
-      return dist
+    return dist
   })
 
-  emit('save', { itemData, distributions })
+  let intervalData = null
+  if (form.isRecurring) {
+    intervalData = {
+      intervalType: form.intervalType,
+      intervalCount: form.intervalCount,
+      startDate: form.intervalStartDate,
+    }
+  }
+
+  emit('save', { itemData, distributions, interval: intervalData })
 }
 
 const formatCurrency = (v) => v ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'ETB' }).format(v) : '0.00'
 
 onMounted(loadData)
 </script>
+
+<!-- Styles unchanged (keep existing) -->
 
 
 
