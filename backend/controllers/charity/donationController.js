@@ -399,27 +399,42 @@ exports.addDonationItem = async (req, res) => {
 
     const baseTotal = parseFloat(quantity) * parseFloat(unitValue);
     let finalTotal = baseTotal;
-    let intervalData = null;
+    let intervalsToCreate = [];
 
     // Handle interval / recurring
     if (interval && interval.intervalType && interval.intervalCount && interval.startDate) {
-      if (!['daily', 'weekly', 'monthly'].includes(interval.intervalType)) {
-        throw new Error('Invalid interval type');
+      if (!["daily", "weekly", "monthly"].includes(interval.intervalType)) {
+        throw new Error("Invalid interval type");
       }
       const count = parseInt(interval.intervalCount);
-      if (isNaN(count) || count <= 0) throw new Error('Interval count must be positive');
+      if (isNaN(count) || count <= 0)
+        throw new Error("Interval count must be positive");
 
-      let endDate = new Date(interval.startDate);
-      if (interval.intervalType === 'daily') endDate.setDate(endDate.getDate() + count - 1);
-      else if (interval.intervalType === 'weekly') endDate.setDate(endDate.getDate() + count * 7 - 1);
-      else if (interval.intervalType === 'monthly') endDate.setMonth(endDate.getMonth() + count);
-      intervalData = {
-        intervalType: interval.intervalType,
-        intervalCount: count,
-        startDate: interval.startDate,
-        endDate: endDate.toISOString().split('T')[0],
-      };
-      finalTotal = baseTotal * count;   // grand total over all intervals
+      for (let i = 0; i < count; i++) {
+        let start = new Date(interval.startDate);
+        let end = new Date(interval.startDate);
+
+        if (interval.intervalType === "daily") {
+          start.setDate(start.getDate() + i);
+          end.setDate(end.getDate() + i);
+        } else if (interval.intervalType === "weekly") {
+          start.setDate(start.getDate() + i * 7);
+          end.setDate(end.getDate() + (i + 1) * 7 - 1);
+        } else if (interval.intervalType === "monthly") {
+          start.setMonth(start.getMonth() + i);
+          end.setMonth(end.getMonth() + i + 1);
+          end.setDate(end.getDate() - 1);
+        }
+
+        intervalsToCreate.push({
+          intervalType: interval.intervalType,
+          intervalCount: i + 1, // Use as sequence number
+          startDate: start.toISOString().split("T")[0],
+          endDate: end.toISOString().split("T")[0],
+          status: "pending",
+        });
+      }
+      finalTotal = baseTotal * count; // grand total over all intervals
     }
 
     const item = await DonationItem.create(
@@ -430,18 +445,22 @@ exports.addDonationItem = async (req, res) => {
         quantity,
         unitValue,
         totalValue: finalTotal,
-        paymentMethod: type === "money" ? (paymentMethod || "bank") : null,
-        isRecurring: !!intervalData,      // ← this sets the flag
+        paymentMethod: type === "money" ? paymentMethod || "bank" : null,
+        isRecurring: intervalsToCreate.length > 0,
       },
       { transaction: t }
     );
 
-    if (intervalData) {
-      await DonationItemInterval.create({
-        donationItemId: item.donationItemId,
-        ...intervalData,
-        status: 'pending',
-      }, { transaction: t });
+    if (intervalsToCreate.length > 0) {
+      for (const inv of intervalsToCreate) {
+        await DonationItemInterval.create(
+          {
+            donationItemId: item.donationItemId,
+            ...inv,
+          },
+          { transaction: t }
+        );
+      }
     }
 
     await recalculateDonationTotal(id, t);
@@ -821,7 +840,10 @@ exports.distributeItem = async (req, res) => {
     }
 
     const item = await DonationItem.findByPk(itemId, {
-      include: [{ model: Donation }],
+      include: [
+        { model: Donation },
+        { model: DonationItemInterval }
+      ],
       transaction: t,
     });
 
@@ -845,36 +867,57 @@ exports.distributeItem = async (req, res) => {
         .status(400)
         .json({
           success: false,
-          error: "Distribution quantity exceeds item quantity",
+          error: "Distribution quantity exceeds item quantity per interval",
         });
     }
 
     const createdDistributions = [];
-    for (const dist of distributions) {
-      const beneficiary = await Beneficiary.findByPk(dist.beneficiaryId, {
-        transaction: t,
-      });
-      if (!beneficiary) {
-        await t.rollback();
-        return res
-          .status(404)
-          .json({
+    
+    // Determine which intervals to target
+    let targetIntervalIds = [null];
+    if (item.isRecurring) {
+      if (!item.DonationItemIntervals || item.DonationItemIntervals.length === 0) {
+        // Safety: Try fetching intervals if they weren't included correctly
+        const intervals = await DonationItemInterval.findAll({
+          where: { donationItemId: itemId },
+          transaction: t
+        });
+        if (intervals.length === 0) {
+          await t.rollback();
+          return res.status(400).json({ success: false, error: "Recurring item has no intervals defined" });
+        }
+        targetIntervalIds = intervals.map(inv => inv.intervalId);
+      } else {
+        targetIntervalIds = item.DonationItemIntervals.map(inv => inv.intervalId);
+      }
+    }
+
+    for (const intervalId of targetIntervalIds) {
+      for (const dist of distributions) {
+        const beneficiary = await Beneficiary.findByPk(dist.beneficiaryId, {
+          transaction: t,
+        });
+        if (!beneficiary) {
+          await t.rollback();
+          return res.status(404).json({
             success: false,
             error: `Beneficiary ${dist.beneficiaryId} not found`,
           });
-      }
+        }
 
-      const value = parseFloat(dist.quantity) * parseFloat(item.unitValue);
-      const distribution = await DonationDistribution.create(
-        {
-          donationItemId: itemId,
-          beneficiaryId: dist.beneficiaryId,
-          quantity: dist.quantity,
-          value,
-        },
-        { transaction: t },
-      );
-      createdDistributions.push(distribution);
+        const value = parseFloat(dist.quantity) * parseFloat(item.unitValue);
+        const distribution = await DonationDistribution.create(
+          {
+            donationItemId: itemId,
+            intervalId: intervalId, // Will be null for non-recurring, and specific ID for recurring
+            beneficiaryId: dist.beneficiaryId,
+            quantity: dist.quantity,
+            value,
+          },
+          { transaction: t },
+        );
+        createdDistributions.push(distribution);
+      }
     }
 
     await logDonationAction(
@@ -1480,21 +1523,52 @@ exports.distributeItemForInterval = async (req, res) => {
     const interval = item.DonationItemIntervals[0];
     if (!interval) throw new Error('Interval not found');
 
+    // ***** NEW: Evidence check for this specific interval *****
+    const evidenceCount = await DonationDistributionEvidence.count({
+      where: { intervalId },
+      transaction: t
+    });
+
+    if (evidenceCount === 0) {
+      await t.rollback();
+      return res.status(400).json({
+        success: false,
+        error: `No evidence uploaded for this period. Please upload evidence before distribution.`
+      });
+    }
+
     // Check date: must be within interval and not already distributed
-    // We'll assume the frontend sends a date, but for simplicity we'll just check if any distributions already exist for this interval
     const existingDistributions = await DonationDistribution.count({
       where: { intervalId },
       transaction: t
     });
+
+    if (existingDistributions > 0 && (!distributions || distributions.length === 0)) {
+      // Just mark as distributed since distributions are already pre-assigned
+      await interval.update({ status: 'distributed' }, { transaction: t });
+      await t.commit();
+      return res.json({ success: true, message: 'Interval marked as distributed' });
+    }
+
     if (existingDistributions > 0) {
       await t.rollback();
       return res.status(400).json({ success: false, error: 'This interval has already been distributed' });
     }
 
-    // Validate total quantity…
+    if (!distributions || distributions.length === 0) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'No distributions provided' });
+    }
+
+    // Validate total quantity
     const totalQty = distributions.reduce((sum, d) => sum + parseFloat(d.quantity || 0), 0);
-    const intervalQty = parseFloat(item.quantity) * parseFloat(item.unitValue); // per interval value? Actually per interval should be based on unitValue * quantity_per_interval? We'll assume quantity is per interval.
-    // But for simplicity we'll allow the same quantity as item for now; adjust later if needed.
+    if (totalQty > parseFloat(item.quantity)) {
+      await t.rollback();
+      return res.status(400).json({ 
+        success: false, 
+        error: `Total quantity (${totalQty}) exceeds the allowed quantity per interval (${item.quantity})` 
+      });
+    }
 
     const created = [];
     for (const dist of distributions) {
@@ -1511,9 +1585,11 @@ exports.distributeItemForInterval = async (req, res) => {
       created.push(distribution);
     }
 
-    // Mark interval as completed if all intervals done? For now just log.
+    // Mark interval as distributed
+    await interval.update({ status: 'distributed' }, { transaction: t });
+
     await t.commit();
-    res.status(201).json({ success: true, data: created });
+    res.status(201).json({ success: true, message: 'Interval distributed successfully', data: created });
   } catch (error) {
     await t.rollback();
     res.status(500).json({ success: false, error: error.message });
@@ -1565,6 +1641,9 @@ exports.uploadIntervalEvidence = async (req, res) => {
       evidences.push(evidence);
     }
 
+    // Mark interval as pending (evidence uploaded)
+    await interval.update({ status: 'pending' }, { transaction: t });
+
     await logDonationAction(item.Donation.donationId, employeeId, 'EVIDENCE_UPLOADED_INTERVAL', {
       itemId,
       intervalId,
@@ -1604,18 +1683,32 @@ exports.updateDonationItemInterval = async (req, res) => {
         throw new Error('Invalid interval data');
       }
       const count = parseInt(interval.intervalCount);
-      let endDate = new Date(interval.startDate);
-      if (interval.intervalType === 'daily') endDate.setDate(endDate.getDate() + count - 1);
-      else if (interval.intervalType === 'weekly') endDate.setDate(endDate.getDate() + count * 7 - 1);
-      else if (interval.intervalType === 'monthly') endDate.setMonth(endDate.getMonth() + count);
-      await DonationItemInterval.create({
-        donationItemId: itemId,
-        intervalType: interval.intervalType,
-        intervalCount: count,
-        startDate: interval.startDate,
-        endDate: endDate.toISOString().split('T')[0],
-        status: 'pending',
-      }, { transaction: t });
+      
+      for (let i = 0; i < count; i++) {
+        let start = new Date(interval.startDate);
+        let end = new Date(interval.startDate);
+
+        if (interval.intervalType === "daily") {
+          start.setDate(start.getDate() + i);
+          end.setDate(end.getDate() + i);
+        } else if (interval.intervalType === "weekly") {
+          start.setDate(start.getDate() + i * 7);
+          end.setDate(end.getDate() + (i + 1) * 7 - 1);
+        } else if (interval.intervalType === "monthly") {
+          start.setMonth(start.getMonth() + i);
+          end.setMonth(end.getMonth() + i + 1);
+          end.setDate(end.getDate() - 1);
+        }
+
+        await DonationItemInterval.create({
+          donationItemId: itemId,
+          intervalType: interval.intervalType,
+          intervalCount: i + 1,
+          startDate: start.toISOString().split("T")[0],
+          endDate: end.toISOString().split("T")[0],
+          status: 'pending',
+        }, { transaction: t });
+      }
     }
 
     // Update item's isRecurring flag
