@@ -755,6 +755,19 @@ async deleteItemDistributions(itemId: number) {
     }
   }
 
+  async reassignDistribution(distributionId: number, data: {
+    amount: number,
+    toBeneficiaryId?: number,
+    reason: string
+  }) {
+    try {
+      const response = await api.post(`/charity/donations/distributions/${distributionId}/reassign`, data)
+      return { success: true, message: response.data.message }
+    } catch (error: any) {
+      return { success: false, error: error.response?.data?.error || 'Failed to reassign distribution' }
+    }
+  }
+
   // Evidence uploads
   async uploadItemEvidence(itemId: number, formData: FormData) {
     try {

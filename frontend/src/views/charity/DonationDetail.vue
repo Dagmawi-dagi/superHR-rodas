@@ -10,7 +10,7 @@
       <div>
         <h1 class="page-title">Donation #{{ donation.donationId }}</h1>
         <p class="page-subtitle">
-          {{ donation.Company?.name }} → {{ donation.Campaign?.title }}
+          {{ donation.DonationCompany?.name }} → {{ donation.Campaign?.title }}
         </p>
       </div>
       <div class="header-actions">
@@ -27,8 +27,8 @@
     <div class="summary-card">
       <div class="summary-row">
         <div class="summary-item">
-          <span class="label">Company</span>
-          <span class="value">{{ donation.Company?.name }}</span>
+          <span class="label">DonationCompany</span>
+          <span class="value">{{ donation.DonationCompany?.name }}</span>
         </div>
         <div class="summary-item">
           <span class="label">Campaign</span>
@@ -42,7 +42,7 @@
           <span class="label">Total Value</span>
           <span class="value">{{ formatCurrency(donation.totalValue) }}</span>
         </div>
-        <div class="summary-item" v-if="donation.status === 'distributed'">
+        <div class="summary-item" v-if="donation.status === 'approved'">
           <span class="label">Returned</span>
           <span class="value">{{ formatCurrency(returnedAmount) }}</span>
         </div>
@@ -232,7 +232,8 @@
                             <th>Beneficiary</th>
                             <th>{{ item.type === 'money' ? 'Amount' : 'Quantity' }}</th>
                             <th>Value</th>
-                            <th>Returned?</th>
+                            <th>Returned</th>
+                            <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -242,16 +243,27 @@
                             <td>{{ formatCurrency(dist.value) }}</td>
                             <td>
                               <span v-if="dist.isReturned" class="returned">Yes ({{ dist.returnReason }})</span>
-                              <span v-else>No
+                              <span v-else class="active-dist">No</span>
+                            </td>
+                            <td>
+                              <span v-if="!dist.isReturned && donation?.status === 'approved'">
                                   <button
-                                    v-if="donation?.status === 'approved'"
                                     @click="openReturnModal(dist)"
                                     class="return-btn"
                                     title="Mark as returned"
                                   >
-                                    ↩
+                                    ↩ Return
+                                  </button>
+                                  <button
+                                    v-if="item.status !== 'distributed'"
+                                    @click="openReassignModal(dist, item)"
+                                    class="reassign-btn"
+                                    title="Reassign / Deduct"
+                                  >
+                                    ⇄ Reassign
                                   </button>
                               </span>
+                              <span v-else>-</span>
                             </td>
                           </tr>
                         </tbody>
@@ -388,7 +400,8 @@
                                   <th>Beneficiary</th>
                                   <th>{{ item.type === 'money' ? 'Amount' : 'Quantity' }}</th>
                                   <th>Value</th>
-                                  <th>Returned?</th>
+                                  <th>Returned</th>
+                                  <th>Actions</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -398,16 +411,27 @@
                                   <td>{{ formatCurrency(dist.value) }}</td>
                                   <td>
                                     <span v-if="dist.isReturned" class="returned">Yes ({{ dist.returnReason }})</span>
-                                    <span v-else>No
+                                    <span v-else class="active-dist">No</span>
+                                  </td>
+                                  <td>
+                                    <span v-if="!dist.isReturned && donation?.status === 'approved'">
                                       <button
-                                        v-if="donation?.status === 'approved'"
                                         @click="openReturnModal(dist)"
                                         class="return-btn"
                                         title="Mark as returned"
                                       >
-                                        ↩
+                                        ↩ Return
+                                      </button>
+                                      <button
+                                        v-if="interval.status !== 'distributed'"
+                                        @click="openReassignModal(dist, item)"
+                                        class="reassign-btn"
+                                        title="Reassign / Deduct"
+                                      >
+                                        ⇄ Reassign
                                       </button>
                                     </span>
+                                    <span v-else>-</span>
                                   </td>
                                 </tr>
                               </tbody>
@@ -511,6 +535,12 @@
         <p>
           Returning distribution for <strong>{{ returningDist?.Beneficiary?.name }}</strong>
         </p>
+        
+        <div class="warning-box">
+          <p><strong>⚠️ Warning:</strong> This action cannot be undone.</p>
+          <p>If you want to move this quantity to another beneficiary or free it up for the item, please consider using the <strong>Reassign / Deduct</strong> feature (⇄) instead.</p>
+        </div>
+
         <textarea v-model="returnReason" rows="2" placeholder="Reason for return (required)"></textarea>
         <div class="modal-actions">
           <button @click="showReturnModal = false" class="btn-secondary">Cancel</button>
@@ -595,6 +625,14 @@
       @save="handleDistribute"
     />
 
+    <ReassignDistributionModal
+      :is-open="showReassignModal"
+      :distribution="selectedDistForReassign"
+      :item="selectedItemForReassign"
+      @close="showReassignModal = false"
+      @success="loadDonation(); addToast('Distribution updated successfully')"
+    />
+
     <!-- Toasts -->
     <div class="toast-container">
       <div v-for="toast in toasts" :key="toast.id" :class="['toast', `toast-${toast.type}`]" @click="removeToast(toast.id)">
@@ -616,6 +654,7 @@ import { useAuthStore } from '@/stores/auth'
 import StatusBadge from './components/DonationItem/StatusBadge.vue'
 import AddItemModal from './components/DonationItem/AddItemModal.vue'
 import DistributeItemModal from './components/Donation/DistributeItemModal.vue'
+import ReassignDistributionModal from './components/Donation/ReassignDistributionModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -674,6 +713,17 @@ const showReturnModal = ref(false)
 const returningDist = ref(null)
 const returnReason = ref('')
 const returning = ref(false)
+
+// ── Reassign distribution state ──
+const showReassignModal = ref(false)
+const selectedDistForReassign = ref(null)
+const selectedItemForReassign = ref(null)
+
+const openReassignModal = (dist, item) => {
+  selectedDistForReassign.value = dist
+  selectedItemForReassign.value = item
+  showReassignModal.value = true
+}
 
 // ── Helper functions ──
 const addToast = (msg, type='success') => {
@@ -1229,6 +1279,19 @@ onMounted(async () => {
 .return-btn:hover {
   background: #fde68a;
 }
+.reassign-btn {
+  margin-left: 4px;
+  background: #dcfce7;
+  border: none;
+  color: #166534;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+}
+.reassign-btn:hover {
+  background: #bbf7d0;
+}
 .toggle-interval { color: #8b5cf6; }
 .interval-detail-cell { background: #fafbfc; padding: 12px; }
 .interval-wrapper {
@@ -1269,5 +1332,19 @@ onMounted(async () => {
 .status-active { background: #dbeafe; color: #1e40af; }
 .status-distributed { background: #dcfce7; color: #166534; }
 .btn-icon { background: none; border: none; color: #ef4444; font-size: 18px; cursor: pointer; }
+
+.warning-box {
+  background: #fffbeb;
+  border-left: 4px solid #f59e0b;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+.warning-box p {
+  margin: 4px 0;
+  font-size: 0.9rem;
+  color: #92400e;
+}
+.active-dist { color: #10b981; font-weight: 600; }
 
 </style>

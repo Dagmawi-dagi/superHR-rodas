@@ -10,6 +10,7 @@ const {
   Campaign,
   Beneficiary,
   Employee,
+  DonationDeduction,
   sequelize,
 } = require("../../models");
 const { Op } = require("sequelize");
@@ -1718,6 +1719,139 @@ exports.updateDonationItemInterval = async (req, res) => {
     res.json({ success: true, message: 'Interval updated' });
   } catch (error) {
     await t.rollback();
+    res.status(400).json({ success: false, error: error.message });
+  }
+};
+
+// Reassign or deduct from a distribution
+exports.reassignDistribution = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { distributionId } = req.params;
+    const { amount, toBeneficiaryId, reason } = req.body;
+
+    if (!amount || parseFloat(amount) <= 0) {
+      throw new Error('Valid amount is required');
+    }
+
+    const dist = await DonationDistribution.findByPk(distributionId, {
+      include: [
+        { 
+          model: DonationItem, 
+          include: [
+            { model: Donation, attributes: ['status', 'donationId'] },
+            { model: DonationItemInterval, as: 'DonationItemIntervals' }
+          ] 
+        }
+      ],
+      transaction: t
+    });
+
+    if (!dist) throw new Error('Distribution not found');
+    
+    const item = dist.DonationItem;
+    if (item.Donation.status !== 'approved') {
+      throw new Error('Reassignment only allowed for approved donations');
+    }
+
+    // Check if item itself is distributed
+    if (item.status === 'distributed') {
+      throw new Error('Cannot reassign/deduct from an already distributed item');
+    }
+
+    // Check if the specific interval is distributed
+    if (dist.intervalId && item.DonationItemIntervals) {
+      const interval = item.DonationItemIntervals.find(i => i.intervalId === dist.intervalId);
+      if (interval && interval.status === 'distributed') {
+        throw new Error('Cannot reassign/deduct from an already distributed period');
+      }
+    }
+
+    if (parseFloat(amount) > parseFloat(dist.quantity)) {
+      throw new Error('Deduction amount exceeds distribution quantity');
+    }
+
+    // 1. Decrease source distribution
+    const oldQty = parseFloat(dist.quantity);
+    const newQty = oldQty - parseFloat(amount);
+    
+    // Update distribution
+    dist.quantity = newQty;
+    dist.value = newQty * parseFloat(item.unitValue);
+    
+    if (newQty <= 0) {
+      await dist.destroy({ transaction: t });
+    } else {
+      await dist.save({ transaction: t });
+    }
+
+    // 2. Handle reassignment
+    if (toBeneficiaryId) {
+      // Prevent reassignment to a beneficiary that already returned this item
+      const returnedDist = await DonationDistribution.findOne({
+        where: {
+          donationItemId: item.donationItemId,
+          beneficiaryId: toBeneficiaryId,
+          intervalId: dist.intervalId,
+          isReturned: true
+        },
+        transaction: t
+      });
+
+      if (returnedDist) {
+        throw new Error('Cannot reassign to a beneficiary that has already returned this item/period');
+      }
+
+      // Find or create target distribution
+      let targetDist = await DonationDistribution.findOne({
+        where: {
+          donationItemId: item.donationItemId,
+          beneficiaryId: toBeneficiaryId,
+          intervalId: dist.intervalId,
+          isReturned: false // Only merge with active distributions
+        },
+        transaction: t
+      });
+
+      if (targetDist) {
+        targetDist.quantity = parseFloat(targetDist.quantity) + parseFloat(amount);
+        targetDist.value = parseFloat(targetDist.quantity) * parseFloat(item.unitValue);
+        await targetDist.save({ transaction: t });
+      } else {
+        await DonationDistribution.create({
+          donationItemId: item.donationItemId,
+          beneficiaryId: toBeneficiaryId,
+          intervalId: dist.intervalId,
+          quantity: amount,
+          value: parseFloat(amount) * parseFloat(item.unitValue)
+        }, { transaction: t });
+      }
+    }
+
+    // 3. Log the deduction/reassignment
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+    await DonationDeduction.create({
+      donationItemId: item.donationItemId,
+      distributionId: dist.distributionId,
+      amount: parseFloat(amount) * parseFloat(item.unitValue), 
+      reason,
+      fromBeneficiaryId: dist.beneficiaryId,
+      reassignedToBeneficiaryId: toBeneficiaryId || null,
+      createdBy: employeeId
+    }, { transaction: t });
+
+    await logDonationAction(item.Donation.donationId, employeeId, 'REASSIGN_DISTRIBUTION', {
+      fromBeneficiaryId: dist.beneficiaryId,
+      toBeneficiaryId,
+      amount,
+      itemId: item.donationItemId
+    }, t);
+
+    await t.commit();
+    res.json({ success: true, message: 'Distribution reassigned/deducted successfully' });
+  } catch (error) {
+    await t.rollback();
+    console.error('Reassign distribution error:', error);
     res.status(400).json({ success: false, error: error.message });
   }
 };

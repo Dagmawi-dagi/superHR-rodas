@@ -71,4 +71,6 @@ router.post('/items/:itemId/deductions', donationController.addDeduction);
 router.get('/items/:itemId/deductions', donationController.getItemDeductions);
 // Returns
 router.post('/distributions/:distributionId/return', donationController.returnDistribution);
+router.post('/distributions/:distributionId/reassign', donationController.reassignDistribution);
+
 module.exports = router;
