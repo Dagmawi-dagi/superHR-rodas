@@ -85,9 +85,6 @@ const getEmployeeIdFromUserId = async (userId) => {
 // ------------------------------------------------------------------
 // CREATE DONATION (status: draft)
 // ------------------------------------------------------------------
-// ------------------------------------------------------------------
-// CREATE DONATION (status: draft)
-// ------------------------------------------------------------------
 exports.createDonation = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -278,6 +275,13 @@ exports.getDonationById = async (req, res) => {
             },
             {
               model: DonationItemInterval   // ← add this
+            },
+            {
+              model: DonationDeduction,
+              include: [
+                { model: Beneficiary, as: 'reassignedTo', attributes: ['name'] },
+                { model: Beneficiary, as: 'fromBeneficiary', attributes: ['name'] }
+              ]
             }
           ]
         },
@@ -1826,6 +1830,11 @@ exports.reassignDistribution = async (req, res) => {
           value: parseFloat(amount) * parseFloat(item.unitValue)
         }, { transaction: t });
       }
+    } else {
+      // If not reassigned, it goes back to the item's unassigned pool
+      const deductedValue = parseFloat(amount) * parseFloat(item.unitValue);
+      item.unassignedDeduction = parseFloat(item.unassignedDeduction || 0) + deductedValue;
+      await item.save({ transaction: t });
     }
 
     // 3. Log the deduction/reassignment

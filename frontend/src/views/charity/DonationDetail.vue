@@ -46,6 +46,10 @@
           <span class="label">Returned</span>
           <span class="value">{{ formatCurrency(returnedAmount) }}</span>
         </div>
+        <div class="summary-item" v-if="donation.status === 'approved'">
+          <span class="label">Unassigned</span>
+          <span class="value">{{ formatCurrency(unassignedAmount) }}</span>
+        </div>
       </div>
       <div class="summary-notes" v-if="donation.notes">
         <span class="label">Notes</span>
@@ -70,9 +74,7 @@
             <th>Total</th>
             <th>Payment</th>
             <th>Recurring</th>
-            <th>Type</th>
-            <th>Total</th>
-            <th>Range</th>
+            <th>Recurring Data</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -94,23 +96,15 @@
               
               <!-- Recurring? -->
               <td>
-                <span v-if="item.isRecurring">✓</span>
+                <div v-if="item.isRecurring" style="text-transform: capitalize;">
+                  ✓ {{ item.DonationItemIntervals?.length }} {{ item.DonationItemIntervals?.[0]?.intervalType?.replace('ly', 's') }}
+                </div>
                 <span v-else>-</span>
               </td>
-              <!-- Interval Type -->
-              <td>
-                {{ item.DonationItemIntervals?.[0]?.intervalType || '-' }}
-              </td>
-              <!-- Total Intervals -->
-              <td>
-                {{ item.DonationItemIntervals?.length || '-' }}
-              </td>
-              <!-- Range -->
+              <!-- Recurring Data -->
               <td style="font-size: 11px">
                 <div v-if="item.isRecurring && item.DonationItemIntervals?.length">
-                  {{ item.DonationItemIntervals[0].startDate }}
-                  <br/>to<br/>
-                  {{ item.DonationItemIntervals[item.DonationItemIntervals.length - 1].endDate }}
+                  {{ formatDate(item.DonationItemIntervals[0].startDate) }} - {{ formatDate(item.DonationItemIntervals[item.DonationItemIntervals.length - 1].endDate) }}
                 </div>
                 <span v-else>-</span>
               </td>
@@ -233,6 +227,7 @@
                             <th>{{ item.type === 'money' ? 'Amount' : 'Quantity' }}</th>
                             <th>Value</th>
                             <th>Returned</th>
+                            <th>Reassigned/Deducted</th>
                             <th>Actions</th>
                           </tr>
                         </thead>
@@ -244,6 +239,21 @@
                             <td>
                               <span v-if="dist.isReturned" class="returned">Yes ({{ dist.returnReason }})</span>
                               <span v-else class="active-dist">No</span>
+                            </td>
+                            <td>
+                                <div v-if="getReassignHistory(item, dist.distributionId).length" class="history-list">
+                                  <div v-for="h in getReassignHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item">
+                                    <span v-if="h.fromBeneficiaryId === dist.beneficiaryId" class="hist-out">
+                                      -{{ item.type === 'money' ? formatCurrency(h.amount) : (h.amount / (item.unitValue || 1)) }}
+                                      {{ h.reassignedTo ? `→ ${h.reassignedTo.name}` : '(To Pool)' }}
+                                    </span>
+                                    <span v-else class="hist-in">
+                                      +{{ item.type === 'money' ? formatCurrency(h.amount) : (h.amount / (item.unitValue || 1)) }}
+                                      from {{ h.fromBeneficiary?.name || 'Pool' }}
+                                    </span>
+                                  </div>
+                                </div>
+                                <span v-else>-</span>
                             </td>
                             <td>
                               <span v-if="!dist.isReturned && donation?.status === 'approved'">
@@ -302,16 +312,15 @@
             </tr>
             <!-- Interval details (new) -->
             <tr v-if="expandedIntervals.includes(item.donationItemId) && item.isRecurring">
-              <td colspan="11" class="interval-detail-cell">
+              <td colspan="9" class="interval-detail-cell">
                 <div class="interval-detail">
-                  <h4>Intervals for {{ item.description || 'Item' }}</h4>
+                  <h4>Recurring Intervals</h4>
                   <div v-if="item.DonationItemIntervals?.length">
                     <div v-for="interval in item.DonationItemIntervals" :key="interval.intervalId" class="interval-wrapper">
                       <div class="interval-row">
                         <span class="interval-info">
-                          <strong>Period {{ interval.intervalCount }}:</strong> 
-                          {{ interval.startDate }} to {{ interval.endDate }} – 
-                          <span :class="['status-badge', `status-${interval.status}`]">{{ interval.status }}</span>
+                          <strong style="text-transform: capitalize;">{{ interval.intervalType?.replace('ly', '') }} {{ interval.intervalCount }} ({{ formatDate(interval.startDate) }}):</strong> 
+                          – <span :class="['status-badge', `status-${interval.status}`]">{{ interval.status }}</span>
                         </span>
                         
                         <div class="interval-actions">
@@ -401,6 +410,7 @@
                                   <th>{{ item.type === 'money' ? 'Amount' : 'Quantity' }}</th>
                                   <th>Value</th>
                                   <th>Returned</th>
+                                  <th>Reassigned/Deducted</th>
                                   <th>Actions</th>
                                 </tr>
                               </thead>
@@ -412,6 +422,21 @@
                                   <td>
                                     <span v-if="dist.isReturned" class="returned">Yes ({{ dist.returnReason }})</span>
                                     <span v-else class="active-dist">No</span>
+                                  </td>
+                                  <td>
+                                      <div v-if="getReassignHistory(item, dist.distributionId).length" class="history-list">
+                                        <div v-for="h in getReassignHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item">
+                                          <span v-if="h.fromBeneficiaryId === dist.beneficiaryId" class="hist-out">
+                                            -{{ item.type === 'money' ? formatCurrency(h.amount) : (h.amount / (item.unitValue || 1)) }}
+                                            {{ h.reassignedTo ? `→ ${h.reassignedTo.name}` : '(To Pool)' }}
+                                          </span>
+                                          <span v-else class="hist-in">
+                                            +{{ item.type === 'money' ? formatCurrency(h.amount) : (h.amount / (item.unitValue || 1)) }}
+                                            from {{ h.fromBeneficiary?.name || 'Pool' }}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <span v-else>-</span>
                                   </td>
                                   <td>
                                     <span v-if="!dist.isReturned && donation?.status === 'approved'">
@@ -505,106 +530,14 @@
       </div>
     </div>
 
-    <!-- Evidence Upload Modal (per item) -->
-    <div v-if="showEvidenceModal" class="modal-overlay" @click.self="showEvidenceModal = false">
-      <div class="modal">
-        <h3>Upload Evidence for item: {{ selectedItem?.description || 'Item' }}</h3>
-        <div class="form-group">
-          <input type="file" multiple @change="handleFileSelect" accept="image/*,.pdf" />
-        </div>
-        <div v-if="selectedFiles.length" class="selected-files">
-          <p>Selected files:</p>
-          <ul>
-            <li v-for="(file, idx) in selectedFiles" :key="idx">{{ file.name }}</li>
-          </ul>
-        </div>
-        <div v-if="uploadingEvidence" class="loading-spinner"></div>
-        <div class="modal-actions">
-          <button @click="showEvidenceModal = false" class="btn-secondary">Cancel</button>
-          <button @click="uploadEvidence" :disabled="!selectedFiles.length || uploadingEvidence" class="btn-primary">
-            {{ uploadingEvidence ? 'Uploading...' : 'Upload' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Return Distribution Modal -->
-    <div v-if="showReturnModal" class="modal-overlay" @click.self="showReturnModal = false">
-      <div class="modal">
-        <h3>Mark Distribution as Returned</h3>
-        <p>
-          Returning distribution for <strong>{{ returningDist?.Beneficiary?.name }}</strong>
-        </p>
-        
-        <div class="warning-box">
-          <p><strong>⚠️ Warning:</strong> This action cannot be undone.</p>
-          <p>If you want to move this quantity to another beneficiary or free it up for the item, please consider using the <strong>Reassign / Deduct</strong> feature (⇄) instead.</p>
-        </div>
-
-        <textarea v-model="returnReason" rows="2" placeholder="Reason for return (required)"></textarea>
-        <div class="modal-actions">
-          <button @click="showReturnModal = false" class="btn-secondary">Cancel</button>
-          <button @click="confirmReturn" :disabled="!returnReason.trim() || returning" class="btn-danger">
-            {{ returning ? 'Returning...' : 'Confirm Return' }}
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Interval Distribution Modal -->
-    <div v-if="showIntervalDistModal" class="modal-overlay" @click.self="showIntervalDistModal = false">
-      <div class="modal" style="max-width:600px">
-        <h3>Distribute for Interval</h3>
-        <p>{{ selectedInterval?.intervalType }} – {{ selectedInterval?.startDate }} to {{ selectedInterval?.endDate }}</p>
-        <div class="form-group">
-          <label>Distribution Date</label>
-          <input type="date" v-model="distributionDate" :min="selectedInterval?.startDate" :max="selectedInterval?.endDate" required />
-        </div>
-        <div v-for="(row, idx) in intervalDistRows" :key="idx" class="dist-row">
-          <div class="field beneficiary">
-            <label>Beneficiary</label>
-            <select v-model="row.beneficiaryId">
-              <option value="">Select</option>
-              <option v-for="b in beneficiaries" :key="b.beneficiaryId" :value="b.beneficiaryId">{{ b.name }} ({{ b.type }})</option>
-            </select>
-          </div>
-          <div class="field quantity">
-            <label>Quantity</label>
-            <input type="number" v-model.number="row.quantity" min="0" step="0.01" required />
-          </div>
-          <button @click="removeIntervalRow(idx)" class="btn-icon">×</button>
-        </div>
-        <button @click="addIntervalRow" class="btn-secondary">+ Add</button>
-        <div class="modal-actions">
-          <button @click="showIntervalDistModal = false" class="btn-secondary">Cancel</button>
-          <button @click="submitIntervalDistribution" :disabled="!distributionDate || !intervalDistRows.length || distributingInterval" class="btn-primary">{{ distributingInterval ? 'Distributing...' : 'Distribute' }}</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Interval Evidence Modal -->
-    <div v-if="showIntervalEvidenceModal" class="modal-overlay" @click.self="showIntervalEvidenceModal = false">
-      <div class="modal">
-        <h3>Upload Evidence for Interval</h3>
-        <p>{{ selectedInterval?.intervalType }} – {{ selectedInterval?.startDate }}</p>
-        <div class="form-group">
-          <input type="file" multiple @change="handleIntervalFileSelect" accept="image/*,.pdf" />
-        </div>
-        <div v-if="intervalFiles.length" class="selected-files">
-          <p>Selected files:</p>
-          <ul>
-            <li v-for="(file, idx) in intervalFiles" :key="idx">{{ file.name }}</li>
-          </ul>
-        </div>
-        <div v-if="uploadingIntervalEvidence" class="loading-spinner"></div>
-        <div class="modal-actions">
-          <button @click="showIntervalEvidenceModal = false" class="btn-secondary">Cancel</button>
-          <button @click="uploadIntervalEvidence" :disabled="!intervalFiles.length || uploadingIntervalEvidence" class="btn-primary">
-            {{ uploadingIntervalEvidence ? 'Uploading...' : 'Upload' }}
-          </button>
-        </div>
-      </div>
-    </div>
+    <!-- Evidence Upload Modal (Combined) -->
+    <EvidenceUploadModal
+      :is-open="showEvidenceModal"
+      :title="evidenceModalTitle"
+      :uploading="uploadingEvidence"
+      @close="showEvidenceModal = false; selectedItem = null; selectedInterval = null"
+      @upload="handleEvidenceUpload"
+    />
 
     <!-- Add/Edit Item Modals -->
     <AddItemModal
@@ -655,6 +588,7 @@ import StatusBadge from './components/DonationItem/StatusBadge.vue'
 import AddItemModal from './components/DonationItem/AddItemModal.vue'
 import DistributeItemModal from './components/Donation/DistributeItemModal.vue'
 import ReassignDistributionModal from './components/Donation/ReassignDistributionModal.vue'
+import EvidenceUploadModal from './components/Donation/EvidenceUploadModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -684,11 +618,53 @@ const showRequestChangesModal = ref(false)
 const requestChangesComment = ref('')
 const submittingChanges = ref(false)
 
-// Evidence modal state (per item)
+// Evidence modal state (Unified)
 const showEvidenceModal = ref(false)
 const selectedItem = ref(null)
-const selectedFiles = ref([])
+const selectedInterval = ref(null)
 const uploadingEvidence = ref(false)
+
+const evidenceModalTitle = computed(() => {
+  if (selectedInterval.value) {
+    return `${selectedInterval.value.intervalType} - ${formatDate(selectedInterval.value.startDate)}`
+  }
+  return selectedItem.value?.description || 'Item'
+})
+
+const handleEvidenceUpload = async (files) => {
+  if (!files.length) return
+  uploadingEvidence.value = true
+  const formData = new FormData()
+  files.forEach(file => formData.append('documents', file))
+  
+  try {
+    let res
+    if (selectedInterval.value) {
+      res = await CharityService.uploadIntervalEvidence(
+        selectedItem.value.donationItemId, 
+        selectedInterval.value.intervalId, 
+        formData
+      )
+    } else {
+      res = await CharityService.uploadItemEvidence(
+        selectedItem.value.donationItemId, 
+        formData
+      )
+    }
+
+    if (res.success) {
+      addToast('Evidence uploaded successfully')
+      showEvidenceModal.value = false
+      selectedItem.value = null
+      selectedInterval.value = null
+      loadDonation()
+    } else {
+      addToast(res.error || 'Upload failed', 'error')
+    }
+  } finally {
+    uploadingEvidence.value = false
+  }
+}
 
 const beneficiaries = ref([])
 const showDistributeModal = ref(false)
@@ -699,14 +675,9 @@ const groups = ref([])
 
 // ── Interval state ──
 const showIntervalDistModal = ref(false)
-const selectedInterval = ref(null)
 const distributionDate = ref('')
 const distributingInterval = ref(false)
 const intervalDistRows = ref([])
-
-const showIntervalEvidenceModal = ref(false)
-const intervalFiles = ref([])
-const uploadingIntervalEvidence = ref(false)
 
 // ── Return distribution state ──
 const showReturnModal = ref(false)
@@ -733,7 +704,12 @@ const addToast = (msg, type='success') => {
 }
 const removeToast = (id) => toasts.value = toasts.value.filter(t => t.id !== id)
 
-const formatDate = (d) => d ? new Date(d).toLocaleDateString() : 'N/A'
+const formatDate = (d) => {
+  if (!d) return 'N/A'
+  const date = new Date(d)
+  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+  return `${months[date.getMonth()]}-${date.getDate()}-${date.getFullYear()}`
+}
 const formatCurrency = (v) => v ? new Intl.NumberFormat('en-US',{style:'currency',currency:'ETB'}).format(v) : '0.00'
 const getTypeLabel = (t) => ({ money:'Money', goods:'Goods', service:'Service' })[t] || t
 const getFileUrl = (relativePath) => {
@@ -759,6 +735,13 @@ const returnedAmount = computed(() => {
     });
   });
   return total;
+});
+
+const unassignedAmount = computed(() => {
+  if (!donation.value?.DonationItems) return 0;
+  return donation.value.DonationItems.reduce((acc, item) => {
+    return acc + parseFloat(item.unassignedDeduction || 0);
+  }, 0);
 });
 
 const canSubmit = computed(() => donation.value?.status === 'draft')
@@ -800,6 +783,11 @@ const summaryDistributions = (item) => {
   if (!item.DonationDistributions) return []
   if (!item.isRecurring) return item.DonationDistributions
   return item.DonationDistributions.filter(d => d.intervalId === null)
+}
+
+const getReassignHistory = (item, distId) => {
+  if (!item.DonationDeductions) return []
+  return item.DonationDeductions.filter(d => d.distributionId === distId || d.reassignedToBeneficiaryId === item.DonationDistributions.find(dist => dist.distributionId === distId)?.beneficiaryId)
 }
 
 // ── Data loading ──
@@ -1002,19 +990,8 @@ const handleDistribute = async (payload) => {
 // ── Per-item evidence upload ──
 const openEvidenceModalForItem = (item) => {
   selectedItem.value = item
-  selectedFiles.value = []
+  selectedInterval.value = null
   showEvidenceModal.value = true
-}
-const handleFileSelect = (event) => selectedFiles.value = Array.from(event.target.files)
-const uploadEvidence = async () => {
-  if (!selectedItem.value || !selectedFiles.value.length) return
-  uploadingEvidence.value = true
-  const formData = new FormData()
-  selectedFiles.value.forEach(file => formData.append('documents', file))
-  const res = await CharityService.uploadItemEvidence(selectedItem.value.donationItemId, formData)
-  uploadingEvidence.value = false
-  if (res.success) { addToast('Evidence uploaded successfully'); showEvidenceModal.value = false; loadDonation() }
-  else addToast(res.error || 'Upload failed', 'error')
 }
 
 // ── Per-item mark distributed ──
@@ -1111,25 +1088,7 @@ const submitIntervalDistribution = async () => {
 const openIntervalEvidenceModal = (interval, item) => {
   selectedInterval.value = interval
   selectedItem.value = item
-  intervalFiles.value = []
-  showIntervalEvidenceModal.value = true
-}
-const handleIntervalFileSelect = (event) => intervalFiles.value = Array.from(event.target.files)
-const uploadIntervalEvidence = async () => {
-  if (!selectedItem.value || !selectedInterval.value || !intervalFiles.value.length) return
-  uploadingIntervalEvidence.value = true
-  const formData = new FormData()
-  intervalFiles.value.forEach(file => formData.append('documents', file))
-  // Note: the backend endpoint for interval evidence must accept intervalId as param
-  const res = await CharityService.uploadIntervalEvidence(selectedItem.value.donationItemId, selectedInterval.value.intervalId, formData)
-  uploadingIntervalEvidence.value = false
-  if (res.success) {
-    addToast('Evidence uploaded successfully')
-    showIntervalEvidenceModal.value = false
-    loadDonation()
-  } else {
-    addToast(res.error || 'Upload failed', 'error')
-  }
+  showEvidenceModal.value = true
 }
 
 // ── Mount ──
@@ -1346,5 +1305,17 @@ onMounted(async () => {
   color: #92400e;
 }
 .active-dist { color: #10b981; font-weight: 600; }
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.history-item {
+  font-size: 10px;
+  line-height: 1.2;
+}
+.hist-out { color: #ef4444; }
+.hist-in { color: #10b981; }
 
 </style>
