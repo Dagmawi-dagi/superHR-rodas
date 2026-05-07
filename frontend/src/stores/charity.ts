@@ -1,5 +1,6 @@
 // stores/charity.ts
 import api from './interceptor'
+import EmployeesService from './employee'
 
 // ============================================================================
 // TYPES
@@ -897,6 +898,26 @@ async uploadIntervalEvidence(itemId: number, intervalId: number, formData: FormD
   }
 }
 
+// … inside CharityService class
+
+async getEmployeesForDropdown() {
+  try {
+    const res = await EmployeesService.getEmployees({
+      limit: 200,
+      employmentStatus: 'active'
+    })
+    if (res.success) {
+      const employees = res.data.map((emp: any) => ({
+        id: emp.id,
+        fullName: emp.fullName,
+      }))
+      return { success: true, data: employees }
+    }
+    return { success: false, data: [], error: 'Failed to fetch employees' }
+  } catch (error: any) {
+    return { success: false, data: [], error: error.message || 'Failed to fetch employees' }
+  }
+}
 
   // --------------------------------------------------------------------------
   // UTILITY METHODS

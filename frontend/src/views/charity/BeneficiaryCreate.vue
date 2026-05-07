@@ -100,9 +100,13 @@
               <select v-model="form.groupId">
                 <option value="">Select group</option>
                 <option v-for="group in groups" :key="group.groupId" :value="group.groupId">
-                  {{ ` ${group.manager.firstName} ${group.manager.lastName} <${group.name}>` }}
+                  {{ group.name }}
                 </option>
               </select>
+              <!-- NEW: Add Group Button -->
+              <button type="button" class="add-location-btn" @click="openGroupModal">
+                + Add New Group
+              </button>
             </div>
           </div>
         </div>
@@ -117,7 +121,7 @@
       </div>
     </form>
 
-    <!-- Add Location Modal -->
+    <!-- Add Location Modal (existing) -->
     <div v-if="showLocationModal" class="modal-overlay" @click.self="showLocationModal = false">
       <div class="modal">
         <h3>Add New Location</h3>
@@ -141,6 +145,62 @@
           <button @click="showLocationModal = false" class="btn-secondary">Cancel</button>
           <button @click="createLocation" :disabled="!newLocation.region || !newLocation.city || savingLocation" class="btn-primary">
             {{ savingLocation ? 'Saving...' : 'Save Location' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Group Modal -->
+    <div v-if="showGroupModal" class="modal-overlay" @click.self="showGroupModal = false">
+      <div class="modal">
+        <h3>Add New Beneficiary Group</h3>
+        <div class="form-group">
+          <label>Group Name <span class="req">*</span></label>
+          <input type="text" v-model="newGroup.name" placeholder="e.g. Urban Support" />
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <input type="text" v-model="newGroup.description" placeholder="Optional description" />
+        </div>
+
+        <!-- Searchable employee combobox -->
+        <div class="form-group">
+          <label>Manager (Employee) <span class="req">*</span></label>
+          <div class="combobox">
+            <input
+              type="text"
+              v-model="employeeSearch"
+              @focus="showEmployeeDropdown = true"
+              @blur="hideEmployeeDropdown"
+              placeholder="Search employee..."
+              autocomplete="off"
+            />
+            <!-- Selected employee chip -->
+            <div v-if="selectedManager" class="selected-manager">
+              {{ selectedManager.fullName }}
+              <button @click="clearManager" class="clear-manager">×</button>
+            </div>
+            <div v-if="showEmployeeDropdown" class="combobox-dropdown">
+              <div
+                v-for="emp in filteredEmployees"
+                :key="emp.id"
+                class="combobox-option"
+                @mousedown.prevent="selectManager(emp)"
+              >
+                {{ emp.fullName }}
+              </div>
+              <div v-if="filteredEmployees.length === 0" class="combobox-no-results">
+                No employees found
+              </div>
+            </div>
+          </div>
+          <span class="error" v-if="groupErrors.manager">Manager is required</span>
+        </div>
+
+        <div class="modal-actions">
+          <button @click="showGroupModal = false" class="btn-secondary">Cancel</button>
+          <button @click="createGroup" :disabled="savingGroup" class="btn-primary">
+            {{ savingGroup ? 'Saving...' : 'Save Group' }}
           </button>
         </div>
       </div>
@@ -181,7 +241,7 @@ const errors = ref({})
 const locations = ref([])
 const groups = ref([])
 
-// Location modal state
+// Location modal state (existing)
 const showLocationModal = ref(false)
 const savingLocation = ref(false)
 const newLocation = ref({
@@ -189,6 +249,15 @@ const newLocation = ref({
   city: '',
   woreda: '',
   description: ''
+})
+
+// Group modal state (NEW)
+const showGroupModal = ref(true)
+const savingGroup = ref(false)
+const newGroup = ref({
+  name: '',
+  description: '',
+  managerEmployeeId: ''
 })
 
 // Toast helpers
@@ -272,7 +341,7 @@ const handleSubmit = async () => {
   isSubmitting.value = false
 }
 
-// Location modal actions
+// Location modal actions (existing)
 const openLocationModal = () => {
   newLocation.value = { region: '', city: '', woreda: '', description: '' }
   showLocationModal.value = true
@@ -280,16 +349,12 @@ const openLocationModal = () => {
 
 const createLocation = async () => {
   if (!newLocation.value.region || !newLocation.value.city) return
-
   savingLocation.value = true
   const res = await CharityService.createLocation(newLocation.value)
   savingLocation.value = false
-
   if (res.success) {
     addToast('Location added successfully')
-    // Refresh locations list
     await loadLocations()
-    // Automatically select the new location
     const newLoc = locations.value.find(
       l => l.region === newLocation.value.region &&
            l.city === newLocation.value.city &&
@@ -301,6 +366,87 @@ const createLocation = async () => {
     addToast(res.error || 'Failed to create location', 'error')
   }
 }
+// Employee search state
+const employees = ref([])
+const employeeSearch = ref('')
+const showEmployeeDropdown = ref(false)
+const selectedManager = ref(null)
+const groupErrors = ref({})
+
+const filteredEmployees = computed(() => {
+  if (!employeeSearch.value.trim()) return employees.value
+  const search = employeeSearch.value.toLowerCase()
+  return employees.value.filter(emp => emp.fullName.toLowerCase().includes(search))
+})
+
+const loadEmployees = async () => {
+  const res = await CharityService.getEmployeesForDropdown() // uses EmployeesService internally
+  if (res.success) {
+    employees.value = res.data
+  } else {
+    addToast(res.error || 'Failed to load employees', 'error')
+  }
+}
+
+const selectManager = (emp) => {
+  selectedManager.value = emp
+  newGroup.value.managerEmployeeId = emp.id
+  employeeSearch.value = ''   // clear input
+  showEmployeeDropdown.value = false
+  groupErrors.value.manager = false
+}
+
+const clearManager = () => {
+  selectedManager.value = null
+  newGroup.value.managerEmployeeId = ''
+}
+
+const hideEmployeeDropdown = () => {
+  // Timeout allows click on option to fire before hiding
+  setTimeout(() => {
+    showEmployeeDropdown.value = false
+  }, 200)
+}
+
+// Update openGroupModal to reset states
+const openGroupModal = () => {
+  newGroup.value = { name: '', description: '', managerEmployeeId: '' }
+  selectedManager.value = null
+  employeeSearch.value = ''
+  groupErrors.value = {}
+  showGroupModal.value = true
+  loadEmployees()
+}
+
+// Update createGroup to validate manager
+const createGroup = async () => {
+  if (!newGroup.value.name.trim()) {
+    addToast('Group name is required', 'error')
+    return
+  }
+  if (!newGroup.value.managerEmployeeId) {
+    groupErrors.value.manager = true
+    return
+  }
+  groupErrors.value = {}
+  savingGroup.value = true
+  const res = await CharityService.createBeneficiaryGroup({
+    name: newGroup.value.name.trim(),
+    description: newGroup.value.description.trim() || undefined,
+    managerEmployeeId: newGroup.value.managerEmployeeId
+  })
+  savingGroup.value = false
+  if (res.success) {
+    addToast('Group added successfully')
+    await loadGroups()
+    const newGrp = groups.value.find(g => g.name === newGroup.value.name.trim())
+    if (newGrp) form.value.groupId = newGrp.groupId
+    showGroupModal.value = false
+  } else {
+    addToast(res.error || 'Failed to create group', 'error')
+  }
+}
+
 
 onMounted(async () => {
   await Promise.all([loadLocations(), loadGroups()])
@@ -311,6 +457,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* ... (keep all existing styles from previous version) ... */
 .beneficiary-create {
   max-width: 900px;
   margin: 0 auto;
@@ -324,11 +471,7 @@ onMounted(async () => {
 .header-title h1 { font-size: 24px; font-weight: 600; color: #0f172a; margin: 0 0 4px; }
 .header-title p { font-size: 14px; color: #64748b; margin: 0; }
 
-.beneficiary-form {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
+.beneficiary-form { display: flex; flex-direction: column; gap: 20px; }
 .form-card { background: white; border-radius: 16px; border: 1px solid #e9edf2; overflow: hidden; }
 .card-header { display: flex; align-items: center; gap: 10px; padding: 14px 20px; background: #fafcfc; border-bottom: 1px solid #e9edf2; }
 .card-header svg { width: 18px; height: 18px; color: #6366f1; }
@@ -366,9 +509,7 @@ onMounted(async () => {
   color: #475569;
   text-align: left;
 }
-.add-location-btn:hover {
-  background: #e2e8f0;
-}
+.add-location-btn:hover { background: #e2e8f0; }
 
 .form-actions { display: flex; justify-content: flex-end; gap: 12px; }
 .btn-outline {
@@ -398,4 +539,60 @@ onMounted(async () => {
 .loading-spinner { width: 30px; height: 30px; border: 3px solid #e2e8f0; border-top-color: #6366f1; border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 768px) { .beneficiary-create { padding: 16px; } .form-row { grid-template-columns: 1fr; } }
+
+.combobox {
+  position: relative;
+}
+.combobox input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.selected-manager {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  padding: 6px 10px;
+  border-radius: 6px;
+  margin-top: 6px;
+  font-size: 13px;
+}
+.clear-manager {
+  background: none;
+  border: none;
+  color: #ef4444;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+.combobox-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  margin-top: 4px;
+}
+.combobox-option {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.combobox-option:hover {
+  background: #f1f5f9;
+}
+.combobox-no-results {
+  padding: 8px 12px;
+  color: #94a3b8;
+  font-size: 14px;
+}
 </style>

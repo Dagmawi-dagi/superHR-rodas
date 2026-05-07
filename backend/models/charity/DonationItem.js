@@ -5,9 +5,10 @@ module.exports = (sequelize, DataTypes) => {
   class DonationItem extends Model {
     static associate(models) {
       DonationItem.belongsTo(models.Donation, { foreignKey: "donationId" });
-      DonationItem.hasMany(models.DonationDistribution, {foreignKey: "donationItemId",});
+      DonationItem.hasMany(models.DonationDistribution, { foreignKey: "donationItemId" });
       DonationItem.hasMany(models.DonationDistributionEvidence, { foreignKey: "donationItemId" });
       DonationItem.hasMany(models.DonationItemInterval, { foreignKey: "donationItemId" });
+      DonationItem.hasMany(models.DonationDeduction, { foreignKey: "donationItemId" });
     }
   }
 
