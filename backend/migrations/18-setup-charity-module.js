@@ -178,6 +178,7 @@ module.exports = {
         deduction_id: { type: Sequelize.INTEGER, autoIncrement: true, primaryKey: true },
         donation_item_id: { type: Sequelize.INTEGER, references: { model: 'donation_items', key: 'donation_item_id' }, onUpdate: 'CASCADE', onDelete: 'CASCADE' },
         distribution_id: { type: Sequelize.INTEGER, references: { model: 'donation_distributions', key: 'distribution_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
+        interval_id: { type: Sequelize.INTEGER, references: { model: 'donation_item_intervals', key: 'interval_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
         amount: { type: Sequelize.DECIMAL(15, 2), allowNull: false },
         reason: { type: Sequelize.TEXT, allowNull: false },
         from_beneficiary_id: { type: Sequelize.INTEGER, references: { model: 'beneficiaries', key: 'beneficiary_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },

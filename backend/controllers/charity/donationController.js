@@ -152,6 +152,8 @@ exports.createDonation = async (req, res) => {
       });
     }
 
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+
     // Create the donation
     const donation = await Donation.create(
       {
@@ -161,11 +163,10 @@ exports.createDonation = async (req, res) => {
         notes,
         status: "draft",
         totalValue: 0,
+        createdBy: employeeId,
       },
       { transaction: t }
     );
-
-    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
     await logDonationAction(
       donation.donationId,
       employeeId,
@@ -223,6 +224,9 @@ exports.getAllDonations = async (req, res) => {
     const include = [
       { model: DonationCompany, attributes: ["companyId", "name", "type"] },
       { model: Campaign, attributes: ["campaignId", "title", "category"] },
+      { model: Employee, as: "creator", attributes: ["employeeId", "firstName", "lastName"] },
+      { model: Employee, as: "approver", attributes: ["employeeId", "firstName", "lastName"] },
+      { model: Employee, as: "distributor", attributes: ["employeeId", "firstName", "lastName"] },
     ];
 
     const { count, rows } = await Donation.findAndCountAll({
@@ -261,6 +265,9 @@ exports.getDonationById = async (req, res) => {
       include: [
         { model: DonationCompany, attributes: ['companyId', 'name', 'type', 'contactInfo'] },
         { model: Campaign, attributes: ['campaignId', 'title', 'description', 'category', 'targetAmount'] },
+        { model: Employee, as: 'creator', attributes: ['employeeId', 'firstName', 'lastName'] },
+        { model: Employee, as: 'approver', attributes: ['employeeId', 'firstName', 'lastName'] },
+        { model: Employee, as: 'distributor', attributes: ['employeeId', 'firstName', 'lastName'] },
         {
           model: DonationItem,
           include: [
@@ -722,7 +729,9 @@ exports.approveDonation = async (req, res) => {
         .json({ success: false, error: "Donation is not pending approval" });
     }
 
-    await donation.update({ status: "approved" }, { transaction: t });
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+
+    await donation.update({ status: "approved", approvedBy: employeeId }, { transaction: t });
 
     const approval = await DonationApproval.findOne({
       where: { donationId: id, status: "pending" },
@@ -732,7 +741,7 @@ exports.approveDonation = async (req, res) => {
       await approval.update(
         {
           status: "approved",
-          approvedBy: req.user.userId,
+          approvedBy: employeeId,
           comment: comment || null,
         },
         { transaction: t },
@@ -741,7 +750,7 @@ exports.approveDonation = async (req, res) => {
       await DonationApproval.create(
         {
           donationId: id,
-          approvedBy: req.user.userId,
+          approvedBy: employeeId,
           status: "approved",
           comment,
         },
@@ -749,7 +758,7 @@ exports.approveDonation = async (req, res) => {
       );
     }
 
-    await logDonationAction(id, req.user.userId, "APPROVE", { comment }, t);
+    await logDonationAction(id, employeeId, "APPROVE", { comment }, t);
 
     await t.commit();
 
@@ -803,8 +812,10 @@ exports.distributeDonation = async (req, res) => {
       });
     }
 
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+
     // Mark donation as distributed
-    await donation.update({ status: 'distributed' }, { transaction: t });
+    await donation.update({ status: 'distributed', distributedBy: employeeId }, { transaction: t });
 
     // Optionally mark all items as distributed (if we want to be consistent)
     await DonationItem.update(
@@ -812,7 +823,6 @@ exports.distributeDonation = async (req, res) => {
       { where: { donationId: id }, transaction: t }
     );
 
-    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
     await logDonationAction(id, employeeId, 'DISTRIBUTE', {}, t);
 
     await t.commit();
@@ -1078,7 +1088,7 @@ exports.markItemDistributed = async (req, res) => {
     const allDistributed = allItems.every(i => i.status === 'distributed');
     if (allDistributed) {
       await Donation.update(
-        { status: 'distributed' },
+        { status: 'distributed', distributedBy: employeeId },
         { where: { donationId: item.donationId }, transaction: t }
       );
       await logDonationAction(item.donationId, employeeId, 'DISTRIBUTE', {}, t);

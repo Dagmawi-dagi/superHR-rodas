@@ -1,5 +1,18 @@
-const { DonationCompany, sequelize } = require("../../models");
+const { DonationCompany, Employee, sequelize } = require("../../models");
 const { Op } = require("sequelize");
+
+// ------------------------------------------------------------------
+// helpers 
+// ------------------------------------------------------------------
+
+const getEmployeeIdFromUserId = async (userId) => {
+  if (!userId) return null;
+  const employee = await Employee.findOne({
+    where: { userId },
+    attributes: ['employeeId']
+  });
+  return employee ? employee.employeeId : null;
+};
 
 
 
@@ -48,6 +61,13 @@ exports.getAllCompanies = async (req, res) => {
       limit,
       offset,
       order,
+      include: [
+        {
+          model: Employee,
+          as: 'creator',
+          attributes: ['employeeId', 'firstName', 'lastName']
+        }
+      ],
       distinct: true,
     });
 
@@ -73,7 +93,15 @@ exports.getAllCompanies = async (req, res) => {
 exports.getCompanyById = async (req, res) => {
   try {
     const { id } = req.params;
-    const company = await DonationCompany.findByPk(id);
+    const company = await DonationCompany.findByPk(id, {
+      include: [
+        {
+          model: Employee,
+          as: 'creator',
+          attributes: ['employeeId', 'firstName', 'lastName']
+        }
+      ]
+    });
 
     if (!company) {
       return res
@@ -101,11 +129,14 @@ exports.createCompany = async (req, res) => {
         .json({ success: false, error: "Company name is required" });
     }
 
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+
     const company = await DonationCompany.create({
       name,
       type: type || "partner",
       contactInfo: contactInfo || {},
       isActive: true,
+      createdBy: employeeId,
     });
 
     res.status(201).json({

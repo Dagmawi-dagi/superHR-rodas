@@ -8,6 +8,7 @@
           <th>Dates</th>
           <th>Target</th>
           <th>Status</th>
+          <th>Created By</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -28,6 +29,7 @@
               {{ getStatusLabel(c.status) }}
             </span>
           </td>
+          <td>{{ c.Employee ? `${c.Employee.firstName} ${c.Employee.lastName}` : 'N/A' }}</td>
           <td class="actions-cell">
             <button class="action-btn edit" @click="$emit('edit', c)" title="Edit">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" /></svg>
@@ -52,7 +54,7 @@
           </td>
         </tr>
         <tr v-if="campaigns.length === 0">
-          <td colspan="6" class="empty-state">
+          <td colspan="7" class="empty-state">
             <div class="empty-state-content">
               <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />

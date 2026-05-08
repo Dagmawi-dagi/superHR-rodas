@@ -135,6 +135,16 @@ const close = () => {
 const submit = async () => {
   if (!props.distribution || !props.item) return
   
+  // Prevent full amount deduction
+  const currentAmount = props.item.type === 'money' 
+    ? Number(props.distribution.value) 
+    : Number(props.distribution.quantity)
+    
+  if (!reassign.value && form.amount >= currentAmount) {
+    alert("Full amount deduction is not allowed. Please use the 'Return' feature instead to return the entire distribution.")
+    return
+  }
+
   loading.value = true
   try {
     // If it's a money item, we need to convert the amount (value) back to quantity fraction

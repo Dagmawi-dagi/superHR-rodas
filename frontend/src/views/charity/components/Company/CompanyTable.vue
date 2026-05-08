@@ -7,6 +7,7 @@
           <th>Type</th>
           <th>Status</th>
           <th>Contact</th>
+          <th>Created By</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -20,6 +21,7 @@
             </span>
           </td>
           <td>{{ c.contactInfo?.email || c.contactInfo?.phone || 'N/A' }}</td>
+          <td>{{ c.creator ? `${c.creator.firstName} ${c.creator.lastName}` : 'N/A' }}</td>
           <td class="actions-cell">
             <!-- <button class="action-btn view" @click="$emit('view', c)" title="View">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
@@ -33,7 +35,7 @@
           </td>
         </tr>
         <tr v-if="companies.length === 0">
-          <td colspan="5" class="empty-state">
+          <td colspan="6" class="empty-state">
             <p>No companies found</p>
             <button @click="$emit('clear-filters')">Clear Filters</button>
           </td>

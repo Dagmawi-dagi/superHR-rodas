@@ -9,6 +9,7 @@
           <th>Date</th>
           <th>Total Value</th>
           <th>Status</th>
+          <th>Created By</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -24,6 +25,7 @@
               {{ getStatusLabel(donation.status) }}
             </span>
           </td>
+          <td>{{ donation.creator ? `${donation.creator.firstName} ${donation.creator.lastName}` : 'N/A' }}</td>
           <td class="actions-cell">
             <button class="action-btn view" @click="$emit('view-donation', donation)" title="View Details">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -63,7 +65,7 @@
         </tr>
         <!-- Empty State -->
         <tr v-if="donations.length === 0">
-          <td colspan="7" class="empty-state">
+          <td colspan="8" class="empty-state">
             <div class="empty-state-content">
               <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4-3-9s1.34-9 3-9" />

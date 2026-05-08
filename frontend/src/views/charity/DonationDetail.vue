@@ -55,9 +55,25 @@
           <span class="value">{{ formatCurrency(unassignedAmount) }}</span>
         </div>
       </div>
-      <div class="summary-notes" v-if="donation.notes">
-        <span class="label">Notes</span>
-        <p>{{ donation.notes }}</p>
+      <div class="summary-footer">
+        <div class="summary-notes" v-if="donation.notes">
+          <span class="label">Notes</span>
+          <p>{{ donation.notes }}</p>
+        </div>
+        <div class="tracking-info">
+          <div class="tracking-item">
+            <span class="label">Drafted By</span>
+            <span class="value">{{ donation.creator ? `${donation.creator.firstName} ${donation.creator.lastName}` : 'N/A' }}</span>
+          </div>
+          <div class="tracking-item" v-if="donation.approvedBy">
+            <span class="label">Approved By</span>
+            <span class="value">{{ donation.approver ? `${donation.approver.firstName} ${donation.approver.lastName}` : 'N/A' }}</span>
+          </div>
+          <div class="tracking-item" v-if="donation.distributedBy">
+            <span class="label">Marked Distributed By</span>
+            <span class="value">{{ donation.distributor ? `${donation.distributor.firstName} ${donation.distributor.lastName}` : 'N/A' }}</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -231,7 +247,8 @@
                             <th>{{ item.type === 'money' ? 'Amount' : 'Quantity' }}</th>
                             <th>Value</th>
                             <th>Returned</th>
-                            <th>Reassigned/Deducted</th>
+                            <th>Reassigned</th>
+                            <th>Deducted</th>
                             <th>Actions</th>
                           </tr>
                         </thead>
@@ -241,12 +258,18 @@
                             <td>{{ item.type === 'money' ? formatCurrency(dist.value) : dist.quantity }}</td>
                             <td>{{ formatCurrency(dist.value) }}</td>
                             <td>
-                              <span v-if="dist.isReturned" class="returned">Yes ({{ dist.returnReason }})</span>
+                              <div v-if="dist.isReturned" class="returned tooltip-container" style="cursor: help; display: inline-block;">
+                                Yes
+                                <div class="tooltip-content">
+                                  <strong>Reason:</strong><br/>
+                                  {{ dist.returnReason || 'No reason provided' }}
+                                </div>
+                              </div>
                               <span v-else class="active-dist">No</span>
                             </td>
                             <td>
-                                <div v-if="getReassignHistory(item, dist.distributionId).length" class="history-list">
-                                  <div v-for="h in getReassignHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item tooltip-container">
+                                <div v-if="getReassignedHistory(item, dist.distributionId).length" class="history-list">
+                                  <div v-for="h in getReassignedHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item tooltip-container">
                                     <span v-if="h.fromBeneficiaryId === dist.beneficiaryId" class="hist-out">
                                       <template v-if="item.type === 'money'">
                                         -{{ formatCurrency(h.amount) }}
@@ -265,6 +288,25 @@
                                       <template v-else>
                                         +{{ (h.amount / (item.unitValue || 1)).toFixed(2) }} ({{ formatCurrency(h.amount) }})
                                         from {{ h.fromBeneficiary?.name || 'Pool' }}
+                                      </template>
+                                    </span>
+                                    <div class="tooltip-content" v-if="h.reason">
+                                      <strong>Reason:</strong><br/>
+                                      {{ h.reason }}
+                                    </div>
+                                  </div>
+                                </div>
+                                <span v-else>-</span>
+                            </td>
+                            <td>
+                                <div v-if="getDeductedHistory(item, dist.distributionId).length" class="history-list">
+                                  <div v-for="h in getDeductedHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item tooltip-container">
+                                    <span class="hist-out">
+                                      <template v-if="item.type === 'money'">
+                                        -{{ formatCurrency(h.amount) }}
+                                      </template>
+                                      <template v-else>
+                                        -{{ (h.amount / (item.unitValue || 1)).toFixed(2) }} ({{ formatCurrency(h.amount) }})
                                       </template>
                                     </span>
                                     <div class="tooltip-content" v-if="h.reason">
@@ -298,8 +340,8 @@
                           </tr>
                         </tbody>
                       </table>
-                      <div class="unassigned" v-if="item.type === 'money' && item.unassignedDeduction > 0">
-                        <em>Unassigned deduction: {{ formatCurrency(item.unassignedDeduction) }}</em>
+                      <div class="unassigned" v-if="item.unassignedDeduction > 0">
+                        <em>Unassigned deduction for this period: {{ item.type === 'money' ? formatCurrency(item.unassignedDeduction) : (item.unassignedDeduction / (item.unitValue || 1)).toFixed(2) + ' (' + formatCurrency(item.unassignedDeduction) + ')' }}</em>
                       </div>
                     </div>
                     <p v-else class="no-dist">No beneficiaries assigned yet.</p>
@@ -324,6 +366,9 @@
                           </tr>
                         </tbody>
                       </table>
+                      <div class="unassigned" v-if="item.unassignedDeduction > 0">
+                        <em>Unassigned deduction for this period: {{ item.type === 'money' ? formatCurrency(item.unassignedDeduction) : (item.unassignedDeduction / (item.unitValue || 1)).toFixed(2) + ' (' + formatCurrency(item.unassignedDeduction) + ')' }}</em>
+                      </div>
                     </div>
                     <p v-else class="no-dist">No beneficiaries assigned yet.</p>
                   </div>
@@ -430,7 +475,8 @@
                                   <th>{{ item.type === 'money' ? 'Amount' : 'Quantity' }}</th>
                                   <th>Value</th>
                                   <th>Returned</th>
-                                  <th>Reassigned/Deducted</th>
+                                  <th>Reassigned</th>
+                                  <th>Deducted</th>
                                   <th>Actions</th>
                                 </tr>
                               </thead>
@@ -440,12 +486,18 @@
                                   <td>{{ item.type === 'money' ? formatCurrency(dist.value) : dist.quantity }}</td>
                                   <td>{{ formatCurrency(dist.value) }}</td>
                                   <td>
-                                    <span v-if="dist.isReturned" class="returned">Yes ({{ dist.returnReason }})</span>
+                                    <div v-if="dist.isReturned" class="returned tooltip-container" style="cursor: help; display: inline-block;">
+                                      Yes
+                                      <div class="tooltip-content">
+                                        <strong>Reason:</strong><br/>
+                                        {{ dist.returnReason || 'No reason provided' }}
+                                      </div>
+                                    </div>
                                     <span v-else class="active-dist">No</span>
                                   </td>
                                   <td>
-                                      <div v-if="getReassignHistory(item, dist.distributionId).length" class="history-list">
-                                        <div v-for="h in getReassignHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item tooltip-container">
+                                      <div v-if="getReassignedHistory(item, dist.distributionId).length" class="history-list">
+                                        <div v-for="h in getReassignedHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item tooltip-container">
                                     <span v-if="h.fromBeneficiaryId === dist.beneficiaryId" class="hist-out">
                                       <template v-if="item.type === 'money'">
                                         -{{ formatCurrency(h.amount) }}
@@ -466,6 +518,25 @@
                                         from {{ h.fromBeneficiary?.name || 'Pool' }}
                                       </template>
                                     </span>
+                                          <div class="tooltip-content" v-if="h.reason">
+                                            <strong>Reason:</strong><br/>
+                                            {{ h.reason }}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <span v-else>-</span>
+                                  </td>
+                                  <td>
+                                      <div v-if="getDeductedHistory(item, dist.distributionId).length" class="history-list">
+                                        <div v-for="h in getDeductedHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item tooltip-container">
+                                          <span class="hist-out">
+                                            <template v-if="item.type === 'money'">
+                                              -{{ formatCurrency(h.amount) }}
+                                            </template>
+                                            <template v-else>
+                                              -{{ (h.amount / (item.unitValue || 1)).toFixed(2) }} ({{ formatCurrency(h.amount) }})
+                                            </template>
+                                          </span>
                                           <div class="tooltip-content" v-if="h.reason">
                                             <strong>Reason:</strong><br/>
                                             {{ h.reason }}
@@ -872,6 +943,14 @@ const getReassignHistory = (item, distId) => {
   })
 }
 
+const getReassignedHistory = (item, distId) => {
+  return getReassignHistory(item, distId).filter(h => h.reassignedToBeneficiaryId !== null)
+}
+
+const getDeductedHistory = (item, distId) => {
+  return getReassignHistory(item, distId).filter(h => h.reassignedToBeneficiaryId === null)
+}
+
 // ── Data loading ──
 const loadDonation = async () => {
   loading.value = true
@@ -1204,8 +1283,39 @@ onMounted(async () => {
 .summary-item { display: flex; flex-direction: column; }
 .label { font-size: 12px; color: #94a3b8; }
 .value { font-size: 16px; font-weight: 600; color: #1e293b; }
-.summary-notes { margin-top: 12px; }
+.summary-notes { flex: 1; min-width: 250px; }
 .summary-notes p { margin: 4px 0 0; color: #475569; }
+.summary-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9;
+  flex-wrap: wrap;
+}
+.tracking-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 200px;
+}
+.tracking-item {
+  display: flex;
+  flex-direction: column;
+}
+.tracking-item .label {
+  font-size: 11px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.tracking-item .value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
 .section-card { background: white; border-radius: 16px; padding: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
 .section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .section-header h3 { margin: 0; font-size: 18px; }
@@ -1403,6 +1513,9 @@ onMounted(async () => {
 .history-item {
   font-size: 10px;
   line-height: 1.2;
+  position: relative;
+}
+.tooltip-container {
   position: relative;
 }
 .tooltip-container:hover .tooltip-content {

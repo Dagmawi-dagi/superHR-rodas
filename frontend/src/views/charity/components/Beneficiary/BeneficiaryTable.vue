@@ -8,6 +8,7 @@
           <th>Group</th>
           <th>Location</th>
           <th>Contact</th>
+          <th>Created By</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -25,6 +26,7 @@
           <td>{{ ben.BeneficiaryGroup ? `${ben.BeneficiaryGroup.name} - ${ ben.BeneficiaryGroup.manager.firstName} ${ ben.BeneficiaryGroup.manager.lastName }`: 'Unassigned' }}</td>
           <td>{{ ben.BeneficiaryLocation ? `${ben.BeneficiaryLocation.region}, ${ben.BeneficiaryLocation.city}` : 'N/A' }}</td>
           <td>{{ ben.contactInfo?.phone || ben.contactInfo?.email || 'N/A' }}</td>
+          <td>{{ ben.creator ? `${ben.creator.firstName} ${ben.creator.lastName}` : 'N/A' }}</td>
           <td class="actions-cell">
             <button class="action-btn view" @click="$router.push(`/charity/beneficiaries/${ben?.beneficiaryId}/edit`)" title="View Details">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -54,7 +56,7 @@
           </td>
         </tr>
         <tr v-if="beneficiaries.length === 0">
-          <td colspan="6" class="empty-state">
+          <td colspan="7" class="empty-state">
             <div class="empty-state-content">
               <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />

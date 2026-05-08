@@ -9,6 +9,9 @@ module.exports = (sequelize, DataTypes) => {
       Donation.hasMany(models.DonationItem, { foreignKey: "donationId" });
       Donation.hasMany(models.DonationApproval, { foreignKey: "donationId" });
       Donation.hasMany(models.DonationLog, { foreignKey: "donationId" });
+      Donation.belongsTo(models.Employee, { foreignKey: "createdBy", as: "creator" });
+      Donation.belongsTo(models.Employee, { foreignKey: "approvedBy", as: "approver" });
+      Donation.belongsTo(models.Employee, { foreignKey: "distributedBy", as: "distributor" });
     }
   }
 
@@ -33,6 +36,9 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: "draft",
       },
       notes: { type: DataTypes.TEXT },
+      createdBy: { type: DataTypes.INTEGER, field: "created_by" },
+      approvedBy: { type: DataTypes.INTEGER, field: "approved_by" },
+      distributedBy: { type: DataTypes.INTEGER, field: "distributed_by" },
     },
     {
       sequelize,

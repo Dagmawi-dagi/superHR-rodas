@@ -8,6 +8,7 @@ module.exports = (sequelize, DataTypes) => {
       Beneficiary.belongsTo(models.BeneficiaryLocation, { foreignKey: "location_id",});
       Beneficiary.belongsTo(models.BeneficiaryGroup, { foreignKey: "group_id" });
       Beneficiary.hasMany(models.BeneficiaryTransfer, { foreignKey: "beneficiary_id" });
+      Beneficiary.belongsTo(models.Employee, { foreignKey: "createdBy", as: "creator" });
     }
   }
 
@@ -38,6 +39,10 @@ module.exports = (sequelize, DataTypes) => {
       groupId: {
         type: DataTypes.INTEGER,
         field: "group_id",
+      },
+      createdBy: {
+        type: DataTypes.INTEGER,
+        field: "created_by",
       },
     },
 

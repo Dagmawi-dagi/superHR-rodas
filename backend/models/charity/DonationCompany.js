@@ -5,6 +5,7 @@ module.exports = (sequelize, DataTypes) => {
   class DonationCompany extends Model {
     static associate(models) {
       DonationCompany.hasMany(models.Donation, { foreignKey: "companyId" });
+      DonationCompany.belongsTo(models.Employee, { foreignKey: "createdBy", as: "creator" });
     }
   }
 
@@ -33,6 +34,10 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
         field: "is_active",
+      },
+      createdBy: {
+        type: DataTypes.INTEGER,
+        field: "created_by",
       },
     },
     {

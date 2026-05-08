@@ -15,6 +15,15 @@ const buildSortingOptions = (sortBy, sortOrder, allowedFields = ['name', 'type',
   const order = sortOrder && sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
   return [[field, order]];
 };
+
+const getEmployeeIdFromUserId = async (userId) => {
+  if (!userId) return null;
+  const employee = await Employee.findOne({
+    where: { userId },
+    attributes: ['employeeId']
+  });
+  return employee ? employee.employeeId : null;
+};
 // ------------------------------------------------------------------
 // GET ALL BENEFICIARIES
 // ------------------------------------------------------------------
@@ -58,6 +67,11 @@ exports.getAllBeneficiaries = async (req, res) => {
             as: 'manager',
             attributes: ['employeeId', 'firstName', 'lastName']
           }
+        },
+        {
+          model: Employee,
+          as: 'creator',
+          attributes: ['employeeId', 'firstName', 'lastName']
         }
       ],
       distinct: true,
@@ -87,7 +101,10 @@ exports.getBeneficiaryById = async (req, res) => {
     const { id } = req.params;
 
     const beneficiary = await Beneficiary.findByPk(id, {
-      include: [{ model: BeneficiaryLocation }],
+      include: [
+        { model: BeneficiaryLocation },
+        { model: Employee, as: 'creator', attributes: ['employeeId', 'firstName', 'lastName'] }
+      ],
     });
 
     if (!beneficiary) {
@@ -122,12 +139,15 @@ exports.createBeneficiary = async (req, res) => {
       }
     }
 
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+
     const beneficiary = await Beneficiary.create({
       type,
       name,
       contactInfo: contactInfo || {},
       locationId: locationId || null,
       groupId: groupId || null,   // Now works because the model has this field
+      createdBy: employeeId,
     });
 
     res.status(201).json({
