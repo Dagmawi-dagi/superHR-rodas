@@ -234,12 +234,13 @@ exports.transferBeneficiary = async (req, res) => {
     const fromGroupId = beneficiary.groupId;
     beneficiary.groupId = toGroupId;
     await beneficiary.save({ transaction: t });
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
     await BeneficiaryTransfer.create({
       beneficiaryId: id,
       fromGroupId,
       toGroupId,
       reason,
-      transferredBy: req.user.userId
+      transferredBy: employeeId
     }, { transaction: t });
     await t.commit();
     res.json({ success: true, message: 'Beneficiary transferred' });

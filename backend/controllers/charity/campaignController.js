@@ -12,6 +12,15 @@ const buildSortingOptions = (sortBy, sortOrder, allowedFields) => {
   const order = sortOrder && sortOrder.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
   return [[field, order]];
 };
+
+const getEmployeeIdFromUserId = async (userId) => {
+  if (!userId) return null;
+  const employee = await Employee.findOne({
+    where: { userId },
+    attributes: ['employeeId']
+  });
+  return employee ? employee.employeeId : null;
+};
 // ------------------------------------------------------------------
 // GET ALL CAMPAIGNS
 // ------------------------------------------------------------------
@@ -108,6 +117,8 @@ exports.createCampaign = async (req, res) => {
         .json({ success: false, error: "Campaign title is required" });
     }
 
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+
     const campaign = await Campaign.create({
       title,
       description,
@@ -116,7 +127,7 @@ exports.createCampaign = async (req, res) => {
       endDate,
       targetAmount,
       status: "planned",
-      createdBy: req.user.userId,
+      createdBy: employeeId,
     });
 
     res.status(201).json({

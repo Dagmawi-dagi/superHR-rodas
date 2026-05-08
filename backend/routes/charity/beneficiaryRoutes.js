@@ -7,21 +7,9 @@ router.use(authMiddleware());
 
 router.get("/", beneficiaryController.getAllBeneficiaries);
 router.get("/:id", beneficiaryController.getBeneficiaryById);
-router.post(
-  "/",
-  authMiddleware(),
-  beneficiaryController.createBeneficiary,
-);
-router.put(
-  "/:id",
-  authMiddleware(),
-  beneficiaryController.updateBeneficiary,
-);
-router.delete(
-  "/:id",
-  authMiddleware(),
-  beneficiaryController.deleteBeneficiary,
-);
-router.post('/:id/transfer', authMiddleware(), beneficiaryController.transferBeneficiary);
-router.get('/:id/transfers', beneficiaryController.getTransferHistory);
+router.post("/", beneficiaryController.createBeneficiary);
+router.put( "/:id",beneficiaryController.updateBeneficiary);
+router.delete("/:id",beneficiaryController.deleteBeneficiary);
+router.post('/:id/transfer',beneficiaryController.transferBeneficiary);
+router.get('/:id/transfers',beneficiaryController.getTransferHistory);
 module.exports = router;

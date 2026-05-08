@@ -1255,73 +1255,6 @@ exports.getDonationLogs = async (req, res) => {
 };
 
 // ------------------------------------------------------------------
-// DONATION STATS SUMMARY
-// ------------------------------------------------------------------
-exports.getDonationStats = async (req, res) => {
-  try {
-    const totalDonations = await Donation.count();
-
-    // Net total value (already excludes returned)
-    const totalValue = await Donation.sum('total_value', {
-      where: { status: { [Op.ne]: 'cancelled' } }
-    }) || 0;
-
-    // Total returned value across all donations
-    const returnedValue = await DonationDistribution.sum('value', {
-      where: { isReturned: true }
-    }) || 0;
-
-    // Gross value before returns
-    const grossValue = parseFloat(totalValue) + parseFloat(returnedValue);
-
-    const statusCounts = await Donation.findAll({
-      attributes: [
-        'status',
-        [sequelize.fn('COUNT', sequelize.col('donation_id')), 'count']
-      ],
-      group: ['status'],
-      raw: true
-    });
-
-    const byType = await DonationItem.findAll({
-      attributes: [
-        'type',
-        [sequelize.fn('SUM', sequelize.col('total_value')), 'total']
-      ],
-      group: ['type'],
-      raw: true
-    });
-
-    const recentDonations = await Donation.findAll({
-      limit: 5,
-      order: [['created_at', 'DESC']],
-      include: [{ model: DonationCompany, attributes: ['name'] }]
-    });
-
-    res.json({
-      success: true,
-      data: {
-        totalDonations,
-        totalValue,           // net
-        grossValue,           // net + returned
-        returnedValue,        // total returned
-        statusBreakdown: statusCounts.reduce((acc, curr) => {
-          acc[curr.status] = parseInt(curr.dataValues?.count ?? curr.count);
-          return acc;
-        }, {}),
-        valueByType: byType.reduce((acc, curr) => {
-          acc[curr.type] = parseFloat(curr.dataValues?.total ?? curr.total);
-          return acc;
-        }, {}),
-        recentDonations
-      }
-    });
-  } catch (error) {
-    console.error('Donation stats error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-// ------------------------------------------------------------------
 // DONATIONS BY CAMPAIGN
 // ------------------------------------------------------------------
 exports.getDonationsByCampaign = async (req, res) => {
@@ -1445,6 +1378,9 @@ exports.returnDistribution = async (req, res) => {
   }
 };
 
+// ------------------------------------------------------------------
+// DONATION STATS SUMMARY
+// ------------------------------------------------------------------
 exports.getDonationStats = async (req, res) => {
   try {
     const totalDonations = await Donation.count();

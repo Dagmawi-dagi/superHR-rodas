@@ -7,12 +7,7 @@ router.use(authMiddleware());
 
 router.get("/", BeneficiaryLocationController.getAllLocations);
 router.get("/:id", BeneficiaryLocationController.getLocationById);
-router.post("/", authMiddleware(), BeneficiaryLocationController.createLocation);
-router.put("/:id", authMiddleware(), BeneficiaryLocationController.updateLocation);
-router.delete(
-  "/:id",
-  authMiddleware("admin"),
-  BeneficiaryLocationController.deleteLocation,
-);
-
+router.post("/", BeneficiaryLocationController.createLocation);
+router.put("/:id", BeneficiaryLocationController.updateLocation);
+router.delete("/:id",authMiddleware("admin"),BeneficiaryLocationController.deleteLocation);
 module.exports = router;

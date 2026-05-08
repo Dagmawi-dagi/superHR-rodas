@@ -189,7 +189,7 @@ exports.deleteCompany = async (req, res) => {
         .json({ success: false, error: "Company not found" });
     }
 
-    await DonationCompany.update({ isActive: false });
+    await company.update({ isActive: false });
 
     res.json({ success: true, message: "Company deactivated" });
   } catch (error) {

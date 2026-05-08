@@ -8,13 +8,9 @@ router.use(authMiddleware());
 router.get("/", campaignController.getAllCampaigns);
 router.get("/:id", campaignController.getCampaignById);
 router.get("/:id/progress", campaignController.getCampaignProgress);
-router.post("/", authMiddleware(), campaignController.createCampaign);
-router.put("/:id", authMiddleware(), campaignController.updateCampaign);
-router.delete(
-  "/:id",
-  authMiddleware(),
-  campaignController.deleteCampaign,
-);
-router.post('/:id/extend', authMiddleware(), campaignController.extendCampaign);
-router.post('/:id/terminate', authMiddleware(), campaignController.terminateCampaign);
+router.post("/", campaignController.createCampaign);
+router.put("/:id", campaignController.updateCampaign);
+router.delete("/:id", campaignController.deleteCampaign);
+router.post('/:id/extend', campaignController.extendCampaign);
+router.post('/:id/terminate', campaignController.terminateCampaign);
 module.exports = router;
