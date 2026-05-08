@@ -134,6 +134,8 @@ export interface Location {
 export interface DonationDeduction {
   deductionId: number
   donationItemId: number
+  distributionId: number
+  intervalId?: number
   amount: number
   reason: string
   reassignedToBeneficiaryId?: number

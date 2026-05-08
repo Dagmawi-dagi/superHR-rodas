@@ -10,15 +10,18 @@
         <div class="info-box">
           <p><strong>Item:</strong> {{ item?.description || 'Item' }}</p>
           <p><strong>From:</strong> {{ distribution?.Beneficiary?.name }}</p>
-          <p><strong>Current Quantity:</strong> {{ distribution?.quantity }}</p>
+          <p>
+            <strong>Current {{ item?.type === 'money' ? 'Amount' : 'Quantity' }}:</strong> 
+            {{ item?.type === 'money' ? formatCurrency(distribution?.value) : distribution?.quantity }}
+          </p>
         </div>
 
         <div class="form-group">
-          <label>Amount to Deduct (Quantity)</label>
+          <label>Amount to {{ reassign ? 'Reassign' : 'Deduct' }} ({{ item?.type === 'money' ? 'Value' : 'Quantity' }})</label>
           <input 
             type="number" 
             v-model.number="form.amount" 
-            :max="distribution?.quantity" 
+            :max="item?.type === 'money' ? distribution?.value : distribution?.quantity" 
             min="0.01"
             step="0.01"
           />
@@ -85,12 +88,14 @@ const loading = ref(false)
 const reassign = ref(false)
 const beneficiaries = ref<Beneficiary[]>([])
 
+const formatCurrency = (v: any) => v ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'ETB' }).format(v) : '0.00'
+
 const filteredBeneficiaries = computed(() => {
   if (!props.item || !props.item.DonationDistributions) return beneficiaries.value
   
   // Get IDs of beneficiaries who already returned this item/interval
   const returnedBenIds = props.item.DonationDistributions
-    .filter(d => d.isReturned && d.intervalId === props.distribution?.intervalId)
+    .filter(d => d.isReturned && String(d.intervalId) === String(props.distribution?.intervalId))
     .map(d => d.beneficiaryId)
     
   return beneficiaries.value.filter(ben => !returnedBenIds.includes(ben.beneficiaryId))
@@ -104,7 +109,11 @@ const form = reactive({
 
 watch(() => props.isOpen, async (val) => {
   if (val && props.distribution) {
-    form.amount = props.distribution.quantity
+    // For money items, we show/edit the 'value' (amount), for others 'quantity'
+    form.amount = props.item?.type === 'money' 
+      ? Number(props.distribution.value) 
+      : Number(props.distribution.quantity)
+      
     form.reason = ''
     form.toBeneficiaryId = undefined
     reassign.value = false
@@ -124,12 +133,19 @@ const close = () => {
 }
 
 const submit = async () => {
-  if (!props.distribution) return
+  if (!props.distribution || !props.item) return
   
   loading.value = true
   try {
+    // If it's a money item, we need to convert the amount (value) back to quantity fraction
+    // because the backend's reassignDistribution expects 'amount' to be relative to 'quantity'
+    let finalAmount = form.amount
+    if (props.item.type === 'money') {
+      finalAmount = form.amount / (Number(props.item.unitValue) || 1)
+    }
+
     const res = await CharityService.reassignDistribution(props.distribution.distributionId, {
-      amount: form.amount,
+      amount: finalAmount,
       toBeneficiaryId: reassign.value ? form.toBeneficiaryId : undefined,
       reason: form.reason
     })

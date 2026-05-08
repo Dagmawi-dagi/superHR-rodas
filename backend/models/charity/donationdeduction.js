@@ -5,6 +5,7 @@ module.exports = (sequelize, DataTypes) => {
   class DonationDeduction extends Model {
     static associate(models) {
       DonationDeduction.belongsTo(models.DonationItem, { foreignKey: "donationItemId" });
+      DonationDeduction.belongsTo(models.DonationItemInterval, { foreignKey: "intervalId" });
       DonationDeduction.belongsTo(models.Beneficiary, { foreignKey: "reassignedToBeneficiaryId", as: "reassignedTo" });
       DonationDeduction.belongsTo(models.Beneficiary, { foreignKey: "fromBeneficiaryId", as: "fromBeneficiary" });
       DonationDeduction.belongsTo(models.DonationDistribution, { foreignKey: "distributionId", as: "sourceDistribution" });
@@ -27,6 +28,10 @@ module.exports = (sequelize, DataTypes) => {
       distributionId: {
         type: DataTypes.INTEGER,
         field: "distribution_id",
+      },
+      intervalId: {
+        type: DataTypes.INTEGER,
+        field: "interval_id",
       },
       amount: {
         type: DataTypes.DECIMAL(15, 2),

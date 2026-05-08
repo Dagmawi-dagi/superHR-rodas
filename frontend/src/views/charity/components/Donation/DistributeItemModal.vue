@@ -137,7 +137,9 @@ function handleSubmit() {
   const payload = rows.value.map(r => {
     const base = { beneficiaryId: r.beneficiaryId }
     if (props.item.type === 'money') {
-      base.quantity = 1
+      // For money items, quantity is the fraction of total value (unitValue)
+      const fraction = parseFloat(r.value) / (parseFloat(props.item.unitValue) || 1)
+      base.quantity = fraction
       base.value = parseFloat(r.value)
     } else {
       base.quantity = parseFloat(r.quantity)

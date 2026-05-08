@@ -1842,6 +1842,7 @@ exports.reassignDistribution = async (req, res) => {
     await DonationDeduction.create({
       donationItemId: item.donationItemId,
       distributionId: dist.distributionId,
+      intervalId: dist.intervalId || null,
       amount: parseFloat(amount) * parseFloat(item.unitValue), 
       reason,
       fromBeneficiaryId: dist.beneficiaryId,

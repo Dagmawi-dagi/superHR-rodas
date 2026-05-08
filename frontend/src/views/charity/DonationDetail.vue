@@ -47,6 +47,10 @@
           <span class="value">{{ formatCurrency(returnedAmount) }}</span>
         </div>
         <div class="summary-item" v-if="donation.status === 'approved'">
+          <span class="label">Distributed (Active)</span>
+          <span class="value">{{ formatCurrency(donation.totalValue - unassignedAmount) }}</span>
+        </div>
+        <div class="summary-item" v-if="donation.status === 'approved'">
           <span class="label">Unassigned</span>
           <span class="value">{{ formatCurrency(unassignedAmount) }}</span>
         </div>
@@ -242,15 +246,31 @@
                             </td>
                             <td>
                                 <div v-if="getReassignHistory(item, dist.distributionId).length" class="history-list">
-                                  <div v-for="h in getReassignHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item">
+                                  <div v-for="h in getReassignHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item tooltip-container">
                                     <span v-if="h.fromBeneficiaryId === dist.beneficiaryId" class="hist-out">
-                                      -{{ item.type === 'money' ? formatCurrency(h.amount) : (h.amount / (item.unitValue || 1)) }}
-                                      {{ h.reassignedTo ? `→ ${h.reassignedTo.name}` : '(To Pool)' }}
+                                      <template v-if="item.type === 'money'">
+                                        -{{ formatCurrency(h.amount) }}
+                                        {{ h.reassignedTo ? `→ ${h.reassignedTo.name}` : '' }}
+                                      </template>
+                                      <template v-else>
+                                        -{{ (h.amount / (item.unitValue || 1)).toFixed(2) }} ({{ formatCurrency(h.amount) }})
+                                        {{ h.reassignedTo ? `→ ${h.reassignedTo.name}` : '' }}
+                                      </template>
                                     </span>
                                     <span v-else class="hist-in">
-                                      +{{ item.type === 'money' ? formatCurrency(h.amount) : (h.amount / (item.unitValue || 1)) }}
-                                      from {{ h.fromBeneficiary?.name || 'Pool' }}
+                                      <template v-if="item.type === 'money'">
+                                        +{{ formatCurrency(h.amount) }}
+                                        from {{ h.fromBeneficiary?.name || 'Pool' }}
+                                      </template>
+                                      <template v-else>
+                                        +{{ (h.amount / (item.unitValue || 1)).toFixed(2) }} ({{ formatCurrency(h.amount) }})
+                                        from {{ h.fromBeneficiary?.name || 'Pool' }}
+                                      </template>
                                     </span>
+                                    <div class="tooltip-content" v-if="h.reason">
+                                      <strong>Reason:</strong><br/>
+                                      {{ h.reason }}
+                                    </div>
                                   </div>
                                 </div>
                                 <span v-else>-</span>
@@ -425,15 +445,31 @@
                                   </td>
                                   <td>
                                       <div v-if="getReassignHistory(item, dist.distributionId).length" class="history-list">
-                                        <div v-for="h in getReassignHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item">
-                                          <span v-if="h.fromBeneficiaryId === dist.beneficiaryId" class="hist-out">
-                                            -{{ item.type === 'money' ? formatCurrency(h.amount) : (h.amount / (item.unitValue || 1)) }}
-                                            {{ h.reassignedTo ? `→ ${h.reassignedTo.name}` : '(To Pool)' }}
-                                          </span>
-                                          <span v-else class="hist-in">
-                                            +{{ item.type === 'money' ? formatCurrency(h.amount) : (h.amount / (item.unitValue || 1)) }}
-                                            from {{ h.fromBeneficiary?.name || 'Pool' }}
-                                          </span>
+                                        <div v-for="h in getReassignHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item tooltip-container">
+                                    <span v-if="h.fromBeneficiaryId === dist.beneficiaryId" class="hist-out">
+                                      <template v-if="item.type === 'money'">
+                                        -{{ formatCurrency(h.amount) }}
+                                        {{ h.reassignedTo ? `→ ${h.reassignedTo.name}` : '' }}
+                                      </template>
+                                      <template v-else>
+                                        -{{ (h.amount / (item.unitValue || 1)).toFixed(2) }} ({{ formatCurrency(h.amount) }})
+                                        {{ h.reassignedTo ? `→ ${h.reassignedTo.name}` : '' }}
+                                      </template>
+                                    </span>
+                                    <span v-else class="hist-in">
+                                      <template v-if="item.type === 'money'">
+                                        +{{ formatCurrency(h.amount) }}
+                                        from {{ h.fromBeneficiary?.name || 'Pool' }}
+                                      </template>
+                                      <template v-else>
+                                        +{{ (h.amount / (item.unitValue || 1)).toFixed(2) }} ({{ formatCurrency(h.amount) }})
+                                        from {{ h.fromBeneficiary?.name || 'Pool' }}
+                                      </template>
+                                    </span>
+                                          <div class="tooltip-content" v-if="h.reason">
+                                            <strong>Reason:</strong><br/>
+                                            {{ h.reason }}
+                                          </div>
                                         </div>
                                       </div>
                                       <span v-else>-</span>
@@ -461,6 +497,9 @@
                                 </tr>
                               </tbody>
                             </table>
+                            <div class="unassigned" v-if="getIntervalUnassigned(item, interval.intervalId) > 0">
+                              <em>Unassigned deduction for this period: {{ item.type === 'money' ? formatCurrency(getIntervalUnassigned(item, interval.intervalId)) : (getIntervalUnassigned(item, interval.intervalId) / (item.unitValue || 1)).toFixed(2) + ' (' + formatCurrency(getIntervalUnassigned(item, interval.intervalId)) + ')' }}</em>
+                            </div>
                           </div>
                           <p v-else class="no-dist">No beneficiaries assigned for this month.</p>
                         </div>
@@ -484,6 +523,9 @@
                                 </tr>
                               </tbody>
                             </table>
+                            <div class="unassigned" v-if="getIntervalUnassigned(item, interval.intervalId) > 0">
+                              <em>Unassigned deduction for this period: {{ item.type === 'money' ? formatCurrency(getIntervalUnassigned(item, interval.intervalId)) : (getIntervalUnassigned(item, interval.intervalId) / (item.unitValue || 1)).toFixed(2) + ' (' + formatCurrency(getIntervalUnassigned(item, interval.intervalId)) + ')' }}</em>
+                            </div>
                           </div>
                           <p v-else class="no-dist">No beneficiaries assigned for this month.</p>
                         </div>
@@ -565,6 +607,26 @@
       @close="showReassignModal = false"
       @success="loadDonation(); addToast('Distribution updated successfully')"
     />
+
+    <!-- Return Distribution Modal -->
+    <div v-if="showReturnModal" class="modal-overlay" @click.self="showReturnModal = false">
+      <div class="modal">
+        <h3>Return Distribution</h3>
+        <div class="warning-box" style="margin-bottom: 12px; background: #fff7ed; border-left: 4px solid #f97316; padding: 8px;">
+          <p style="color: #9a3412; font-size: 12px; margin: 0;">
+            <strong>⚠️ Warning:</strong> Consider using Reassign/Deduct instead. Returning a distribution is permanent and cannot be undone.
+          </p>
+        </div>
+        <p>Enter the reason for returning this distribution.</p>
+        <textarea v-model="returnReason" rows="3" placeholder="Reason..."></textarea>
+        <div class="modal-actions">
+          <button @click="showReturnModal = false" class="btn-secondary">Cancel</button>
+          <button @click="confirmReturn" :disabled="!returnReason.trim() || returning" class="btn-primary">
+            {{ returning ? 'Saving...' : 'Confirm Return' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Toasts -->
     <div class="toast-container">
@@ -758,7 +820,9 @@ const toggleIntervalDistributions = (intervalId) => {
 const getIntervalDistributions = (item, intervalId) => {
   if (!item.DonationDistributions) return []
   // Show only distributions specific to this interval
-  return item.DonationDistributions.filter(d => String(d.intervalId) === String(intervalId))
+  const filtered = item.DonationDistributions.filter(d => String(d.intervalId) === String(intervalId))
+  // Sort by created_at descending (newest first)
+  return [...filtered].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
 }
 
 const hasIntervalEvidence = (item, intervalId) => {
@@ -781,13 +845,31 @@ const toggleIntervalEvidence = (intervalId) => {
 // Helper to filter main table (only show non-interval distributions for recurring items)
 const summaryDistributions = (item) => {
   if (!item.DonationDistributions) return []
-  if (!item.isRecurring) return item.DonationDistributions
-  return item.DonationDistributions.filter(d => d.intervalId === null)
+  let filtered = item.DonationDistributions
+  if (item.isRecurring) {
+    filtered = item.DonationDistributions.filter(d => d.intervalId === null)
+  }
+  // Sort by created_at descending (newest first)
+  return [...filtered].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
 }
 
 const getReassignHistory = (item, distId) => {
   if (!item.DonationDeductions) return []
-  return item.DonationDeductions.filter(d => d.distributionId === distId || d.reassignedToBeneficiaryId === item.DonationDistributions.find(dist => dist.distributionId === distId)?.beneficiaryId)
+  const dist = item.DonationDistributions?.find(d => d.distributionId === distId)
+  if (!dist) return []
+
+  return item.DonationDeductions.filter(d => {
+    // 1. Deduction was from THIS specific distribution (matches exactly)
+    if (d.distributionId === distId) return true
+    
+    // 2. Deduction was reassigned TO THIS beneficiary in THIS specific interval
+    // We check both beneficiaryId and intervalId to ensure it belongs to this period
+    if (d.reassignedToBeneficiaryId === dist.beneficiaryId && String(d.intervalId) === String(dist.intervalId)) {
+      return true
+    }
+    
+    return false
+  })
 }
 
 // ── Data loading ──
@@ -1091,6 +1173,13 @@ const openIntervalEvidenceModal = (interval, item) => {
   showEvidenceModal.value = true
 }
 
+const getIntervalUnassigned = (item, intervalId) => {
+  if (!item.DonationDeductions) return 0
+  return item.DonationDeductions
+    .filter(d => String(d.intervalId) === String(intervalId) && !d.reassignedToBeneficiaryId)
+    .reduce((sum, d) => sum + parseFloat(d.amount || 0), 0)
+}
+
 // ── Mount ──
 onMounted(async () => {
   await loadDonation()
@@ -1314,6 +1403,35 @@ onMounted(async () => {
 .history-item {
   font-size: 10px;
   line-height: 1.2;
+  position: relative;
+}
+.tooltip-container:hover .tooltip-content {
+  display: block;
+}
+.tooltip-content {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  width: 200px;
+  background: #1e293b;
+  color: white;
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  margin-bottom: 5px;
+  white-space: normal;
+}
+.tooltip-content::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 10px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: #1e293b transparent transparent transparent;
 }
 .hist-out { color: #ef4444; }
 .hist-in { color: #10b981; }
