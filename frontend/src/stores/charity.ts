@@ -24,7 +24,7 @@ export interface Campaign {
   startDate?: string
   endDate?: string
   targetAmount?: number
-  status: 'planned' | 'active' | 'completed' | 'cancelled'
+  status: 'inactive' | 'active' | 'completed' | 'cancelled'
   createdBy?: number
   actualEndDate?: string
   terminationReason?: string
@@ -930,7 +930,10 @@ async getEmployeesForDropdown() {
       pending: 'Pending Approval',
       approved: 'Approved',
       distributed: 'Distributed',
-      cancelled: 'Cancelled'
+      cancelled: 'Cancelled',
+      inactive: 'Inactive',
+      active: 'Active',
+      completed: 'Completed'
     }
     return labels[status] || status
   }

@@ -40,8 +40,8 @@ module.exports = (sequelize, DataTypes) => {
         field: "target_amount",
       },
       status: {
-        type: DataTypes.ENUM("planned", "active", "completed", "cancelled"),
-        defaultValue: "planned",
+        type: DataTypes.ENUM("inactive", "active", "completed", "cancelled"),
+        defaultValue: "inactive",
       },
       createdBy: {
         type: DataTypes.INTEGER,

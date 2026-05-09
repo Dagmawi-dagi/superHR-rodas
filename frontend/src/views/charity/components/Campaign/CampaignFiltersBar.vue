@@ -15,7 +15,7 @@
     </div>
     <select v-model="localFilters.status" class="filter-select" @change="emitAll">
       <option value="">All Statuses</option>
-      <option value="planned">Planned</option>
+      <option value="inactive">Inactive</option>
       <option value="active">Active</option>
       <option value="completed">Completed</option>
       <option value="cancelled">Cancelled</option>

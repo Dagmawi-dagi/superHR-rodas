@@ -126,7 +126,7 @@ exports.createCampaign = async (req, res) => {
       startDate,
       endDate,
       targetAmount,
-      status: "planned",
+      status: "inactive",
       createdBy: employeeId,
     });
 

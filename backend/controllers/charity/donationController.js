@@ -24,6 +24,12 @@ const getPagination = (page, size, defaultLimit = 10, maxLimit = 100) => {
   return { limit, offset };
 };
 
+
+// ------------------------------------------------------------------
+// MONEY HELPER — always round to 2 decimal places
+// ------------------------------------------------------------------
+const money = (val) => Math.round(parseFloat(val || 0) * 100) / 100;
+
 // ------------------------------------------------------------------
 // RECALCULATE DONATION TOTAL
 // ------------------------------------------------------------------
@@ -34,7 +40,7 @@ const recalculateDonationTotal = async (donationId, transaction = null) => {
     attributes: ['totalValue'],
     transaction,
   });
-  const total = items.reduce((sum, item) => sum + parseFloat(item.totalValue || 0), 0);
+  const total = items.reduce((sum, item) => sum + money(item.totalValue), 0);
 
   // Subtract returned distribution values
   const returnedSum = await DonationDistribution.sum('value', {
@@ -43,7 +49,7 @@ const recalculateDonationTotal = async (donationId, transaction = null) => {
     transaction,
   }) || 0;
 
-  const effectiveTotal = total - parseFloat(returnedSum);
+  const effectiveTotal = money(total - money(returnedSum));
 
   await Donation.update(
     { totalValue: effectiveTotal },
@@ -342,7 +348,8 @@ exports.updateDonation = async (req, res) => {
     if (notes !== undefined) updates.notes = notes;
 
     await donation.update(updates, { transaction: t });
-    await logDonationAction(id, req.user.userId, "UPDATE", updates, t);
+    const _empUpdate = await getEmployeeIdFromUserId(req.user.userId);
+    await logDonationAction(id, _empUpdate, "UPDATE", updates, t);
 
     await t.commit();
     res.json({ success: true, message: "Donation updated", data: donation });
@@ -377,7 +384,8 @@ exports.cancelDonation = async (req, res) => {
     }
 
     await donation.update({ status: "cancelled" }, { transaction: t });
-    await logDonationAction(id, req.user.userId, "CANCEL", {}, t);
+    const _empCancel = await getEmployeeIdFromUserId(req.user.userId);
+    await logDonationAction(id, _empCancel, "CANCEL", {}, t);
 
     await t.commit();
     res.json({ success: true, message: "Donation cancelled" });
@@ -409,7 +417,7 @@ exports.addDonationItem = async (req, res) => {
       return res.status(400).json({ success: false, error: "Donation not found or not editable" });
     }
 
-    const baseTotal = parseFloat(quantity) * parseFloat(unitValue);
+    const baseTotal = money(parseFloat(quantity) * parseFloat(unitValue));
     let finalTotal = baseTotal;
     let intervalsToCreate = [];
 
@@ -446,7 +454,7 @@ exports.addDonationItem = async (req, res) => {
           status: "pending",
         });
       }
-      finalTotal = baseTotal * count; // grand total over all intervals
+      finalTotal = money(baseTotal * count); // grand total over all intervals
     }
 
     const item = await DonationItem.create(
@@ -476,7 +484,8 @@ exports.addDonationItem = async (req, res) => {
     }
 
     await recalculateDonationTotal(id, t);
-    await logDonationAction(id, req.user.userId, "ADD_ITEM", { itemId: item.donationItemId }, t);
+    const _empAddItem = await getEmployeeIdFromUserId(req.user.userId);
+    await logDonationAction(id, _empAddItem, "ADD_ITEM", { itemId: item.donationItemId }, t);
 
     await t.commit();
     res.status(201).json({ success: true, message: "Item added", data: item });
@@ -524,7 +533,7 @@ exports.updateDonationItem = async (req, res) => {
     if (quantity !== undefined || unitValue !== undefined) {
       const qty = quantity !== undefined ? parseFloat(quantity) : parseFloat(item.quantity);
       const val = unitValue !== undefined ? parseFloat(unitValue) : parseFloat(item.unitValue);
-      updates.totalValue = qty * val;
+      updates.totalValue = money(qty * val);
     }
 
     await item.update(updates, { transaction: t });
@@ -569,9 +578,10 @@ exports.deleteDonationItem = async (req, res) => {
     const donationId = item.donationId;
     await item.destroy({ transaction: t });
     await recalculateDonationTotal(donationId, t);
+    const _empDel = await getEmployeeIdFromUserId(req.user.userId);
     await logDonationAction(
       donationId,
-      req.user.userId,
+      _empDel,
       "DELETE_ITEM",
       { itemId },
       t,
@@ -637,7 +647,8 @@ exports.submitForApproval = async (req, res) => {
       { transaction: t },
     );
 
-    await logDonationAction(id, req.user.userId, "SUBMIT_FOR_APPROVAL", {}, t);
+    const _empSubmit = await getEmployeeIdFromUserId(req.user.userId);
+    await logDonationAction(id, _empSubmit, "SUBMIT_FOR_APPROVAL", {}, t);
 
     await t.commit();
 
@@ -920,7 +931,7 @@ exports.distributeItem = async (req, res) => {
           });
         }
 
-        const value = parseFloat(dist.quantity) * parseFloat(item.unitValue);
+        const value = money(parseFloat(dist.quantity) * parseFloat(item.unitValue));
         const distribution = await DonationDistribution.create(
           {
             donationItemId: itemId,
@@ -935,9 +946,10 @@ exports.distributeItem = async (req, res) => {
       }
     }
 
+    const _empDistItem = await getEmployeeIdFromUserId(req.user.userId);
     await logDonationAction(
       item.Donation.donationId,
-      req.user.userId,
+      _empDistItem,
       "DISTRIBUTE_ITEM",
       {
         itemId,
@@ -1401,7 +1413,7 @@ exports.getDonationStats = async (req, res) => {
     }) || 0;
 
     // Gross distributed value (before returns)
-    const grossValue = parseFloat(totalValue) + parseFloat(returnedValue);
+    const grossValue = money(money(totalValue) + money(returnedValue));
 
     // Status counts
     const statusCounts = await Donation.findAll({
@@ -1525,7 +1537,7 @@ exports.distributeItemForInterval = async (req, res) => {
     for (const dist of distributions) {
       const beneficiary = await Beneficiary.findByPk(dist.beneficiaryId, { transaction: t });
       if (!beneficiary) throw new Error(`Beneficiary ${dist.beneficiaryId} not found`);
-      const value = parseFloat(dist.quantity) * parseFloat(item.unitValue);
+      const value = money(parseFloat(dist.quantity) * parseFloat(item.unitValue));
       const distribution = await DonationDistribution.create({
         donationItemId: itemId,
         beneficiaryId: dist.beneficiaryId,
@@ -1727,7 +1739,7 @@ exports.reassignDistribution = async (req, res) => {
     
     // Update distribution
     dist.quantity = newQty;
-    dist.value = newQty * parseFloat(item.unitValue);
+    dist.value = money(newQty * money(item.unitValue));
     
     if (newQty <= 0) {
       await dist.destroy({ transaction: t });
@@ -1764,8 +1776,8 @@ exports.reassignDistribution = async (req, res) => {
       });
 
       if (targetDist) {
-        targetDist.quantity = parseFloat(targetDist.quantity) + parseFloat(amount);
-        targetDist.value = parseFloat(targetDist.quantity) * parseFloat(item.unitValue);
+        targetDist.quantity = money(parseFloat(targetDist.quantity) + money(amount));
+        targetDist.value = money(targetDist.quantity * money(item.unitValue));
         await targetDist.save({ transaction: t });
       } else {
         await DonationDistribution.create({
@@ -1773,12 +1785,12 @@ exports.reassignDistribution = async (req, res) => {
           beneficiaryId: toBeneficiaryId,
           intervalId: dist.intervalId,
           quantity: amount,
-          value: parseFloat(amount) * parseFloat(item.unitValue)
+          value: money(parseFloat(amount) * money(item.unitValue))
         }, { transaction: t });
       }
     } else {
       // If not reassigned, it goes back to the item's unassigned pool
-      const deductedValue = parseFloat(amount) * parseFloat(item.unitValue);
+      const deductedValue = money(parseFloat(amount) * money(item.unitValue));
       item.unassignedDeduction = parseFloat(item.unassignedDeduction || 0) + deductedValue;
       await item.save({ transaction: t });
     }

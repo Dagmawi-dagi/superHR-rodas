@@ -103,7 +103,7 @@ const processing = ref(false)
 
 const stats = ref({
   total: 0,
-  planned: 0,
+  inactive: 0,
   active: 0,
   completed: 0,
   cancelled: 0
@@ -168,7 +168,7 @@ const loadCampaigns = async () => {
 const computeStats = (data) => {
   stats.value = {
     total: data.length,
-    planned: data.filter(c => c.status === 'planned').length,
+    inactive: data.filter(c => c.status === 'inactive').length,
     active: data.filter(c => c.status === 'active').length,
     completed: data.filter(c => c.status === 'completed').length,
     cancelled: data.filter(c => c.status === 'cancelled').length
@@ -213,10 +213,10 @@ const confirmTerminate = async (reason) => {
 const openStatusModal = (campaign) => {
   campaignToModify.value = campaign
   const map = {
-    planned: ['active', 'cancelled'],
+    inactive: ['active', 'cancelled'],
     active: ['completed', 'cancelled'],
-    completed: [],
-    cancelled: ['planned']
+    completed: ['inactive'],
+    cancelled: ['inactive']
   }
   allowedStatuses.value = map[campaign.status] || []
   selectedNewStatus.value = ''

@@ -22,8 +22,8 @@
 
       </div>
       <div class="stat-content">
-        <span class="stat-label">Planned</span>
-        <span class="stat-value">{{ stats.planned }}</span>
+        <span class="stat-label">Inactive</span>
+        <span class="stat-value">{{ stats.inactive }}</span>
       </div>
     </div>
     <div class="stat-card">

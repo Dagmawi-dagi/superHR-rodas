@@ -90,10 +90,10 @@ const formatDate = (d) => d ? new Date(d).toLocaleDateString() : ''
 // Allowed transitions based on current status
 const getAllowedTransitions = (status) => {
   const map = {
-    planned: ['active', 'cancelled'],
+    inactive: ['active', 'cancelled'],
     active: ['completed', 'cancelled'],
-    completed: [],               // maybe allow 'active'?
-    cancelled: ['planned']
+    completed: ['inactive'],
+    cancelled: ['inactive']
   }
   return map[status] || []
 }
@@ -108,7 +108,7 @@ const getAllowedTransitions = (status) => {
 .date-cell { white-space: nowrap; font-size: 13px; color: #475569; }
 .amount-cell { font-weight: 600; }
 .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: capitalize; }
-.status-planned { background: #e0e7ff; color: #3730a3; }
+.status-inactive { background: #e0e7ff; color: #3730a3; }
 .status-active { background: #dcfce7; color: #15803d; }
 .status-completed { background: #dbeafe; color: #1e40af; }
 .status-cancelled { background: #fee2e2; color: #b91c1c; }
