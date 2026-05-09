@@ -258,7 +258,7 @@
                             <td>{{ item.type === 'money' ? formatCurrency(dist.value) : dist.quantity }}</td>
                             <td>{{ formatCurrency(dist.value) }}</td>
                             <td>
-                              <div v-if="dist.isReturned" class="returned tooltip-container" style="cursor: help; display: inline-block;">
+                              <div v-if="dist.isReturned" class="returned tooltip-container">
                                 Yes
                                 <div class="tooltip-content">
                                   <strong>Reason:</strong><br/>
@@ -1517,6 +1517,7 @@ onMounted(async () => {
 }
 .tooltip-container {
   position: relative;
+  cursor: help;
 }
 .tooltip-container:hover .tooltip-content {
   display: block;
