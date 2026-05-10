@@ -252,7 +252,7 @@ const newLocation = ref({
 })
 
 // Group modal state (NEW)
-const showGroupModal = ref(true)
+const showGroupModal = ref(false)
 const savingGroup = ref(false)
 const newGroup = ref({
   name: '',

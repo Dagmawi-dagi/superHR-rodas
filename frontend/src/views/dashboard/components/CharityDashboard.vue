@@ -57,11 +57,11 @@
         </div>
         <div class="stat-content">
           <h3>Active Campaigns</h3>
-          <p class="stat-number">{{ stats.activeCampaigns }}</p>
-          <span class="stat-trend">{{ stats.totalCampaigns }} total</span>
+          <p class="stat-number"> {{ stats.activeCampaigns }} </p>
+          <span class="stat-trend"> {{ stats.totalCampaigns }} total</span>
         </div>
       </div>
-      <div class="stat-card">
+<!--       <div class="stat-card">
         <div class="stat-icon !p-3">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#fff" class="size-6">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 15 3 9m0 0 6-6M3 9h12a6 6 0 0 1 0 12h-3" />
@@ -70,9 +70,9 @@
         <div class="stat-content">
           <h3>Returned Value</h3>
           <p class="stat-number">{{ formatCurrency(stats.returnedValue) }}</p>
-          <!-- <span class="stat-trend">Gross: {{ formatCurrency(stats.grossValue) }}</span> -->
+          <span class="stat-trend">Gross: {{ formatCurrency(stats.grossValue) }}</span>
         </div>
-      </div>
+      </div> -->
     </div>
 
     <!-- Status Breakdown & Type Distribution -->
