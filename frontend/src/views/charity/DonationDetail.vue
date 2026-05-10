@@ -77,6 +77,23 @@
       </div>
     </div>
 
+    <!-- Requested Changes Section (only show if there are rejected approvals) -->
+    <div v-if="requestedChanges" class="changes-requested-card">
+      <div class="changes-header">
+        <div class="changes-icon">⚠️</div>
+        <div class="changes-title-block">
+          <h3 class="changes-title">Changes Requested</h3>
+          <p class="changes-subtitle">
+            Requested by {{ requestedChanges.Employee ? `${requestedChanges.Employee.firstName} ${requestedChanges.Employee.lastName}` : 'Reviewer' }} 
+            on {{ formatDate(requestedChanges.createdAt) }}
+          </p>
+        </div>
+      </div>
+      <div class="changes-comment">
+        {{ requestedChanges.comment }}
+      </div>
+    </div>
+
     <!-- Items Section -->
     <div class="section-card">
       <div class="section-header">
@@ -882,6 +899,14 @@ const canApprove = computed(() => donation.value?.status === 'pending' && ['admi
 const canDistribute = computed(() => donation.value?.status === 'approved')
 const canCancel = computed(() => donation.value?.status !== 'cancelled')
 
+// Get ALL "rejected" approvals (change requests) ordered by most recent first
+const requestedChanges = computed(() => {
+  if (!donation.value?.DonationApprovals) return []
+  return donation.value.DonationApprovals
+    .filter(a => a.status === 'rejected')
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+})
+
 const toggleIntervalDistributions = (intervalId) => {
   const idx = expandedIntervalDists.value.indexOf(intervalId)
   if (idx > -1) expandedIntervalDists.value.splice(idx, 1)
@@ -1549,5 +1574,48 @@ onMounted(async () => {
 }
 .hist-out { color: #ef4444; }
 .hist-in { color: #10b981; }
+
+/* Requested Changes Card */
+.changes-requested-card {
+  background: #fffbeb;
+  border: 2px solid #f59e0b;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);
+}
+.changes-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.changes-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+.changes-title-block {
+  flex: 1;
+}
+.changes-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #92400e;
+  margin: 0 0 4px;
+}
+.changes-subtitle {
+  font-size: 13px;
+  color: #b45309;
+  margin: 0;
+}
+.changes-comment {
+  background: white;
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: #78350f;
+  font-size: 14px;
+  line-height: 1.6;
+  border-left: 3px solid #f59e0b;
+}
 
 </style>
