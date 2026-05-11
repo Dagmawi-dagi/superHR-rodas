@@ -78,20 +78,47 @@
     </div>
 
     <!-- Requested Changes Section (only show if there are rejected approvals) -->
-    <div v-if="requestedChanges" class="changes-requested-card">
-      <div class="changes-header">
+    <div v-if="requestedChanges.length > 0" class="changes-requested-section">
+      <div class="changes-section-header" @click="toggleChangesTimeline" style="cursor: pointer;">
         <div class="changes-icon">⚠️</div>
-        <div class="changes-title-block">
-          <h3 class="changes-title">Changes Requested</h3>
-          <p class="changes-subtitle">
-            Requested by {{ requestedChanges.Employee ? `${requestedChanges.Employee.firstName} ${requestedChanges.Employee.lastName}` : 'Reviewer' }} 
-            on {{ formatDate(requestedChanges.createdAt) }}
-          </p>
+        <h3 class="changes-section-title">
+          Changes Requested 
+          <span class="changes-count">({{ requestedChanges.length }})</span>
+        </h3>
+        <button class="collapse-toggle" :class="{ 'is-open': isChangesTimelineOpen }">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Timeline of all change requests -->
+      <transition name="timeline-collapse">
+        <div v-show="isChangesTimelineOpen" class="changes-timeline">
+          <div 
+            v-for="(change, index) in requestedChanges" 
+            :key="change.approvalId"
+            class="change-item"
+            :class="{ 'is-latest': index === 0 }"
+          >
+            <div class="change-marker"></div>
+            <div class="change-content">
+              <div class="change-header">
+                <div class="change-meta">
+                  <span class="change-requester">
+                    {{ change.Employee ? `${change.Employee.firstName} ${change.Employee.lastName}` : 'Reviewer' }}
+                  </span>
+                  <span class="change-date">{{ formatDate(change.createdAt) }}</span>
+                </div>
+                <span v-if="index === 0" class="latest-badge">Most Recent</span>
+              </div>
+              <div class="change-comment">
+                {{ change.comment }}
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="changes-comment">
-        {{ requestedChanges.comment }}
-      </div>
+      </transition>
     </div>
 
     <!-- Items Section -->
@@ -746,6 +773,12 @@ const authStore = useAuthStore()
 
 const donationId = parseInt(route.params.id)
 const donation = ref(null)
+const isChangesTimelineOpen = ref(false) // Start expanded by default
+
+// Toggle changes timeline
+const toggleChangesTimeline = () => {
+  isChangesTimelineOpen.value = !isChangesTimelineOpen.value
+}
 const items = computed(() => donation.value?.DonationItems || [])
 const loading = ref(false)
 const submitting = ref(false)
@@ -904,7 +937,7 @@ const requestedChanges = computed(() => {
   if (!donation.value?.DonationApprovals) return []
   return donation.value.DonationApprovals
     .filter(a => a.status === 'rejected')
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 })
 
 const toggleIntervalDistributions = (intervalId) => {
@@ -1575,47 +1608,160 @@ onMounted(async () => {
 .hist-out { color: #ef4444; }
 .hist-in { color: #10b981; }
 
-/* Requested Changes Card */
-.changes-requested-card {
+/* Requested Changes Section — Timeline Design */
+.changes-requested-section {
   background: #fffbeb;
   border: 2px solid #f59e0b;
   border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 20px;
+  padding: 20px;
+  margin-bottom: 24px;
   box-shadow: 0 2px 8px rgba(245, 158, 11, 0.1);
 }
-.changes-header {
+.changes-section-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid #fbbf24;
+  user-select: none;
+}
+.collapse-toggle {
+  margin-left: auto;
+  background: white;
+  border: 2px solid #f59e0b;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #f59e0b;
+}
+.collapse-toggle:hover {
+  background: #fef3c7;
+  border-color: #d97706;
+}
+.collapse-toggle svg {
+  transition: transform 0.3s ease;
+}
+.collapse-toggle.is-open svg {
+  transform: rotate(180deg);
 }
 .changes-icon {
-  font-size: 24px;
+  font-size: 28px;
   line-height: 1;
 }
-.changes-title-block {
-  flex: 1;
-}
-.changes-title {
-  font-size: 16px;
+.changes-section-title {
+  font-size: 18px;
   font-weight: 600;
   color: #92400e;
-  margin: 0 0 4px;
-}
-.changes-subtitle {
-  font-size: 13px;
-  color: #b45309;
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.changes-comment {
+.changes-count {
+  font-size: 14px;
+  font-weight: 500;
+  color: #d97706;
   background: white;
+  padding: 2px 10px;
+  border-radius: 12px;
+}
+
+/* Timeline */
+.changes-timeline {
+  position: relative;
+}
+.change-item {
+  position: relative;
+  padding-left: 32px;
+  margin-bottom: 16px;
+}
+.change-item:last-child {
+  margin-bottom: 0;
+}
+.change-item.is-latest .change-content {
+  border-left-color: #f59e0b;
+  border-left-width: 3px;
+  background: white;
+}
+.change-marker {
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 12px;
+  height: 12px;
+  background: #fbbf24;
+  border: 2px solid #f59e0b;
+  border-radius: 50%;
+}
+.change-item.is-latest .change-marker {
+  width: 14px;
+  height: 14px;
+  background: #f59e0b;
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2);
+}
+.change-content {
+  background: #fef3c7;
   border-radius: 8px;
   padding: 12px 14px;
+  border-left: 2px solid #fbbf24;
+}
+.change-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.change-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.change-requester {
+  font-size: 14px;
+  font-weight: 600;
+  color: #92400e;
+}
+.change-date {
+  font-size: 12px;
+  color: #b45309;
+}
+.latest-badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #f59e0b;
+  background: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.change-comment {
   color: #78350f;
   font-size: 14px;
   line-height: 1.6;
-  border-left: 3px solid #f59e0b;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Timeline collapse/expand transition */
+.timeline-collapse-enter-active,
+.timeline-collapse-leave-active {
+  transition: all 0.3s ease;
+  max-height: 2000px;
+  overflow: hidden;
+}
+.timeline-collapse-enter-from,
+.timeline-collapse-leave-to {
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0;
 }
 
 </style>
