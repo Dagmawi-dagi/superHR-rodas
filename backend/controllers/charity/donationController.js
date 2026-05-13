@@ -42,14 +42,7 @@ const recalculateDonationTotal = async (donationId, transaction = null) => {
   });
   const total = items.reduce((sum, item) => sum + money(item.totalValue), 0);
 
-  // Subtract returned distribution values
-  const returnedSum = await DonationDistribution.sum('value', {
-    where: { isReturned: true },
-    include: [{ model: DonationItem, attributes: [], where: { donationId } }],
-    transaction,
-  }) || 0;
-
-  const effectiveTotal = money(total - money(returnedSum));
+  const effectiveTotal = money(total);
 
   await Donation.update(
     { totalValue: effectiveTotal },
@@ -403,18 +396,25 @@ exports.addDonationItem = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { id } = req.params;
-    const { type, description, quantity, unitValue, paymentMethod, interval } = req.body;
+    const { type, description, quantity, unitValue, paymentMethod, interval, beneficiaryId, distributionDate } = req.body;
 
     // Validate required fields
-    if (!type || quantity === undefined || unitValue === undefined) {
+    if (!type || quantity === undefined || unitValue === undefined || !beneficiaryId) {
       await t.rollback();
-      return res.status(400).json({ success: false, error: "type, quantity, unitValue required" });
+      return res.status(400).json({ success: false, error: "type, quantity, unitValue, and beneficiaryId are required" });
     }
 
     const donation = await Donation.findByPk(id, { transaction: t });
     if (!donation || donation.status !== "draft") {
       await t.rollback();
       return res.status(400).json({ success: false, error: "Donation not found or not editable" });
+    }
+
+    // Validate beneficiary
+    const beneficiary = await Beneficiary.findByPk(beneficiaryId, { transaction: t });
+    if (!beneficiary) {
+      await t.rollback();
+      return res.status(404).json({ success: false, error: "Beneficiary not found" });
     }
 
     const baseTotal = money(parseFloat(quantity) * parseFloat(unitValue));
@@ -460,6 +460,8 @@ exports.addDonationItem = async (req, res) => {
     const item = await DonationItem.create(
       {
         donationId: id,
+        beneficiaryId,
+        distributionDate: distributionDate || null,
         type,
         description,
         quantity,
@@ -503,7 +505,7 @@ exports.updateDonationItem = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { itemId } = req.params;
-    const { quantity, unitValue, description, paymentMethod } = req.body;
+    const { quantity, unitValue, description, paymentMethod, beneficiaryId, distributionDate } = req.body;
 
     const item = await DonationItem.findByPk(itemId, {
       include: [{ model: Donation, attributes: ["status"] }],
@@ -524,6 +526,9 @@ exports.updateDonationItem = async (req, res) => {
     if (quantity !== undefined) updates.quantity = quantity;
     if (unitValue !== undefined) updates.unitValue = unitValue;
     if (description !== undefined) updates.description = description;
+    if (beneficiaryId !== undefined) updates.beneficiaryId = beneficiaryId;
+    if (distributionDate !== undefined) updates.distributionDate = distributionDate;
+    
     // Allow updating payment method (only meaningful for money items)
     if (paymentMethod !== undefined) {
       updates.paymentMethod = paymentMethod;
@@ -679,10 +684,7 @@ exports.requestChanges = async (req, res) => {
       await t.rollback();
       return res.status(400).json({ success: false, error: 'Comment is required' });
     }
-    if (!['admin', 'finance', 'charity'].includes(req.user.role)) {
-      await t.rollback();
-      return res.status(403).json({ success: false, error: 'Insufficient permissions' });
-    }
+    
     const donation = await Donation.findByPk(id, { transaction: t });
     if (!donation) throw new Error('Donation not found');
     if (donation.status !== 'pending') throw new Error('Donation must be pending');
@@ -717,13 +719,6 @@ exports.approveDonation = async (req, res) => {
   try {
     const { id } = req.params;
     const { comment } = req.body;
-
-    if (!["admin", "finance","charity"].includes(req.user.role)) {
-      await t.rollback();
-      return res
-        .status(403)
-        .json({ success: false, error: "Insufficient permissions" });
-    }
 
     const donation = await Donation.findByPk(id, { transaction: t });
     if (!donation) {
@@ -931,6 +926,9 @@ exports.distributeItem = async (req, res) => {
           });
         }
 
+        // Allow paymentMethod to vary per beneficiary/item if provided
+        const pm = dist.paymentMethod || item.paymentMethod || 'bank';
+
         const value = money(parseFloat(dist.quantity) * parseFloat(item.unitValue));
         const distribution = await DonationDistribution.create(
           {
@@ -939,9 +937,17 @@ exports.distributeItem = async (req, res) => {
             beneficiaryId: dist.beneficiaryId,
             quantity: dist.quantity,
             value,
+            // paymentMethod is currently on DonationItem, but if we need it on DonationDistribution:
+            // pm
           },
           { transaction: t },
         );
+        
+        // If we want to update the item's paymentMethod for this specific beneficiary link (v3)
+        if (item.beneficiaryId === dist.beneficiaryId) {
+            await item.update({ paymentMethod: pm }, { transaction: t });
+        }
+
         createdDistributions.push(distribution);
       }
     }
@@ -968,6 +974,40 @@ exports.distributeItem = async (req, res) => {
   } catch (error) {
     await t.rollback();
     console.error("Distribute item error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+exports.updateDistributionDate = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { itemId } = req.params;
+    const { distributionDate } = req.body;
+
+    const item = await DonationItem.findByPk(itemId, {
+      include: [{ model: Donation, attributes: ['status'] }],
+      transaction: t
+    });
+
+    if (!item) {
+      await t.rollback();
+      return res.status(404).json({ success: false, error: 'Item not found' });
+    }
+
+    if (item.Donation.status === 'distributed') {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Cannot update date for distributed donation' });
+    }
+
+    await item.update({ distributionDate }, { transaction: t });
+
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+    await logDonationAction(item.donationId, employeeId, 'UPDATE_DISTRIBUTION_DATE', { itemId, distributionDate }, t);
+
+    await t.commit();
+    res.json({ success: true, message: 'Distribution date updated', data: item });
+  } catch (error) {
+    await t.rollback();
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -1395,21 +1435,58 @@ exports.returnDistribution = async (req, res) => {
 // ------------------------------------------------------------------
 exports.getDonationStats = async (req, res) => {
   try {
-    const totalDonations = await Donation.count();
+    const { groupId } = req.query;
+    let effectiveGroupId = groupId;
+
+    // Auto-filter for team leaders if not explicitly provided (or even if it is)
+    if (req.user.role === 'charity_teamleader') {
+      const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+      const involvedGroups = await BeneficiaryGroup.findAll({
+        where: {
+          [Op.or]: [
+            { headEmployeeId: employeeId },
+            { viceHeadEmployeeId: employeeId },
+            { members: { [Op.contains]: [employeeId] } }
+          ]
+        },
+        attributes: ['groupId']
+      });
+      const involvedGroupIds = involvedGroups.map(g => g.groupId);
+      
+      if (groupId) {
+        if (!involvedGroupIds.includes(parseInt(groupId))) {
+          effectiveGroupId = -1; // No access to requested group
+        }
+      } else {
+        effectiveGroupId = involvedGroupIds.length ? { [Op.in]: involvedGroupIds } : -1;
+      }
+    }
+
+    const whereDonation = {};
+    if (effectiveGroupId) whereDonation.groupId = effectiveGroupId;
+
+    const totalDonations = await Donation.count({ where: whereDonation });
 
     // Net total value (already subtracts returns, excludes cancelled)
     const totalValue = await Donation.sum('total_value', {
-      where: { status: { [Op.notIn]: ['cancelled'] } }
+      where: { ...whereDonation, status: { [Op.notIn]: ['cancelled'] } }
     }) || 0;
 
     // Total returned value (across all donations)
     const returnedValue = await DonationDistribution.sum('value', {
-      where: { isReturned: true }
+      where: { isReturned: true },
+      include: [{
+        model: DonationItem,
+        include: [{
+          model: Donation,
+          where: whereDonation
+        }]
+      }]
     }) || 0;
 
     // Total value of cancelled donations
     const cancelledValue = await Donation.sum('total_value', {
-      where: { status: 'cancelled' }
+      where: { ...whereDonation, status: 'cancelled' }
     }) || 0;
 
     // Gross distributed value (before returns)
@@ -1417,6 +1494,7 @@ exports.getDonationStats = async (req, res) => {
 
     // Status counts
     const statusCounts = await Donation.findAll({
+      where: whereDonation,
       attributes: [
         'status',
         [sequelize.fn('COUNT', sequelize.col('donation_id')), 'count']
@@ -1427,15 +1505,21 @@ exports.getDonationStats = async (req, res) => {
 
     // Value by type
     const byType = await DonationItem.findAll({
+      include: [{
+        model: Donation,
+        where: whereDonation,
+        attributes: []
+      }],
       attributes: [
         'type',
-        [sequelize.fn('SUM', sequelize.col('total_value')), 'total']
+        [sequelize.fn('SUM', sequelize.col('DonationItem.total_value')), 'total']
       ],
       group: ['type'],
       raw: true
     });
 
     const recentDonations = await Donation.findAll({
+      where: whereDonation,
       limit: 5,
       order: [['created_at', 'DESC']],
       include: [{ model: DonationCompany, attributes: ['name'] }]

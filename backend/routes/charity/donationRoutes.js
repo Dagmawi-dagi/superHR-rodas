@@ -1,76 +1,73 @@
-const express = require("express");
-const router = express.Router();
-const donationController = require("../../controllers/charity/donationController");
-const { authMiddleware } = require("../../middleware/authMiddleware");
-const { uploadMultipleDocuments } = require("../../middleware/uploadMiddleware");
+const express = require('express');
+const router  = express.Router();
+const donationController    = require('../../controllers/charity/donationController');
+const adjustmentController  = require('../../controllers/charity/adjustmentController');
+const { authMiddleware }    = require('../../middleware/authMiddleware');
+const { uploadMultipleDocuments } = require('../../middleware/uploadMiddleware');
 
-router.use(authMiddleware());
+// ── DONATION CRUD ─────────────────────────────────────────────────────────────
+router.post('/',    authMiddleware(['admin', 'charity_teamleader']), donationController.createDonation);   // head/vice creates
+router.get('/',     authMiddleware(['admin', 'charity_admin', 'charity_teamleader']),     donationController.getAllDonations);
+router.get('/:id',  authMiddleware(['admin', 'charity_admin', 'charity_teamleader']),     donationController.getDonationById);
+router.put('/:id',  authMiddleware(['admin', 'charity_teamleader']), donationController.updateDonation);
+router.delete('/:id', authMiddleware(['admin', 'charity_admin']), donationController.cancelDonation);
 
-// ------------------------------------------------------------------
-// DONATION CRUD
-// ------------------------------------------------------------------
-router.post("/", donationController.createDonation);
-router.get("/", donationController.getAllDonations);
-router.get("/:id", donationController.getDonationById);
-router.put("/:id", donationController.updateDonation);
-router.delete("/:id", donationController.cancelDonation);
-router.post('/:id/request-changes', donationController.requestChanges);
-// Evidence upload for a distribution
-router.post('/items/:itemId/evidences',  (req, res, next) => { req.params.type = 'charityEvidences'; next(); },uploadMultipleDocuments,donationController.uploadEvidence);
-router.post('/items/:itemId/distribute-single', donationController.markItemDistributed);
-// Distribute for a specific interval (recurring items)
-router.post("/items/:itemId/distribute/:intervalId", donationController.distributeItemForInterval);
-router.post(
-  "/items/:itemId/intervals/:intervalId/evidences",
-  (req, res, next) => {
-    req.params.type = "charityEvidences";
-    next();
-  },
+// ── DONATION ITEMS ────────────────────────────────────────────────────────────
+router.post('/:id/items',         authMiddleware(['admin', 'charity_teamleader']), donationController.addDonationItem);
+router.put('/items/:itemId',      authMiddleware(['admin', 'charity_teamleader']), donationController.updateDonationItem);
+router.delete('/items/:itemId',   authMiddleware(['admin', 'charity_admin']), donationController.deleteDonationItem);
+router.delete('/items/:itemId/distributions', authMiddleware(['admin', 'charity_admin']), donationController.deleteItemDistributions);
+
+// ── DISTRIBUTION DATE EDIT (charity_admin only) ───────────────────────────────
+router.put('/items/:itemId/distribution-date', authMiddleware(['admin', 'charity_admin']), donationController.updateDistributionDate);
+
+// ── STATUS TRANSITIONS ────────────────────────────────────────────────────────
+router.post('/:id/submit',          authMiddleware(['admin', 'charity_teamleader']), donationController.submitForApproval);
+router.post('/:id/approve',         authMiddleware(['admin', 'charity_admin']),      donationController.approveDonation);
+router.post('/:id/request-changes', authMiddleware(['admin', 'charity_admin']),      donationController.requestChanges);
+router.post('/:id/distribute',      authMiddleware(['admin', 'charity_admin']),      donationController.distributeDonation);
+
+// ── DISTRIBUTION MANAGEMENT ───────────────────────────────────────────────────
+router.post('/items/:itemId/distribute',           authMiddleware(['admin', 'charity_admin']), donationController.distributeItem);
+router.post('/items/:itemId/distribute-single',    authMiddleware(['admin', 'charity_admin']), donationController.markItemDistributed);
+router.post('/items/:itemId/distribute/:intervalId', authMiddleware(['admin', 'charity_admin']), donationController.distributeItemForInterval);
+router.get('/distributions',                       authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getDistributions);
+router.get('/distributions/:distributionId',       authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getDistributionById);
+router.post('/distributions/:distributionId/return',   authMiddleware(['admin', 'charity_admin']), donationController.returnDistribution);
+router.post('/distributions/:distributionId/reassign', authMiddleware(['admin', 'charity_admin']), donationController.reassignDistribution);
+
+// ── ADJUSTMENT REQUESTS ───────────────────────────────────────────────────────
+router.post('/items/:itemId/adjustments',        authMiddleware(['admin', 'charity_teamleader']), adjustmentController.requestAdjustment);
+router.get('/items/:itemId/adjustments',         authMiddleware(['admin', 'charity_admin', 'charity_teamleader']),     adjustmentController.getItemAdjustments);
+router.get('/adjustments/pending',               authMiddleware(['admin', 'charity_admin']),      adjustmentController.getAllPendingAdjustments);
+router.put('/adjustments/:id/review',            authMiddleware(['admin', 'charity_admin']),      adjustmentController.reviewAdjustment);
+
+// ── EVIDENCE ──────────────────────────────────────────────────────────────────
+router.post('/items/:itemId/evidences',
+  authMiddleware(['admin', 'charity_admin']),
+  (req, res, next) => { req.params.type = 'charityEvidences'; next(); },
+  uploadMultipleDocuments,
+  donationController.uploadEvidence
+);
+router.post('/items/:itemId/intervals/:intervalId/evidences',
+  authMiddleware(['admin', 'charity_admin']),
+  (req, res, next) => { req.params.type = 'charityEvidences'; next(); },
   uploadMultipleDocuments,
   donationController.uploadIntervalEvidence
 );
-router.put('/items/:itemId/interval', donationController.updateDonationItemInterval);
-// ------------------------------------------------------------------
-// DONATION ITEMS
-// ------------------------------------------------------------------
-router.post("/:id/items", donationController.addDonationItem);
-router.put("/items/:itemId", donationController.updateDonationItem);
-router.delete("/items/:itemId", donationController.deleteDonationItem);
-router.delete("/items/:itemId/distributions", donationController.deleteItemDistributions);
-// ------------------------------------------------------------------
-// STATUS TRANSITIONS
-// ------------------------------------------------------------------
-router.post("/:id/submit", donationController.submitForApproval);
-router.post("/:id/approve", donationController.approveDonation);
-router.post("/:id/distribute", donationController.distributeDonation);
+router.put('/items/:itemId/interval', authMiddleware(['admin', 'charity_admin']), donationController.updateDonationItemInterval);
 
-// ------------------------------------------------------------------
-// DISTRIBUTION MANAGEMENT
-// ------------------------------------------------------------------
-router.post("/items/:itemId/distribute", donationController.distributeItem);
-router.get("/distributions", donationController.getDistributions);
-router.get(
-  "/distributions/:distributionId",
-  donationController.getDistributionById,
-);
+// ── APPROVAL & LOGS ────────────────────────────────────────────────────────────
+router.get('/:id/approvals', authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getApprovalHistory);
+router.get('/:id/logs',      authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getDonationLogs);
 
-// ------------------------------------------------------------------
-// APPROVAL & LOGS
-// ------------------------------------------------------------------
-router.get("/:id/approvals", donationController.getApprovalHistory);
-router.get("/:id/logs", donationController.getDonationLogs);
+// ── DEDUCTIONS (legacy — kept for backward compat) ────────────────────────────
+router.post('/items/:itemId/deductions', authMiddleware(['admin', 'charity_admin']), donationController.addDeduction);
+router.get('/items/:itemId/deductions',  authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getItemDeductions);
 
-// ------------------------------------------------------------------
-// STATS / REPORTS
-// ------------------------------------------------------------------
-router.get("/stats/summary", donationController.getDonationStats);
-router.get("/stats/by-campaign", donationController.getDonationsByCampaign);
-router.get("/stats/by-company", donationController.getDonationsByCompany);
-// Deductions
-router.post('/items/:itemId/deductions', donationController.addDeduction);
-router.get('/items/:itemId/deductions', donationController.getItemDeductions);
-// Returns
-router.post('/distributions/:distributionId/return', donationController.returnDistribution);
-router.post('/distributions/:distributionId/reassign', donationController.reassignDistribution);
+// ── STATS ──────────────────────────────────────────────────────────────────────
+router.get('/stats/summary',     authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getDonationStats);
+router.get('/stats/by-campaign', authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getDonationsByCampaign);
+router.get('/stats/by-company',  authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getDonationsByCompany);
 
 module.exports = router;

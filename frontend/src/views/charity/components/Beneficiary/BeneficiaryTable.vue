@@ -34,13 +34,7 @@
                 <circle cx="12" cy="12" r="3" />
               </svg>
             </button>
-            <!-- <button class="action-btn edit" @click="$router.push(`/charity/beneficiaries/${ben.BeneficiaryId}/edit`)" title="Edit Beneficiary">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
-              </svg>
-            </button>-->
-             <button class="action-btn transfer" @click="$emit('transfer', ben)" title="Transfer Group">
+            <button v-if="canManage" class="action-btn transfer" @click="$emit('transfer', ben)" title="Transfer Group">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="17 1 21 5 17 9" />
                 <path d="M3 11V9a4 4 0 0 1 4-4h14" />
@@ -48,7 +42,7 @@
                 <path d="M21 13v2a4 4 0 0 1-4 4H3" />
               </svg>
             </button>
-            <button class="action-btn delete" @click="$emit('delete', ben)" title="Delete">
+            <button v-if="canManage" class="action-btn delete" @click="$emit('delete', ben)" title="Delete">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
               </svg>
@@ -97,7 +91,8 @@
 <script setup>
 defineProps({
   beneficiaries: { type: Array, default: () => [] },
-  pagination: { type: Object, default: () => ({ currentPage: 1, totalPages: 1 }) }
+  pagination: { type: Object, default: () => ({ currentPage: 1, totalPages: 1 }) },
+  canManage: { type: Boolean, default: true }
 });
 
 defineEmits(['view', 'edit', 'transfer', 'delete', 'go-to-page', 'clear-filters']);

@@ -1,18 +1,19 @@
 'use strict';
 
 /**
- * Migration 18 — Charity Module (consolidated)
+ * Migration 18 — Charity Module v3 (consolidated)
  *
- * Replaces the old migrations 18, 19, and 20 in a single file:
- *   - All 14 charity tables
- *   - Tracking columns (created_by on companies/beneficiaries; created_by/approved_by/distributed_by on donations)
- *   - Campaign status ENUM: 'inactive' | 'active' | 'completed' | 'cancelled'  (no 'planned')
+ * Roles: charity_admin | charity_teamleader
  *
- * Delete migrations 19 and 20 from your repo — this file supersedes them.
+ * Changes from previous version:
+ *  - beneficiary_groups: + head_employee_id, vice_head_employee_id, members (JSONB)
+ *  - donations:          + group_id (which group created this donation)
+ *  - donation_items:     + beneficiary_id (item is per-beneficiary), distribution_date, payment_date
+ *  - NEW table: donation_item_adjustment_requests
  */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    const transaction = await queryInterface.sequelize.transaction();
+    const t = await queryInterface.sequelize.transaction();
     try {
 
       // 1. Donation Companies
@@ -26,7 +27,7 @@ module.exports = {
         created_at:   { type: Sequelize.DATE, allowNull: false },
         updated_at:   { type: Sequelize.DATE, allowNull: false },
         deleted_at:   { type: Sequelize.DATE },
-      }, { transaction });
+      }, { transaction: t });
 
       // 2. Campaigns
       await queryInterface.createTable('campaigns', {
@@ -45,7 +46,7 @@ module.exports = {
         created_at:         { type: Sequelize.DATE, allowNull: false },
         updated_at:         { type: Sequelize.DATE, allowNull: false },
         deleted_at:         { type: Sequelize.DATE },
-      }, { transaction });
+      }, { transaction: t });
 
       // 3. Beneficiary Locations
       await queryInterface.createTable('beneficiary_locations', {
@@ -54,19 +55,24 @@ module.exports = {
         city:        Sequelize.STRING(100),
         woreda:      Sequelize.STRING(100),
         description: Sequelize.STRING(255),
-      }, { transaction });
+      }, { transaction: t });
 
-      // 4. Beneficiary Groups
+      // 4. Beneficiary Groups (v3: head, vice, members)
       await queryInterface.createTable('beneficiary_groups', {
-        group_id:            { type: Sequelize.INTEGER, autoIncrement: true, primaryKey: true },
-        name:                { type: Sequelize.STRING(150), allowNull: false },
-        description:         Sequelize.TEXT,
-        manager_employee_id: { type: Sequelize.INTEGER, references: { model: 'employees', key: 'employee_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
-        is_active:           { type: Sequelize.BOOLEAN, defaultValue: true },
-        created_at:          { type: Sequelize.DATE, allowNull: false },
-        updated_at:          { type: Sequelize.DATE, allowNull: false },
-        deleted_at:          { type: Sequelize.DATE },
-      }, { transaction });
+        group_id:              { type: Sequelize.INTEGER, autoIncrement: true, primaryKey: true },
+        name:                  { type: Sequelize.STRING(150), allowNull: false },
+        description:           Sequelize.TEXT,
+        // v3 NEW ──────────────────────────────────────────────────────────────
+        head_employee_id:      { type: Sequelize.INTEGER, references: { model: 'employees', key: 'employee_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
+        vice_head_employee_id: { type: Sequelize.INTEGER, references: { model: 'employees', key: 'employee_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
+        members:               { type: Sequelize.JSONB, defaultValue: [] },
+        // legacy (kept)
+        manager_employee_id:   { type: Sequelize.INTEGER, references: { model: 'employees', key: 'employee_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
+        is_active:             { type: Sequelize.BOOLEAN, defaultValue: true },
+        created_at:            { type: Sequelize.DATE, allowNull: false },
+        updated_at:            { type: Sequelize.DATE, allowNull: false },
+        deleted_at:            { type: Sequelize.DATE },
+      }, { transaction: t });
 
       // 5. Beneficiaries
       await queryInterface.createTable('beneficiaries', {
@@ -80,7 +86,7 @@ module.exports = {
         created_at:     { type: Sequelize.DATE, allowNull: false },
         updated_at:     { type: Sequelize.DATE, allowNull: false },
         deleted_at:     { type: Sequelize.DATE },
-      }, { transaction });
+      }, { transaction: t });
 
       // 6. Beneficiary Transfers
       await queryInterface.createTable('beneficiary_transfers', {
@@ -91,13 +97,14 @@ module.exports = {
         reason:         { type: Sequelize.TEXT, allowNull: false },
         transferred_by: { type: Sequelize.INTEGER, references: { model: 'employees', key: 'employee_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
         created_at:     { type: Sequelize.DATE, allowNull: false },
-      }, { transaction });
+      }, { transaction: t });
 
-      // 7. Donations
+      // 7. Donations (v3: + group_id)
       await queryInterface.createTable('donations', {
         donation_id:    { type: Sequelize.INTEGER, autoIncrement: true, primaryKey: true },
         company_id:     { type: Sequelize.INTEGER, references: { model: 'donation_companies', key: 'company_id' }, onUpdate: 'CASCADE', onDelete: 'RESTRICT' },
         campaign_id:    { type: Sequelize.INTEGER, references: { model: 'campaigns', key: 'campaign_id' }, onUpdate: 'CASCADE', onDelete: 'RESTRICT' },
+        group_id:       { type: Sequelize.INTEGER, references: { model: 'beneficiary_groups', key: 'group_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
         donation_date:  Sequelize.DATEONLY,
         total_value:    { type: Sequelize.DECIMAL(15, 2), defaultValue: 0 },
         status:         { type: Sequelize.ENUM('draft', 'pending', 'approved', 'distributed', 'cancelled'), defaultValue: 'draft' },
@@ -108,12 +115,17 @@ module.exports = {
         created_at:     { type: Sequelize.DATE, allowNull: false },
         updated_at:     { type: Sequelize.DATE, allowNull: false },
         deleted_at:     { type: Sequelize.DATE },
-      }, { transaction });
+      }, { transaction: t });
 
-      // 8. Donation Items
+      // 8. Donation Items (v3: + beneficiary_id, distribution_date, payment_date)
       await queryInterface.createTable('donation_items', {
         donation_item_id:     { type: Sequelize.INTEGER, autoIncrement: true, primaryKey: true },
         donation_id:          { type: Sequelize.INTEGER, references: { model: 'donations', key: 'donation_id' }, onUpdate: 'CASCADE', onDelete: 'CASCADE' },
+        // v3 NEW ──────────────────────────────────────────────────────────────
+        beneficiary_id:       { type: Sequelize.INTEGER, allowNull: false, references: { model: 'beneficiaries', key: 'beneficiary_id' }, onUpdate: 'CASCADE', onDelete: 'RESTRICT' },
+        distribution_date:    Sequelize.DATEONLY,  // scheduled — editable by charity_admin
+        payment_date:         Sequelize.DATEONLY,  // actual    — set on distribution
+        // existing ─────────────────────────────────────────────────────────────
         type:                 { type: Sequelize.ENUM('money', 'goods', 'service'), allowNull: false },
         description:          Sequelize.STRING(255),
         quantity:             { type: Sequelize.DECIMAL(10, 2) },
@@ -126,7 +138,7 @@ module.exports = {
         created_at:           { type: Sequelize.DATE, allowNull: false },
         updated_at:           { type: Sequelize.DATE, allowNull: false },
         deleted_at:           { type: Sequelize.DATE },
-      }, { transaction });
+      }, { transaction: t });
 
       // 9. Donation Item Intervals
       await queryInterface.createTable('donation_item_intervals', {
@@ -139,7 +151,7 @@ module.exports = {
         status:           { type: Sequelize.ENUM('pending', 'active', 'distributed', 'completed'), defaultValue: 'pending' },
         created_at:       { type: Sequelize.DATE, allowNull: false },
         updated_at:       { type: Sequelize.DATE, allowNull: false },
-      }, { transaction });
+      }, { transaction: t });
 
       // 10. Donation Distributions
       await queryInterface.createTable('donation_distributions', {
@@ -155,7 +167,7 @@ module.exports = {
         created_at:       { type: Sequelize.DATE, allowNull: false },
         updated_at:       { type: Sequelize.DATE, allowNull: false },
         deleted_at:       { type: Sequelize.DATE },
-      }, { transaction });
+      }, { transaction: t });
 
       // 11. Donation Distribution Evidences
       await queryInterface.createTable('donation_distribution_evidences', {
@@ -167,7 +179,7 @@ module.exports = {
         file_type:        Sequelize.STRING(50),
         uploaded_by:      { type: Sequelize.INTEGER, references: { model: 'employees', key: 'employee_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
         created_at:       { type: Sequelize.DATE, allowNull: false },
-      }, { transaction });
+      }, { transaction: t });
 
       // 12. Donation Approvals
       await queryInterface.createTable('donation_approvals', {
@@ -177,7 +189,7 @@ module.exports = {
         status:      { type: Sequelize.ENUM('pending', 'approved', 'rejected'), defaultValue: 'pending' },
         comment:     Sequelize.TEXT,
         created_at:  { type: Sequelize.DATE, allowNull: false },
-      }, { transaction });
+      }, { transaction: t });
 
       // 13. Donation Logs
       await queryInterface.createTable('donation_logs', {
@@ -187,7 +199,7 @@ module.exports = {
         action:      Sequelize.STRING(100),
         metadata:    { type: Sequelize.JSONB, defaultValue: {} },
         created_at:  { type: Sequelize.DATE, allowNull: false },
-      }, { transaction });
+      }, { transaction: t });
 
       // 14. Donation Deductions
       await queryInterface.createTable('donation_deductions', {
@@ -202,34 +214,55 @@ module.exports = {
         deduction_date:               { type: Sequelize.DATEONLY, defaultValue: Sequelize.NOW },
         created_by:                   { type: Sequelize.INTEGER, references: { model: 'employees', key: 'employee_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
         created_at:                   { type: Sequelize.DATE, allowNull: false },
-      }, { transaction });
+      }, { transaction: t });
 
-      await transaction.commit();
+      // 15. Donation Item Adjustment Requests (NEW)
+      await queryInterface.createTable('donation_item_adjustment_requests', {
+        adjustment_id:     { type: Sequelize.INTEGER, autoIncrement: true, primaryKey: true },
+        donation_item_id:  { type: Sequelize.INTEGER, allowNull: false, references: { model: 'donation_items', key: 'donation_item_id' }, onUpdate: 'CASCADE', onDelete: 'CASCADE' },
+        beneficiary_id:    { type: Sequelize.INTEGER, allowNull: false, references: { model: 'beneficiaries', key: 'beneficiary_id' }, onUpdate: 'CASCADE', onDelete: 'RESTRICT' },
+        type:              { type: Sequelize.ENUM('deduct', 'increase', 'reassign', 'return'), allowNull: false },
+        amount:            { type: Sequelize.DECIMAL(15, 2), allowNull: false },
+        reason:            { type: Sequelize.TEXT, allowNull: false },
+        to_beneficiary_id: { type: Sequelize.INTEGER, references: { model: 'beneficiaries', key: 'beneficiary_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
+        status:            { type: Sequelize.ENUM('pending', 'approved', 'rejected'), defaultValue: 'pending' },
+        requested_by:      { type: Sequelize.INTEGER, allowNull: false, references: { model: 'employees', key: 'employee_id' }, onUpdate: 'CASCADE', onDelete: 'RESTRICT' },
+        reviewed_by:       { type: Sequelize.INTEGER, references: { model: 'employees', key: 'employee_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
+        admin_comment:     Sequelize.TEXT,
+        created_at:        { type: Sequelize.DATE, allowNull: false },
+        updated_at:        { type: Sequelize.DATE, allowNull: false },
+      }, { transaction: t });
+
+      await t.commit();
     } catch (err) {
-      await transaction.rollback();
+      await t.rollback();
       throw err;
     }
   },
 
   async down(queryInterface, Sequelize) {
-    const transaction = await queryInterface.sequelize.transaction();
+    const t = await queryInterface.sequelize.transaction();
     try {
-      await queryInterface.dropTable('donation_deductions',             { transaction });
-      await queryInterface.dropTable('donation_logs',                   { transaction });
-      await queryInterface.dropTable('donation_approvals',              { transaction });
-      await queryInterface.dropTable('donation_distribution_evidences', { transaction });
-      await queryInterface.dropTable('donation_distributions',          { transaction });
-      await queryInterface.dropTable('donation_item_intervals',         { transaction });
-      await queryInterface.dropTable('donation_items',                  { transaction });
-      await queryInterface.dropTable('donations',                       { transaction });
-      await queryInterface.dropTable('beneficiary_transfers',           { transaction });
-      await queryInterface.dropTable('beneficiaries',                   { transaction });
-      await queryInterface.dropTable('beneficiary_groups',              { transaction });
-      await queryInterface.dropTable('beneficiary_locations',           { transaction });
-      await queryInterface.dropTable('campaigns',                       { transaction });
-      await queryInterface.dropTable('donation_companies',              { transaction });
+      const drops = [
+        'donation_item_adjustment_requests',
+        'donation_deductions',
+        'donation_logs',
+        'donation_approvals',
+        'donation_distribution_evidences',
+        'donation_distributions',
+        'donation_item_intervals',
+        'donation_items',
+        'donations',
+        'beneficiary_transfers',
+        'beneficiaries',
+        'beneficiary_groups',
+        'beneficiary_locations',
+        'campaigns',
+        'donation_companies',
+      ];
+      for (const tbl of drops) await queryInterface.dropTable(tbl, { transaction: t });
 
-      for (const t of [
+      const enums = [
         'enum_donation_companies_type',
         'enum_campaigns_status',
         'enum_beneficiaries_type',
@@ -240,13 +273,16 @@ module.exports = {
         'enum_donation_item_intervals_interval_type',
         'enum_donation_item_intervals_status',
         'enum_donation_approvals_status',
-      ]) {
-        await queryInterface.sequelize.query(`DROP TYPE IF EXISTS "${t}";`, { transaction });
+        'enum_donation_item_adjustment_requests_type',
+        'enum_donation_item_adjustment_requests_status',
+      ];
+      for (const e of enums) {
+        await queryInterface.sequelize.query(`DROP TYPE IF EXISTS "${e}";`, { transaction: t });
       }
-      await transaction.commit();
+      await t.commit();
     } catch (err) {
-      await transaction.rollback();
+      await t.rollback();
       throw err;
     }
   }
-}
+};

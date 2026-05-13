@@ -46,6 +46,30 @@ exports.getAllBeneficiaries = async (req, res) => {
       where.name = { [Op.like]: `%${search}%` };
     }
 
+    // charity_teamleader: can only see beneficiaries in their groups
+    if (req.user.role === 'charity_teamleader') {
+      const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+      const involvedGroups = await BeneficiaryGroup.findAll({
+        where: {
+          [Op.or]: [
+            { headEmployeeId: employeeId },
+            { viceHeadEmployeeId: employeeId },
+            { members: { [Op.contains]: [employeeId] } }
+          ]
+        },
+        attributes: ['groupId']
+      });
+      const involvedGroupIds = involvedGroups.map(g => g.groupId);
+
+      if (where.groupId) {
+        if (!involvedGroupIds.includes(parseInt(where.groupId))) {
+          where.groupId = -1; // Force no results if they requested a group they are not in
+        }
+      } else {
+        where.groupId = { [Op.in]: involvedGroupIds };
+      }
+    }
+
     const allowedSortFields = ['name', 'type', 'created_at'];
     const order = buildSortingOptions(sortBy, sortOrder, allowedSortFields);
 

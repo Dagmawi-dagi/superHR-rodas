@@ -21,7 +21,7 @@
     <select v-model="localFilters.groupId" class="filter-select" @change="emitAll">
       <option value="">All Groups</option>
       <option v-for="group in groups" :key="group.groupId" :value="group.groupId">
-          {{ `${group.manager.firstName} ${group.manager.lastName}  <${group.name}>`}}
+          {{ `${group?.manager?.firstName} ${group?.manager?.lastName}  <${group?.name}>`}}
       </option>
     </select>
     <select v-model="localFilters.locationId" class="filter-select" @change="emitAll">

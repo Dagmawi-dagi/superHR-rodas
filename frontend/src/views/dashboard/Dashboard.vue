@@ -18,7 +18,8 @@ const dashboardComponents = {
   finance: defineAsyncComponent(() => import('./components/FinanceDashboard.vue')),
   employee: defineAsyncComponent(() => import('./components/EmployeeDashboard.vue')),
   attendance: defineAsyncComponent(() => import('./components/AttendanceDashboard.vue')),
-  charity: defineAsyncComponent(() => import('./components/CharityDashboard.vue'))
+  charity_admin: defineAsyncComponent(() => import('./components/CharityDashboard.vue')),
+  charity_teamleader: defineAsyncComponent(() => import('./components/CharityDashboard.vue'))
 }
 
 // Get the current dashboard component based on user role
