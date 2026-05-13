@@ -121,533 +121,147 @@
       </transition>
     </div>
 
-    <!-- Items Section -->
+    <!-- Beneficiaries & Items Section -->
     <div class="section-card">
       <div class="section-header">
-        <h3>Donation Items</h3>
-        <button v-if="donation.status === 'draft'" @click="openAddItemModal" class="btn-secondary">+ Add Item</button>
+        <h3>Beneficiaries & Items</h3>
+        <button v-if="donation.status === 'draft'" @click="openAddItemModal()" class="btn-secondary">+ Add Item</button>
       </div>
 
-      <table class="items-table" v-if="items.length">
+      <table class="items-table" v-if="beneficiariesWithItems.length">
         <thead>
           <tr>
+            <th>Beneficiary</th>
             <th>Type</th>
-            <th>Description</th>
-            <th>Qty/Amount</th>
-            <th>Unit Value</th>
-            <th>Total</th>
-            <th>Payment</th>
-            <th>Recurring</th>
-            <th>Recurring Data</th>
+            <th>Location</th>
+            <th>Items Count</th>
+            <th>Total Value</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          <template v-for="item in items" :key="item.donationItemId">
+          <template v-for="ben in beneficiariesWithItems" :key="ben.beneficiaryId">
             <tr>
-              <td><span :class="['type-badge', `type-${item.type}`]">{{ getTypeLabel(item.type) }}</span></td>
-              <td>{{ item.description || '-' }}</td>
               <td>
-                <span v-if="item.type === 'money'">{{ formatCurrency(item.totalValue) }}</span>
-                <span v-else>{{ item.quantity }}</span>
-              </td>
-              <td>
-                <span v-if="item.type === 'money'">-</span>
-                <span v-else>{{ formatCurrency(item.unitValue) }}</span>
-              </td>
-              <td class="total-cell">{{ formatCurrency(item.totalValue) }}</td>
-              <td>{{ item.type === 'money' ? (item.paymentMethod || 'bank') : '-' }}</td>
-              
-              <!-- Recurring? -->
-              <td>
-                <div v-if="item.isRecurring" style="text-transform: capitalize;">
-                  ✓ {{ item.DonationItemIntervals?.length }} {{ item.DonationItemIntervals?.[0]?.intervalType?.replace('ly', 's') }}
+                <div class="col-name" style="display: flex; align-items: center; gap: 8px;">
+                  <div class="ben-avatar" style="width: 24px; height: 24px; font-size: 11px; display: flex; align-items: center; justify-content: center; background: #e2e8f0; border-radius: 50%;">{{ ben.name.charAt(0) }}</div>
+                  <span class="ben-name" style="font-weight: 600;">{{ ben.name }}</span>
                 </div>
-                <span v-else>-</span>
               </td>
-              <!-- Recurring Data -->
-              <td style="font-size: 11px">
-                <div v-if="item.isRecurring && item.DonationItemIntervals?.length">
-                  {{ formatDate(item.DonationItemIntervals[0].startDate) }} - {{ formatDate(item.DonationItemIntervals[item.DonationItemIntervals.length - 1].endDate) }}
-                </div>
-                <span v-else>-</span>
-              </td>
-
+              <td><span :class="['type-badge', ben.type]">{{ ben.type }}</span></td>
+              <td>{{ ben.Location?.city || '-' }}</td>
+              <td>{{ ben.items.length }}</td>
+              <td class="total-cell">{{ formatCurrency(ben.totalValue) }}</td>
               <td class="actions-cell">
-                <!-- Upload Evidence (only for non-recurring or at item level) -->
-                <button
-                  v-if="donation?.status === 'approved' && !item.isRecurring"
-                  @click="openEvidenceModalForItem(item)"
-                  class="action-btn evidence"
-                  title="Upload Evidence"
-                >
+                <button class="action-btn toggle-dist" @click="toggleBeneficiaryItems(ben.beneficiaryId)" title="Donation Items">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                </button>
-                
-                <!-- Evidence warning (exclamation mark) - Always show if missing (non-recurring only) -->
-                <span v-if="!item.isRecurring && !item.DonationDistributionEvidences?.length && item.status !== 'distributed' && donation.status === 'approved'"  
-                      class="evidence-warning" 
-                      title="Evidence required">
-                  ⚠️  
-                </span>
-
-                <!-- Mark Item Distributed (only for non-recurring) -->
-                <button
-                  v-if="donation?.status === 'approved' && item.status !== 'distributed' && !item.isRecurring"
-                  @click="markItemAsDistributed(item)"
-                  class="action-btn distribute-item"
-                  :title="(!item.DonationDistributionEvidences?.length) ? 'Upload evidence first' : 'Mark Item Distributed'"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-2.25-1.313M21 7.5v2.25m0-2.25-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3 2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75 2.25-1.313M12 21.75V19.5m0 2.25-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
-                  </svg>
-                </button>
-                <span v-if="item.status === 'distributed'" class="distributed-badge" title="Distributed">✓</span>
-
-                <!-- Edit item (draft only) -->
-                <button v-if="donation?.status === 'draft'" @click="openEditItemModal(item)" class="action-btn edit" title="Edit">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
-                  </svg>
-                </button>
-
-                <!-- Delete item (draft only) -->
-                <button v-if="donation?.status === 'draft'" @click="deleteItem(item)" class="action-btn delete" title="Delete">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  </svg>
-                </button>
-
-                <!-- Toggle distribution view -->
-                <button v-if="!item.isRecurring" class="action-btn toggle-dist" @click="toggleDistributions(item.donationItemId)" title="Show distribution">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M9 18l6-6-6-6" v-if="!expandedItems.includes(item.donationItemId)" />
+                    <path d="M20 7h-9m9 4h-9m9 4h-9M4 7h2m-2 4h2m-2 4h2" v-if="!expandedBeneficiaries.includes(ben.beneficiaryId)" />
                     <path d="M6 9l6 6 6-6" v-else />
                   </svg>
                 </button>
-
-                <!-- Toggle intervals view (only for recurring items) -->
-                <button v-if="item.isRecurring" class="action-btn toggle-interval" @click="toggleIntervalView(item.donationItemId)" title="View Intervals">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M9 18l6-6-6-6" v-if="!expandedIntervals.includes(item.donationItemId)" />
-                    <path d="M6 9l6 6 6-6" v-else />
-                  </svg>
+                <button v-if="donation.status === 'draft'" @click="openAddItemModal(ben.beneficiaryId)" class="action-btn edit" title="Add Item">
+                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                     <line x1="12" y1="5" x2="12" y2="19"></line>
+                     <line x1="5" y1="12" x2="19" y2="12"></line>
+                   </svg>
                 </button>
-
-                <!-- Evidence display (non-recurring only) -->
-                <div v-if="!item.isRecurring && item.DonationDistributionEvidences?.length" class="evidence-container">
-                  <button @click="toggleEvidence(item.donationItemId)" class="action-btn evidence" title="View Evidence">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-                    </svg>
-                  </button>
-                  <div v-if="expandedEvidence.includes(item.donationItemId)" class="evidence-list">
-                    <a
-                      v-for="ev in item.DonationDistributionEvidences"
-                      :key="ev.evidenceId"
-                      :href="getFileUrl(ev.fileUrl)"
-                      target="_blank"
-                      class="evidence-item"
-                    >
-                      {{ ev.fileName }}
-                    </a>
-                  </div>
-                </div>
               </td>
-
             </tr>
-            <!-- Distribution details (expandable) -->
-            <tr v-if="expandedItems.includes(item.donationItemId)">
-              <td colspan="11" class="dist-detail-cell">
+            <!-- Items for this beneficiary (expandable) -->
+            <tr v-if="expandedBeneficiaries.includes(ben.beneficiaryId)">
+              <td colspan="6" class="dist-detail-cell">
                 <div class="dist-detail">
                   <div class="dist-header">
-                    <h4>Assigned Beneficiaries</h4>
-                    <div class="view-toggle">
-                      <button
-                        :class="['toggle-btn', { active: (distViewMode[item.donationItemId] || 'individual') === 'individual' }]"
-                        @click="toggleDistView(item.donationItemId, 'individual')">
-                        Individual
-                      </button>
-                      <button
-                        :class="['toggle-btn', { active: (distViewMode[item.donationItemId] || 'individual') === 'group' }]"
-                        @click="toggleDistView(item.donationItemId, 'group')">
-                        By Group
-                      </button>
-                    </div>
+                    <h4 style="margin: 0; font-size: 14px;">Donation Items for {{ ben.name }}</h4>
+                    <button v-if="donation.status === 'draft'" @click="openAddItemModal(ben.beneficiaryId)" class="btn-sm distribute">+ Add Item</button>
                   </div>
-
-                  <!-- Individual view -->
-                  <div v-if="(distViewMode[item.donationItemId] || 'individual') === 'individual'">
-                    <div v-if="summaryDistributions(item).length">
-                      <table class="mini-table">
+                  <div v-if="ben.items.length" style="margin-top: 12px;">
+                     <table class="mini-table">
                         <thead>
                           <tr>
-                            <th>Beneficiary</th>
-                            <th>{{ item.type === 'money' ? 'Amount' : 'Quantity' }}</th>
-                            <th>Value</th>
-                            <th>Returned</th>
-                            <th>Reassigned</th>
-                            <th>Deducted</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                            <th>Qty/Amount</th>
+                            <th>Total</th>
+                            <th>Recurring</th>
+                            <th>Status</th>
                             <th>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          <tr v-for="dist in summaryDistributions(item)" :key="dist.distributionId">
-                            <td>{{ dist.Beneficiary?.name || 'Unknown' }} ({{ dist.Beneficiary?.type }})</td>
-                            <td>{{ item.type === 'money' ? formatCurrency(dist.value) : dist.quantity }}</td>
-                            <td>{{ formatCurrency(dist.value) }}</td>
+                          <tr v-for="item in ben.items" :key="item.donationItemId">
+                            <td><span :class="['type-badge', `type-${item.type}`]">{{ getTypeLabel(item.type) }}</span></td>
+                            <td>{{ item.description || '-' }}</td>
                             <td>
-                              <div v-if="dist.isReturned" class="returned tooltip-container">
-                                Yes
-                                <div class="tooltip-content">
-                                  <strong>Reason:</strong><br/>
-                                  {{ dist.returnReason || 'No reason provided' }}
-                                </div>
+                              <span v-if="item.type === 'money'">{{ formatCurrency(item.totalValue) }}</span>
+                              <span v-else>{{ item.quantity }}</span>
+                            </td>
+                            <td>{{ formatCurrency(item.totalValue) }}</td>
+                            <td>
+                              <div v-if="item.isRecurring" style="text-transform: capitalize;">
+                                ✓ {{ item.DonationItemIntervals?.length }} {{ item.DonationItemIntervals?.[0]?.intervalType?.replace('ly', 's') }}
                               </div>
-                              <span v-else class="active-dist">No</span>
+                              <span v-else>No</span>
                             </td>
-                            <td>
-                                <div v-if="getReassignedHistory(item, dist.distributionId).length" class="history-list">
-                                  <div v-for="h in getReassignedHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item tooltip-container">
-                                    <span v-if="h.fromBeneficiaryId === dist.beneficiaryId" class="hist-out">
-                                      <template v-if="item.type === 'money'">
-                                        -{{ formatCurrency(h.amount) }}
-                                        {{ h.reassignedTo ? `→ ${h.reassignedTo.name}` : '' }}
-                                      </template>
-                                      <template v-else>
-                                        -{{ (h.amount / (item.unitValue || 1)).toFixed(2) }} ({{ formatCurrency(h.amount) }})
-                                        {{ h.reassignedTo ? `→ ${h.reassignedTo.name}` : '' }}
-                                      </template>
-                                    </span>
-                                    <span v-else class="hist-in">
-                                      <template v-if="item.type === 'money'">
-                                        +{{ formatCurrency(h.amount) }}
-                                        from {{ h.fromBeneficiary?.name || 'Pool' }}
-                                      </template>
-                                      <template v-else>
-                                        +{{ (h.amount / (item.unitValue || 1)).toFixed(2) }} ({{ formatCurrency(h.amount) }})
-                                        from {{ h.fromBeneficiary?.name || 'Pool' }}
-                                      </template>
-                                    </span>
-                                    <div class="tooltip-content" v-if="h.reason">
-                                      <strong>Reason:</strong><br/>
-                                      {{ h.reason }}
-                                    </div>
-                                  </div>
-                                </div>
-                                <span v-else>-</span>
-                            </td>
-                            <td>
-                                <div v-if="getDeductedHistory(item, dist.distributionId).length" class="history-list">
-                                  <div v-for="h in getDeductedHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item tooltip-container">
-                                    <span class="hist-out">
-                                      <template v-if="item.type === 'money'">
-                                        -{{ formatCurrency(h.amount) }}
-                                      </template>
-                                      <template v-else>
-                                        -{{ (h.amount / (item.unitValue || 1)).toFixed(2) }} ({{ formatCurrency(h.amount) }})
-                                      </template>
-                                    </span>
-                                    <div class="tooltip-content" v-if="h.reason">
-                                      <strong>Reason:</strong><br/>
-                                      {{ h.reason }}
-                                    </div>
-                                  </div>
-                                </div>
-                                <span v-else>-</span>
-                            </td>
-                            <td>
-                              <span v-if="!dist.isReturned && donation?.status === 'approved'">
-                                  <button
-                                    @click="openReturnModal(dist)"
-                                    class="return-btn"
-                                    title="Mark as returned"
-                                  >
-                                    ↩ Return
-                                  </button>
-                                  <button
-                                    v-if="item.status !== 'distributed'"
-                                    @click="openReassignModal(dist, item)"
-                                    class="reassign-btn"
-                                    title="Reassign / Deduct"
-                                  >
-                                    ⇄ Reassign
-                                  </button>
-                              </span>
-                              <span v-else>-</span>
+                            <td><StatusBadge :status="item.status" /></td>
+                            <td class="actions-cell">
+                                <button
+                                  v-if="donation?.status === 'approved' && !item.isRecurring"
+                                  @click="openEvidenceModalForItem(item)"
+                                  class="action-btn evidence"
+                                  title="Upload Evidence"
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                    <polyline points="7 10 12 15 17 10" />
+                                    <line x1="12" y1="15" x2="12" y2="3" />
+                                  </svg>
+                                </button>
+                                
+                                <span v-if="!item.isRecurring && !item.DonationDistributionEvidences?.length && item.status !== 'distributed' && donation.status === 'approved'"  
+                                      class="evidence-warning" 
+                                      title="Evidence required">
+                                  ⚠️  
+                                </span>
+
+                                <button
+                                  v-if="donation?.status === 'approved' && item.status !== 'distributed' && !item.isRecurring"
+                                  @click="markItemAsDistributed(item)"
+                                  class="action-btn distribute-item"
+                                  :title="(!item.DonationDistributionEvidences?.length) ? 'Upload evidence first' : 'Mark Item Distributed'"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-2.25-1.313M21 7.5v2.25m0-2.25-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3 2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75 2.25-1.313M12 21.75V19.5m0 2.25-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
+                                  </svg>
+                                </button>
+                                <span v-if="item.status === 'distributed'" class="distributed-badge" title="Distributed">✓</span>
+
+                                <button v-if="donation?.status === 'draft'" @click="openEditItemModal(item)" class="action-btn edit" title="Edit">
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                    <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
+                                  </svg>
+                                </button>
+
+                                <button v-if="donation?.status === 'draft'" @click="deleteItem(item)" class="action-btn delete" title="Delete">
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                  </svg>
+                                </button>
+
+                                <!-- Toggle intervals view (only for recurring items) -->
+                                <button v-if="item.isRecurring" class="action-btn toggle-interval" @click="toggleIntervalView(item.donationItemId)" title="View Intervals">
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M9 18l6-6-6-6" v-if="!expandedIntervals.includes(item.donationItemId)" />
+                                    <path d="M6 9l6 6 6-6" v-else />
+                                  </svg>
+                                </button>
                             </td>
                           </tr>
                         </tbody>
-                      </table>
-                      <div class="unassigned" v-if="item.unassignedDeduction > 0">
-                        <em>Unassigned deduction for this period: {{ item.type === 'money' ? formatCurrency(item.unassignedDeduction) : (item.unassignedDeduction / (item.unitValue || 1)).toFixed(2) + ' (' + formatCurrency(item.unassignedDeduction) + ')' }}</em>
-                      </div>
-                    </div>
-                    <p v-else class="no-dist">No beneficiaries assigned yet.</p>
+                     </table>
                   </div>
-
-                  <!-- Group view -->
-                  <div v-else>
-                    <div v-if="item.DonationDistributions && item.DonationDistributions.length">
-                      <table class="mini-table">
-                        <thead>
-                          <tr>
-                            <th>Group</th>
-                            <th>{{ item.type === 'money' ? 'Total Amount' : 'Total Quantity' }}</th>
-                            <th>Total Value</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr v-for="(group, groupId) in groupedDistributions(item)" :key="groupId">
-                            <td>{{ getGroupName(groupId) }}</td>
-                            <td>{{ item.type === 'money' ? formatCurrency(group.totalValue) : group.totalQuantity }}</td>
-                            <td>{{ formatCurrency(group.totalValue) }}</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                      <div class="unassigned" v-if="item.unassignedDeduction > 0">
-                        <em>Unassigned deduction for this period: {{ item.type === 'money' ? formatCurrency(item.unassignedDeduction) : (item.unassignedDeduction / (item.unitValue || 1)).toFixed(2) + ' (' + formatCurrency(item.unassignedDeduction) + ')' }}</em>
-                      </div>
-                    </div>
-                    <p v-else class="no-dist">No beneficiaries assigned yet.</p>
-                  </div>
-                </div>
-              </td>
-            </tr>
-            <!-- Interval details (new) -->
-            <tr v-if="expandedIntervals.includes(item.donationItemId) && item.isRecurring">
-              <td colspan="9" class="interval-detail-cell">
-                <div class="interval-detail">
-                  <h4>Recurring Intervals</h4>
-                  <div v-if="item.DonationItemIntervals?.length">
-                    <div v-for="interval in item.DonationItemIntervals" :key="interval.intervalId" class="interval-wrapper">
-                      <div class="interval-row">
-                        <span class="interval-info">
-                          <strong style="text-transform: capitalize;">{{ interval.intervalType?.replace('ly', '') }} {{ interval.intervalCount }} ({{ formatDate(interval.startDate) }}):</strong> 
-                          – <span :class="['status-badge', `status-${interval.status}`]">{{ interval.status }}</span>
-                        </span>
-                        
-                        <div class="interval-actions">
-                          <button class="btn-sm" @click="toggleIntervalDistributions(interval.intervalId)">
-                            {{ expandedIntervalDists.includes(interval.intervalId) ? 'Hide' : 'View' }} Beneficiaries
-                          </button>
-                          
-                          <!-- Interval Evidence icon -->
-                          <button
-                            v-if="donation?.status === 'approved'"
-                            @click="openIntervalEvidenceModal(interval, item)"
-                            class="action-btn evidence"
-                            title="Upload Evidence"
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                              <polyline points="7 10 12 15 17 10" />
-                              <line x1="12" y1="15" x2="12" y2="3" />
-                            </svg>
-                          </button>
-
-                          <!-- Interval Evidence View icon -->
-                          <div v-if="hasIntervalEvidence(item, interval.intervalId)" class="evidence-container">
-                            <button @click="toggleIntervalEvidence(interval.intervalId)" class="action-btn evidence" title="View Evidence">
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="m18.375 12.739-7.693 7.693a4.5 4.5 0 0 1-6.364-6.364l10.94-10.94A3 3 0 1 1 19.5 7.372L8.552 18.32m.009-.01-.01.01m5.699-9.941-7.81 7.81a1.5 1.5 0 0 0 2.112 2.13" />
-                              </svg>
-                            </button>
-                            <div v-if="expandedIntervalEvidence.includes(interval.intervalId)" class="evidence-list">
-                              <a
-                                v-for="ev in getIntervalEvidences(item, interval.intervalId)"
-                                :key="ev.evidenceId"
-                                :href="getFileUrl(ev.fileUrl)"
-                                target="_blank"
-                                class="evidence-item"
-                              >
-                                {{ ev.fileName }}
-                              </a>
-                            </div>
-                          </div>
-
-                          <!-- Interval Distribute icon -->
-                          <span v-if="interval.status !== 'distributed' && donation.status === 'approved' && !hasIntervalEvidence(item, interval.intervalId)"
-                                class="evidence-warning"
-                                title="Upload evidence for this period first">
-                            ⚠️
-                          </span>
-
-                          <button
-                            v-if="donation?.status === 'approved' && interval.status !== 'distributed'"
-                            @click="markIntervalAsDistributed(interval, item)"
-                            class="action-btn distribute-item"
-                            :title="!hasIntervalEvidence(item, interval.intervalId) ? 'Upload evidence for this period first' : 'Distribute for this period'"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-                              <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-2.25-1.313M21 7.5v2.25m0-2.25-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3 2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75 2.25-1.313M12 21.75V19.5m0 2.25-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                      
-                      <!-- Per-interval distribution list -->
-                      <div v-if="expandedIntervalDists.includes(interval.intervalId)" class="interval-dists">
-                        <div class="dist-header">
-                          <h5 class="dist-title">Assigned Beneficiaries for {{ interval.startDate }} to {{ interval.endDate }}</h5>
-                          <div class="view-toggle">
-                            <button
-                              :class="['toggle-btn', { active: (intervalDistViewMode[interval.intervalId] || 'individual') === 'individual' }]"
-                              @click="toggleIntervalDistView(interval.intervalId, 'individual')">
-                              Individual
-                            </button>
-                            <button
-                              :class="['toggle-btn', { active: (intervalDistViewMode[interval.intervalId] || 'individual') === 'group' }]"
-                              @click="toggleIntervalDistView(interval.intervalId, 'group')">
-                              By Group
-                            </button>
-                          </div>
-                        </div>
-
-                        <!-- Individual view -->
-                        <div v-if="(intervalDistViewMode[interval.intervalId] || 'individual') === 'individual'">
-                          <div v-if="getIntervalDistributions(item, interval.intervalId).length">
-                            <table class="mini-table">
-                              <thead>
-                                <tr>
-                                  <th>Beneficiary</th>
-                                  <th>{{ item.type === 'money' ? 'Amount' : 'Quantity' }}</th>
-                                  <th>Value</th>
-                                  <th>Returned</th>
-                                  <th>Reassigned</th>
-                                  <th>Deducted</th>
-                                  <th>Actions</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr v-for="dist in getIntervalDistributions(item, interval.intervalId)" :key="dist.distributionId">
-                                  <td>{{ dist.Beneficiary?.name || 'Unknown' }}</td>
-                                  <td>{{ item.type === 'money' ? formatCurrency(dist.value) : dist.quantity }}</td>
-                                  <td>{{ formatCurrency(dist.value) }}</td>
-                                  <td>
-                                    <div v-if="dist.isReturned" class="returned tooltip-container" style="cursor: help; display: inline-block;">
-                                      Yes
-                                      <div class="tooltip-content">
-                                        <strong>Reason:</strong><br/>
-                                        {{ dist.returnReason || 'No reason provided' }}
-                                      </div>
-                                    </div>
-                                    <span v-else class="active-dist">No</span>
-                                  </td>
-                                  <td>
-                                      <div v-if="getReassignedHistory(item, dist.distributionId).length" class="history-list">
-                                        <div v-for="h in getReassignedHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item tooltip-container">
-                                    <span v-if="h.fromBeneficiaryId === dist.beneficiaryId" class="hist-out">
-                                      <template v-if="item.type === 'money'">
-                                        -{{ formatCurrency(h.amount) }}
-                                        {{ h.reassignedTo ? `→ ${h.reassignedTo.name}` : '' }}
-                                      </template>
-                                      <template v-else>
-                                        -{{ (h.amount / (item.unitValue || 1)).toFixed(2) }} ({{ formatCurrency(h.amount) }})
-                                        {{ h.reassignedTo ? `→ ${h.reassignedTo.name}` : '' }}
-                                      </template>
-                                    </span>
-                                    <span v-else class="hist-in">
-                                      <template v-if="item.type === 'money'">
-                                        +{{ formatCurrency(h.amount) }}
-                                        from {{ h.fromBeneficiary?.name || 'Pool' }}
-                                      </template>
-                                      <template v-else>
-                                        +{{ (h.amount / (item.unitValue || 1)).toFixed(2) }} ({{ formatCurrency(h.amount) }})
-                                        from {{ h.fromBeneficiary?.name || 'Pool' }}
-                                      </template>
-                                    </span>
-                                          <div class="tooltip-content" v-if="h.reason">
-                                            <strong>Reason:</strong><br/>
-                                            {{ h.reason }}
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <span v-else>-</span>
-                                  </td>
-                                  <td>
-                                      <div v-if="getDeductedHistory(item, dist.distributionId).length" class="history-list">
-                                        <div v-for="h in getDeductedHistory(item, dist.distributionId)" :key="h.deductionId" class="history-item tooltip-container">
-                                          <span class="hist-out">
-                                            <template v-if="item.type === 'money'">
-                                              -{{ formatCurrency(h.amount) }}
-                                            </template>
-                                            <template v-else>
-                                              -{{ (h.amount / (item.unitValue || 1)).toFixed(2) }} ({{ formatCurrency(h.amount) }})
-                                            </template>
-                                          </span>
-                                          <div class="tooltip-content" v-if="h.reason">
-                                            <strong>Reason:</strong><br/>
-                                            {{ h.reason }}
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <span v-else>-</span>
-                                  </td>
-                                  <td>
-                                    <span v-if="!dist.isReturned && donation?.status === 'approved'">
-                                      <button
-                                        @click="openReturnModal(dist)"
-                                        class="return-btn"
-                                        title="Mark as returned"
-                                      >
-                                        ↩ Return
-                                      </button>
-                                      <button
-                                        v-if="interval.status !== 'distributed'"
-                                        @click="openReassignModal(dist, item)"
-                                        class="reassign-btn"
-                                        title="Reassign / Deduct"
-                                      >
-                                        ⇄ Reassign
-                                      </button>
-                                    </span>
-                                    <span v-else>-</span>
-                                  </td>
-                                </tr>
-                              </tbody>
-                            </table>
-                            <div class="unassigned" v-if="getIntervalUnassigned(item, interval.intervalId) > 0">
-                              <em>Unassigned deduction for this period: {{ item.type === 'money' ? formatCurrency(getIntervalUnassigned(item, interval.intervalId)) : (getIntervalUnassigned(item, interval.intervalId) / (item.unitValue || 1)).toFixed(2) + ' (' + formatCurrency(getIntervalUnassigned(item, interval.intervalId)) + ')' }}</em>
-                            </div>
-                          </div>
-                          <p v-else class="no-dist">No beneficiaries assigned for this month.</p>
-                        </div>
-
-                        <!-- Group view -->
-                        <div v-else>
-                          <div v-if="getIntervalDistributions(item, interval.intervalId).length">
-                            <table class="mini-table">
-                              <thead>
-                                <tr>
-                                  <th>Group</th>
-                                  <th>{{ item.type === 'money' ? 'Total Amount' : 'Total Quantity' }}</th>
-                                  <th>Total Value</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                <tr v-for="(group, groupId) in getGroupedDistributions(getIntervalDistributions(item, interval.intervalId))" :key="groupId">
-                                  <td>{{ getGroupName(groupId) }}</td>
-                                  <td>{{ item.type === 'money' ? formatCurrency(group.totalValue) : group.totalQuantity }}</td>
-                                  <td>{{ formatCurrency(group.totalValue) }}</td>
-                                </tr>
-                              </tbody>
-                            </table>
-                            <div class="unassigned" v-if="getIntervalUnassigned(item, interval.intervalId) > 0">
-                              <em>Unassigned deduction for this period: {{ item.type === 'money' ? formatCurrency(getIntervalUnassigned(item, interval.intervalId)) : (getIntervalUnassigned(item, interval.intervalId) / (item.unitValue || 1)).toFixed(2) + ' (' + formatCurrency(getIntervalUnassigned(item, interval.intervalId)) + ')' }}</em>
-                            </div>
-                          </div>
-                          <p v-else class="no-dist">No beneficiaries assigned for this month.</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <p v-else>No intervals defined.</p>
+                  <p v-else class="no-dist">No items assigned to this beneficiary yet.</p>
                 </div>
               </td>
             </tr>
@@ -655,7 +269,7 @@
         </tbody>
       </table>
       <div v-else class="empty-items">
-        <p>No items yet. Add some items to proceed.</p>
+        <p>No beneficiaries receiving items from this donation yet.</p>
       </div>
     </div>
 
@@ -702,8 +316,9 @@
       :donation-id="donationId"
       :saving="savingItem"
       :item-to-edit="editingItem"
+      :pre-selected-beneficiary-id="preSelectedBenId"
       @close="closeAddItemModal"
-      @save="handleItemSave"
+      @saved="handleItemSaved"
     />
     
     <DistributeItemModal
@@ -850,11 +465,32 @@ const handleEvidenceUpload = async (files) => {
 }
 
 const beneficiaries = ref([])
+const myBeneficiaries = ref([])
 const showDistributeModal = ref(false)
 const distributingItem = ref(null)
 const distributingSaving = ref(false)
 
 const groups = ref([])
+
+const expandedBeneficiaries = ref([])
+const toggleBeneficiaryItems = (benId) => {
+  const idx = expandedBeneficiaries.value.indexOf(benId)
+  if (idx > -1) expandedBeneficiaries.value.splice(idx, 1)
+  else expandedBeneficiaries.value.push(benId)
+}
+
+const beneficiariesWithItems = computed(() => {
+  if (!myBeneficiaries.value.length) return []
+  return myBeneficiaries.value.map(ben => {
+    const benItems = items.value.filter(item => item.beneficiaryId === ben.beneficiaryId)
+    const totalValue = benItems.reduce((sum, item) => sum + parseFloat(item.totalValue || 0), 0)
+    return {
+      ...ben,
+      items: benItems,
+      totalValue
+    }
+  })
+})
 
 // ── Interval state ──
 const showIntervalDistModal = ref(false)
@@ -1013,12 +649,28 @@ const getDeductedHistory = (item, distId) => {
 const loadDonation = async () => {
   loading.value = true
   const res = await CharityService.getDonationById(donationId)
-  if (res.success) donation.value = res.data
+  if (res.success) {
+    donation.value = res.data
+    await loadDependencies() // Load beneficiaries after donation so we have groupId
+  }
   else addToast('Failed to load donation', 'error')
   loading.value = false
 }
 
 const loadDependencies = async () => {
+  // If donation has a groupId, load those beneficiaries
+  if (donation.value?.groupId) {
+    const res = await CharityService.getGroupBeneficiaries(donation.value.groupId)
+    if (res.success) myBeneficiaries.value = res.data
+  } else {
+    // Fallback: load user's group beneficiaries
+    const grpRes = await CharityService.getMyGroup()
+    if (grpRes.success && grpRes.data?.length) {
+      const res = await CharityService.getGroupBeneficiaries(grpRes.data[0].groupId)
+      if (res.success) myBeneficiaries.value = res.data
+    }
+  }
+
   const bens = await CharityService.getBeneficiaries()
   if (bens.success) beneficiaries.value = bens.data
 }
@@ -1080,71 +732,26 @@ const submitRequestChanges = async () => {
 }
 
 // ── Items management ──
-const openAddItemModal = () => {
+const preSelectedBenId = ref(null)
+const openAddItemModal = (benId = null) => {
   editingItem.value = null
+  preSelectedBenId.value = benId
   showAddItemModal.value = true
 }
 const openEditItemModal = (item) => {
   editingItem.value = { ...item }
+  preSelectedBenId.value = item.beneficiaryId
   showAddItemModal.value = true
 }
 const closeAddItemModal = () => {
   showAddItemModal.value = false
   editingItem.value = null
+  preSelectedBenId.value = null
 }
 
-const handleItemSave = async ({ itemData, distributions, interval }) => {
-  savingItem.value = true
-  try {
-    if (editingItem.value) {
-      // Update the item itself
-      const updateRes = await CharityService.updateDonationItem(editingItem.value.donationItemId, itemData)
-      if (!updateRes.success) {
-        addToast(updateRes.error || 'Failed to update item', 'error')
-        savingItem.value = false
-        return
-      }
-      // Update interval (create/delete as needed)
-      await CharityService.updateDonationItemInterval(editingItem.value.donationItemId, interval || null)
-      // Replace distributions
-      const deleteRes = await CharityService.deleteItemDistributions(editingItem.value.donationItemId)
-      if (!deleteRes.success) {
-        addToast('Failed to clear old distributions', 'error')
-      }
-      if (distributions.length > 0) {
-        const distRes = await CharityService.distributeItem(editingItem.value.donationItemId, distributions)
-        if (distRes.success) {
-          addToast('Item updated successfully')
-        } else {
-          addToast('Item updated but distribution assignment failed: ' + distRes.error, 'warning')
-        }
-      } else {
-        addToast('Item updated (no beneficiaries assigned)')
-      }
-    } else {
-      // New item
-      const res = await CharityService.addDonationItem(donationId, {
-        ...itemData,
-        interval: interval || undefined,
-      })
-      if (!res.success) {
-        addToast(res.error || 'Failed to add item', 'error')
-        savingItem.value = false
-        return
-      }
-      const newItemId = res.data.donationItemId
-      if (distributions.length > 0) {
-        const distRes = await CharityService.distributeItem(newItemId, distributions)
-        distRes.success ? addToast('Item added and beneficiaries assigned') : addToast('Item added but assignment failed: ' + distRes.error, 'warning')
-      } else {
-        addToast('Item added successfully')
-      }
-    }
-    loadDonation()
-  } catch (err) {
-    addToast('Unexpected error', 'error')
-  }
-  savingItem.value = false
+const handleItemSaved = () => {
+  addToast(editingItem.value ? 'Item updated' : 'Item(s) added')
+  loadDonation()
   closeAddItemModal()
 }
 
