@@ -15,6 +15,14 @@
       </div>
       <div class="header-actions">
         <StatusBadge :status="donation.status" />
+        <button v-if="donation.status === 'approved'" @click="openEvidenceModal" class="btn-secondary" style="background: #ede9fe; color: #7c3aed; border: 1px solid #ddd6fe;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 4px; vertical-align: middle;">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Upload Evidence
+        </button>
         <button v-if="canSubmit" @click="submitDonation" class="btn-primary" :disabled="submitting">Submit for Approval</button>
         <button v-if="canApprove" @click="approveDonation" class="btn-primary" :disabled="approving">Approve</button>
         <button v-if="canApprove" @click="showRequestChangesModal = true" class="btn-warning" :disabled="submittingChanges">Request Changes</button>
@@ -60,6 +68,25 @@
           <span class="label">Notes</span>
           <p>{{ donation.notes }}</p>
         </div>
+
+        <div class="evidence-section" v-if="donation.DonationDistributionEvidences?.length" style="flex: 1; min-width: 250px;">
+          <span class="label">Distribution Evidence</span>
+          <div class="evidence-links" style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 8px;">
+             <a v-for="ev in donation.DonationDistributionEvidences.filter(e => !e.intervalId)" 
+                :key="ev.evidenceId" 
+                :href="getFileUrl(ev.fileUrl)" 
+                target="_blank" 
+                class="evidence-link"
+                style="display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: #f8fafc; border-radius: 8px; text-decoration: none; color: #475569; font-size: 13px; border: 1px solid #e2e8f0; transition: all 0.2s;">
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px; color: #7c3aed;">
+                 <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                 <polyline points="13 2 13 9 20 9"></polyline>
+               </svg>
+               <span style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ ev.fileName || 'Evidence' }}</span>
+             </a>
+          </div>
+        </div>
+
         <div class="tracking-info">
           <div class="tracking-item">
             <span class="label">Drafted By</span>
@@ -206,29 +233,10 @@
                             <td><StatusBadge :status="item.status" /></td>
                             <td class="actions-cell">
                                 <button
-                                  v-if="donation?.status === 'approved' && !item.isRecurring"
-                                  @click="openEvidenceModalForItem(item)"
-                                  class="action-btn evidence"
-                                  title="Upload Evidence"
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                    <polyline points="7 10 12 15 17 10" />
-                                    <line x1="12" y1="15" x2="12" y2="3" />
-                                  </svg>
-                                </button>
-                                
-                                <span v-if="!item.isRecurring && !item.DonationDistributionEvidences?.length && item.status !== 'distributed' && donation.status === 'approved'"  
-                                      class="evidence-warning" 
-                                      title="Evidence required">
-                                  ⚠️  
-                                </span>
-
-                                <button
                                   v-if="donation?.status === 'approved' && item.status !== 'distributed' && !item.isRecurring"
                                   @click="markItemAsDistributed(item)"
                                   class="action-btn distribute-item"
-                                  :title="(!item.DonationDistributionEvidences?.length) ? 'Upload evidence first' : 'Mark Item Distributed'"
+                                  :title="(!donation.DonationDistributionEvidences?.length) ? 'Upload evidence first' : 'Mark Item Distributed'"
                                 >
                                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-2.25-1.313M21 7.5v2.25m0-2.25-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3 2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75 2.25-1.313M12 21.75V19.5m0 2.25-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
@@ -424,10 +432,16 @@ const uploadingEvidence = ref(false)
 
 const evidenceModalTitle = computed(() => {
   if (selectedInterval.value) {
-    return `${selectedInterval.value.intervalType} - ${formatDate(selectedInterval.value.startDate)}`
+    return `Interval Evidence: ${formatDate(selectedInterval.value.startDate)}`
   }
-  return selectedItem.value?.description || 'Item'
+  return 'Donation Evidence'
 })
+
+const openEvidenceModal = () => {
+  selectedItem.value = null
+  selectedInterval.value = null
+  showEvidenceModal.value = true
+}
 
 const handleEvidenceUpload = async (files) => {
   if (!files.length) return
@@ -439,13 +453,13 @@ const handleEvidenceUpload = async (files) => {
     let res
     if (selectedInterval.value) {
       res = await CharityService.uploadIntervalEvidence(
-        selectedItem.value.donationItemId, 
+        donationId, 
         selectedInterval.value.intervalId, 
         formData
       )
     } else {
-      res = await CharityService.uploadItemEvidence(
-        selectedItem.value.donationItemId, 
+      res = await CharityService.uploadDonationEvidence(
+        donationId, 
         formData
       )
     }

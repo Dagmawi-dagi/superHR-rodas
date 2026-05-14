@@ -43,13 +43,13 @@ router.get('/adjustments/pending',               authMiddleware(['admin', 'chari
 router.put('/adjustments/:id/review',            authMiddleware(['admin', 'charity_admin']),      adjustmentController.reviewAdjustment);
 
 // ── EVIDENCE ──────────────────────────────────────────────────────────────────
-router.post('/items/:itemId/evidences',
+router.post('/:id/evidences',
   authMiddleware(['admin', 'charity_admin']),
   (req, res, next) => { req.params.type = 'charityEvidences'; next(); },
   uploadMultipleDocuments,
   donationController.uploadEvidence
 );
-router.post('/items/:itemId/intervals/:intervalId/evidences',
+router.post('/:id/intervals/:intervalId/evidences',
   authMiddleware(['admin', 'charity_admin']),
   (req, res, next) => { req.params.type = 'charityEvidences'; next(); },
   uploadMultipleDocuments,

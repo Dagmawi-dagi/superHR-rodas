@@ -268,6 +268,9 @@ exports.getDonationById = async (req, res) => {
         { model: Employee, as: 'approver', attributes: ['employeeId', 'firstName', 'lastName'] },
         { model: Employee, as: 'distributor', attributes: ['employeeId', 'firstName', 'lastName'] },
         {
+          model: DonationDistributionEvidence   // MOVED HERE (direct under Donation)
+        },
+        {
           model: DonationItem,
           include: [
             {
@@ -275,9 +278,6 @@ exports.getDonationById = async (req, res) => {
               include: [
                 { model: Beneficiary, attributes: ['beneficiaryId', 'name', 'type', 'groupId'] }
               ]
-            },
-            {
-              model: DonationDistributionEvidence   // direct under DonationItem, not under DonationDistribution
             },
             {
               model: DonationItemInterval   // ← add this
@@ -785,10 +785,10 @@ exports.distributeDonation = async (req, res) => {
     const { id } = req.params;
 
     const donation = await Donation.findByPk(id, {
-      include: {
-        model: DonationItem,
-        include: [ { model: DonationDistributionEvidence, attributes: ['evidenceId'] } ]
-      },
+      include: [
+        { model: DonationItem },
+        { model: DonationDistributionEvidence, attributes: ['evidenceId'] }
+      ],
       transaction: t
     });
 
@@ -802,19 +802,12 @@ exports.distributeDonation = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Donation must be approved first' });
     }
 
-    // ***** Evidence check for all items *****
-    const itemsWithoutEvidence = [];
-    for (const item of donation.DonationItems) {
-      if (!item.DonationDistributionEvidences || item.DonationDistributionEvidences.length === 0) {
-        itemsWithoutEvidence.push(item.description || `Item #${item.donationItemId}`);
-      }
-    }
-
-    if (itemsWithoutEvidence.length > 0) {
+    // ***** Evidence check for donation *****
+    if (!donation.DonationDistributionEvidences || donation.DonationDistributionEvidences.length === 0) {
       await t.rollback();
       return res.status(400).json({
         success: false,
-        error: `The following items are missing evidence: ${itemsWithoutEvidence.join(', ')}. Please upload evidence before distribution.`
+        error: "No evidence uploaded for this donation. Please upload evidence before distribution."
       });
     }
 
@@ -1044,7 +1037,7 @@ exports.deleteItemDistributions = async (req, res) => {
 exports.uploadEvidence = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { itemId } = req.params; // now itemId, not distributionId
+    const { id } = req.params; // donationId
     const files = req.files;
 
     if (!files || files.length === 0) {
@@ -1052,13 +1045,10 @@ exports.uploadEvidence = async (req, res) => {
       return res.status(400).json({ success: false, error: 'No files uploaded' });
     }
 
-    const item = await DonationItem.findByPk(itemId, {
-      include: [{ model: Donation, attributes: ['donationId', 'status'] }],
-      transaction: t
-    });
-    if (!item || item.Donation.status !== 'approved') {
+    const donation = await Donation.findByPk(id, { transaction: t });
+    if (!donation || donation.status !== 'approved') {
       await t.rollback();
-      return res.status(400).json({ success: false, error: 'Donation must be approved' });
+      return res.status(400).json({ success: false, error: 'Donation not found or not approved' });
     }
 
     const employeeId = await getEmployeeIdFromUserId(req.user.userId);
@@ -1066,7 +1056,7 @@ exports.uploadEvidence = async (req, res) => {
     const evidences = [];
     for (const file of files) {
       const evidence = await DonationDistributionEvidence.create({
-        donationItemId: parseInt(itemId),
+        donationId: parseInt(id),
         fileUrl: `/uploads/documents/charityEvidences/${file.filename}`,
         fileName: file.originalname,
         fileType: file.mimetype,
@@ -1075,8 +1065,7 @@ exports.uploadEvidence = async (req, res) => {
       evidences.push(evidence);
     }
 
-    await logDonationAction(item.Donation.donationId, employeeId, 'EVIDENCE_UPLOADED', {
-      itemId,
+    await logDonationAction(id, employeeId, 'EVIDENCE_UPLOADED', {
       fileCount: files.length,
     }, t);
 
@@ -1095,11 +1084,14 @@ exports.markItemDistributed = async (req, res) => {
   try {
     const { itemId } = req.params;
 
-    // Fetch item with its donation and existing evidence count
+    // Fetch item with its donation and existing evidence count at donation level
     const item = await DonationItem.findByPk(itemId, {
       include: [
-        { model: Donation, attributes: ['donationId', 'status'] },
-        { model: DonationDistributionEvidence, attributes: ['evidenceId'] } // just to check existence
+        { 
+          model: Donation, 
+          attributes: ['donationId', 'status'],
+          include: [{ model: DonationDistributionEvidence, attributes: ['evidenceId'] }]
+        }
       ],
       transaction: t
     });
@@ -1114,12 +1106,12 @@ exports.markItemDistributed = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Item already distributed' });
     }
 
-    // ***** Evidence check *****
-    if (!item.DonationDistributionEvidences || item.DonationDistributionEvidences.length === 0) {
+    // ***** Evidence check (Donation Level) *****
+    if (!item.Donation.DonationDistributionEvidences || item.Donation.DonationDistributionEvidences.length === 0) {
       await t.rollback();
       return res.status(400).json({
         success: false,
-        error: `No evidence uploaded for item "${item.description}". Please upload evidence before distribution.`
+        error: `No evidence uploaded for this donation. Please upload evidence before distribution.`
       });
     }
 
@@ -1558,7 +1550,10 @@ exports.distributeItemForInterval = async (req, res) => {
     const { distributions } = req.body; // array of { beneficiaryId, quantity, value }
 
     const item = await DonationItem.findByPk(itemId, {
-      include: [{ model: DonationItemInterval, where: { intervalId }, required: true }, { model: Donation, attributes: ['status'] }],
+      include: [
+        { model: DonationItemInterval, where: { intervalId }, required: true }, 
+        { model: Donation, attributes: ['donationId', 'status'] }
+      ],
       transaction: t
     });
 
@@ -1570,9 +1565,9 @@ exports.distributeItemForInterval = async (req, res) => {
     const interval = item.DonationItemIntervals[0];
     if (!interval) throw new Error('Interval not found');
 
-    // ***** NEW: Evidence check for this specific interval *****
+    // ***** Evidence check for this specific interval (at Donation Level) *****
     const evidenceCount = await DonationDistributionEvidence.count({
-      where: { intervalId },
+      where: { donationId: item.Donation.donationId, intervalId },
       transaction: t
     });
 
@@ -1648,7 +1643,7 @@ exports.distributeItemForInterval = async (req, res) => {
 exports.uploadIntervalEvidence = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { itemId, intervalId } = req.params;
+    const { id, intervalId } = req.params; // donationId
     const files = req.files;
 
     if (!files || files.length === 0) {
@@ -1656,21 +1651,14 @@ exports.uploadIntervalEvidence = async (req, res) => {
       return res.status(400).json({ success: false, error: 'No files uploaded' });
     }
 
-    // Validate item and interval existence
-    const item = await DonationItem.findByPk(itemId, {
-      include: [
-        { model: Donation, attributes: ['donationId', 'status'] },
-        { model: DonationItemInterval, where: { intervalId }, required: true }
-      ],
-      transaction: t
-    });
-
-    if (!item || item.Donation.status !== 'approved') {
+    // Validate donation and interval existence
+    const donation = await Donation.findByPk(id, { transaction: t });
+    if (!donation || donation.status !== 'approved') {
       await t.rollback();
-      return res.status(400).json({ success: false, error: 'Item not found or donation not approved' });
+      return res.status(400).json({ success: false, error: 'Donation not found or not approved' });
     }
 
-    const interval = item.DonationItemIntervals[0];
+    const interval = await DonationItemInterval.findByPk(intervalId, { transaction: t });
     if (!interval) throw new Error('Interval not found');
 
     const employeeId = await getEmployeeIdFromUserId(req.user.userId);
@@ -1678,7 +1666,7 @@ exports.uploadIntervalEvidence = async (req, res) => {
     const evidences = [];
     for (const file of files) {
       const evidence = await DonationDistributionEvidence.create({
-        donationItemId: parseInt(itemId),
+        donationId: parseInt(id),
         intervalId: parseInt(intervalId),
         fileUrl: `/uploads/documents/charityEvidences/${file.filename}`,
         fileName: file.originalname,
@@ -1691,8 +1679,7 @@ exports.uploadIntervalEvidence = async (req, res) => {
     // Mark interval as pending (evidence uploaded)
     await interval.update({ status: 'pending' }, { transaction: t });
 
-    await logDonationAction(item.Donation.donationId, employeeId, 'EVIDENCE_UPLOADED_INTERVAL', {
-      itemId,
+    await logDonationAction(id, employeeId, 'EVIDENCE_UPLOADED_INTERVAL', {
       intervalId,
       fileCount: files.length,
     }, t);

@@ -10,6 +10,7 @@ module.exports = (sequelize, DataTypes) => {
       Donation.hasMany(models.DonationItem,         { foreignKey: 'donationId' });
       Donation.hasMany(models.DonationApproval,     { foreignKey: 'donationId' });
       Donation.hasMany(models.DonationLog,          { foreignKey: 'donationId' });
+      Donation.hasMany(models.DonationDistributionEvidence, { foreignKey: 'donationId' });
       Donation.belongsTo(models.Employee, { foreignKey: 'createdBy',     as: 'creator' });
       Donation.belongsTo(models.Employee, { foreignKey: 'approvedBy',    as: 'approver' });
       Donation.belongsTo(models.Employee, { foreignKey: 'distributedBy', as: 'distributor' });

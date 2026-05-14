@@ -4,7 +4,7 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class DonationDistributionEvidence extends Model {
     static associate(models) {
-      DonationDistributionEvidence.belongsTo(models.DonationItem, { foreignKey: "donationItemId" });
+      DonationDistributionEvidence.belongsTo(models.Donation, { foreignKey: "donationId" });
       DonationDistributionEvidence.belongsTo(models.Employee, { foreignKey: "uploadedBy" });
       DonationDistributionEvidence.belongsTo(models.DonationItemInterval, { foreignKey: "intervalId" });
     }
@@ -18,9 +18,9 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true,
         field: "evidence_id",
       },
-      donationItemId: {
+      donationId: {
         type: DataTypes.INTEGER,
-        field: "donation_item_id",
+        field: "donation_id",
       },
       intervalId: {
         type: DataTypes.INTEGER,

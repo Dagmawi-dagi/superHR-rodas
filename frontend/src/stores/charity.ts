@@ -92,7 +92,7 @@ export interface DonationItem {
 
 export interface DonationDistributionEvidence {
   evidenceId: number
-  donationItemId: number
+  donationId: number
   fileUrl: string
   fileName?: string
   fileType?: string
@@ -130,6 +130,7 @@ export interface Donation {
   creator?: { employeeId: number; firstName: string; lastName: string }
   approver?: { employeeId: number; firstName: string; lastName: string }
   distributor?: { employeeId: number; firstName: string; lastName: string }
+  DonationDistributionEvidences?: DonationDistributionEvidence[]
   createdAt?: string
   updatedAt?: string
 }
@@ -479,12 +480,12 @@ class CharityService {
   }
 
   // ── Evidence ───────────────────────────────────────────────────────────────
-  async uploadItemEvidence(itemId: number, formData: FormData) {
-    try { const r = await api.post(`/charity/donations/items/${itemId}/evidences`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }); return r.data }
+  async uploadDonationEvidence(donationId: number, formData: FormData) {
+    try { const r = await api.post(`/charity/donations/${donationId}/evidences`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
-  async uploadIntervalEvidence(itemId: number, intervalId: number, formData: FormData) {
-    try { const r = await api.post(`/charity/donations/items/${itemId}/intervals/${intervalId}/evidences`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }); return r.data }
+  async uploadIntervalEvidence(donationId: number, intervalId: number, formData: FormData) {
+    try { const r = await api.post(`/charity/donations/${donationId}/intervals/${intervalId}/evidences`, formData, { headers: { 'Content-Type': 'multipart/form-data' } }); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
 
