@@ -177,30 +177,30 @@ const router = createRouter({
           meta: { title: 'Add Company', roles: ['admin', 'charity_admin'] },
         },
 
-        // ── CHARITY TEAMLEADER routes ──────────────────────────────────────────────
+        // ── CHARITY TEAMLEADER & ADMIN "My" routes ──────────────────────────────────────
         {
           path: 'charity/my-donations',
           name: 'my-donations',
           component: () => import('@/views/charity/MyDonations.vue'),
-          meta: { title: 'My Donations', roles: ['charity_teamleader'] },
+          meta: { title: 'My Donations', roles: ['charity_admin', 'charity_teamleader'] },
         },
         {
           path: 'charity/my-donations/create',
           name: 'my-donations-create',
           component: () => import('@/views/charity/DonationCreate.vue'),
-          meta: { title: 'Create Donation', roles: ['charity_teamleader'] },
+          meta: { title: 'Create Donation', roles: ['charity_admin', 'charity_teamleader'] },
         },
         {
           path: 'charity/my-donations/:id/edit',
           name: 'my-donations-edit',
           component: () => import('@/views/charity/DonationCreate.vue'),
-          meta: { title: 'Edit Donation', roles: ['charity_teamleader'] },
+          meta: { title: 'Edit Donation', roles: ['charity_admin', 'charity_teamleader'] },
         },
         {
           path: 'charity/my-beneficiaries',
           name: 'my-beneficiaries',
           component: () => import('@/views/charity/MyBeneficiaries.vue'),
-          meta: { title: 'My Beneficiaries', roles: ['charity_teamleader'] },
+          meta: { title: 'My Beneficiaries', roles: ['charity_admin', 'charity_teamleader'] },
         },
         {
           path: "",

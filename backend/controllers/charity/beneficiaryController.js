@@ -29,7 +29,7 @@ const getEmployeeIdFromUserId = async (userId) => {
 // ------------------------------------------------------------------
 exports.getAllBeneficiaries = async (req, res) => {
   try {
-    const { page, size, sortBy, sortOrder, type, groupId, locationId, search } = req.query;
+    const { page, size, sortBy, sortOrder, type, groupId, locationId, search, createdBy } = req.query;
     const { limit, offset } = getPagination(page, size);
     const where = {};
 
@@ -44,6 +44,9 @@ exports.getAllBeneficiaries = async (req, res) => {
     }
     if (search && search.trim() !== '') {
       where.name = { [Op.like]: `%${search}%` };
+    }
+    if (createdBy) {
+      where.createdBy = parseInt(createdBy);
     }
 
     // charity_teamleader: can only see beneficiaries in their groups

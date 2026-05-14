@@ -139,21 +139,24 @@ const roleMenus = {
   charity_admin: [
     { name: 'Dashboard', path: '/dashboard', icon: 'HomeIcon' },
     {
-      name: 'Donations', path: '/charity/donations', icon: 'ArchiveBoxIcon',
+      name: 'Administrative', path: '/charity/donations', icon: 'ShieldCheckIcon',
       dropdownMenu: [
         { name: 'All Donations',      path: '/charity/donations',                 icon: 'ArchiveBoxIcon' },
         { name: 'Pending Approvals',  path: '/charity/donations/pending-approvals',icon: 'CheckBadgeIcon' },
         { name: 'Adjustment Requests',path: '/charity/donations/adjustments',      icon: 'AdjustmentsHorizontalIcon' },
+        { name: 'Beneficiaries List', path: '/charity/beneficiaries',             icon: 'UsersIcon' },
+        { name: 'Beneficiary Groups', path: '/charity/groups',                  icon: 'RectangleStackIcon' },
+      ],
+    },
+    {
+      name: 'Personal Work', path: '/charity/my-donations', icon: 'UserIcon',
+      dropdownMenu: [
+        { name: 'My Donations',     path: '/charity/my-donations',        icon: 'ListBulletIcon' },
+        { name: 'Create Donation',   path: '/charity/my-donations/create', icon: 'PlusCircleIcon' },
+        { name: 'My Beneficiaries', path: '/charity/my-beneficiaries',     icon: 'UsersIcon' },
       ],
     },
     { name: 'Campaigns',          path: '/charity/campaigns',    icon: 'SpeakerWaveIcon' },
-    {
-      name: 'Beneficiary Groups', path: '/charity/groups', icon: 'UserGroupIcon',
-      dropdownMenu: [
-        { name: 'Groups List',      path: '/charity/groups',         icon: 'RectangleStackIcon' },
-        { name: 'All Beneficiaries', path: '/charity/beneficiaries',icon: 'UsersIcon' },
-      ],
-    },
     { name: 'Donation Companies', path: '/charity/companies',    icon: 'BuildingOffice2Icon' },
   ],
 

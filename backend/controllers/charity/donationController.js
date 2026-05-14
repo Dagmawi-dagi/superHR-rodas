@@ -9,6 +9,7 @@ const {
   DonationItemInterval,
   Campaign,
   Beneficiary,
+  BeneficiaryLocation,
   Employee,
   DonationDeduction,
   sequelize,
@@ -205,6 +206,8 @@ exports.getAllDonations = async (req, res) => {
       startDate,
       endDate,
       search,
+      createdBy,
+      groupId,
     } = req.query;
     const { limit, offset } = getPagination(page, size);
 
@@ -212,6 +215,8 @@ exports.getAllDonations = async (req, res) => {
     if (status) where.status = status;
     if (companyId) where.companyId = parseInt(companyId);
     if (campaignId) where.campaignId = parseInt(campaignId);
+    if (createdBy)  where.createdBy  = parseInt(createdBy);
+    if (groupId)    where.groupId    = parseInt(groupId);
     if (startDate && endDate) {
       where.donationDate = { [Op.between]: [startDate, endDate] };
     } else if (startDate) {
@@ -274,9 +279,19 @@ exports.getDonationById = async (req, res) => {
           model: DonationItem,
           include: [
             {
+              model: Beneficiary, 
+              as: 'beneficiary', 
+              attributes: ['beneficiaryId', 'name', 'type', 'groupId'],
+              include: [{ model: BeneficiaryLocation, attributes: ['city'] }]
+            },
+            {
               model: DonationDistribution,
               include: [
-                { model: Beneficiary, attributes: ['beneficiaryId', 'name', 'type', 'groupId'] }
+                { 
+                  model: Beneficiary, 
+                  attributes: ['beneficiaryId', 'name', 'type', 'groupId'],
+                  include: [{ model: BeneficiaryLocation, attributes: ['city'] }]
+                }
               ]
             },
             {
@@ -1427,8 +1442,9 @@ exports.returnDistribution = async (req, res) => {
 // ------------------------------------------------------------------
 exports.getDonationStats = async (req, res) => {
   try {
-    const { groupId } = req.query;
+    const { groupId, createdBy } = req.query;
     let effectiveGroupId = groupId;
+    let effectiveCreatedBy = createdBy;
 
     // Auto-filter for team leaders if not explicitly provided (or even if it is)
     if (req.user.role === 'charity_teamleader') {
@@ -1456,6 +1472,7 @@ exports.getDonationStats = async (req, res) => {
 
     const whereDonation = {};
     if (effectiveGroupId) whereDonation.groupId = effectiveGroupId;
+    if (effectiveCreatedBy) whereDonation.createdBy = parseInt(effectiveCreatedBy);
 
     const totalDonations = await Donation.count({ where: whereDonation });
 

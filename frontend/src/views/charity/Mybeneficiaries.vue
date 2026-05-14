@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <h1 class="page-title">My Beneficiaries</h1>
-        <p class="page-subtitle">Beneficiaries in {{ groupName || 'your group' }}</p>
+        <p class="page-subtitle">Beneficiaries created by you</p>
       </div>
     </div>
 
@@ -40,10 +40,13 @@
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue';
 import charityService from '@/stores/charity';
+import { useAuthStore } from '@/stores/auth';
 
 import BeneficiaryStatsCards from './components/Beneficiary/BeneficiaryStatsCards.vue';
 import BeneficiaryFiltersBar from './components/Beneficiary/BeneficiaryFiltersBar.vue';
 import BeneficiaryTable from './components/Beneficiary/BeneficiaryTable.vue';
+
+const authStore = useAuthStore();
 
 // State
 const beneficiaries = ref([]);
@@ -101,17 +104,17 @@ const calculateStats = () => {
 };
 
 const loadBeneficiaries = async () => {
-  if (!groupId.value) return;
   loading.value = true;
   try {
-    const params = {
+    const params: any = {
       page: pagination.value.currentPage,
       limit: pagination.value.pageSize,
       search: filters.value.search,
       type: filters.value.type,
       locationId: filters.value.locationId as any,
-      groupId: groupId.value 
+      createdBy: authStore.user?.employeeId
     };
+
     const result = await charityService.getBeneficiaries(params);
     if (result.success) {
       beneficiaries.value = result.data;
@@ -126,15 +129,17 @@ const loadBeneficiaries = async () => {
 };
 
 const clearFilters = () => {
-  filters.value = { search: '', type: '', groupId: String(groupId.value), locationId: '' };
+  filters.value = { search: '', type: '', groupId: groupId.value ? String(groupId.value) : '', locationId: '' };
   pagination.value.currentPage = 1;
   loadBeneficiaries();
 };
 
 const updateFilters = (newFilters: any) => {
   filters.value = { ...filters.value, ...newFilters };
-  // Ensure they don't change the groupId filter away from their own group
-  filters.value.groupId = String(groupId.value);
+  // Ensure they don't change the groupId filter away from their own group if they have one
+  if (groupId.value) {
+    filters.value.groupId = String(groupId.value);
+  }
 };
 
 const goToPage = (page: number) => {
@@ -158,10 +163,8 @@ watch([() => filters.value.type, () => filters.value.locationId], () => {
 
 // Init
 onMounted(async () => {
-  const myGroupId = await loadMyGroup();
-  if (myGroupId) {
-    await Promise.all([loadLocations(), loadBeneficiaries()]);
-  }
+  loadMyGroup();
+  await Promise.all([loadLocations(), loadBeneficiaries()]);
 });
 </script>
 

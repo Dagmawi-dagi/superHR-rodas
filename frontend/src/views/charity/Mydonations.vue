@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <h1 class="page-title">My Donations</h1>
-        <p class="page-subtitle">Donations for {{ myGroupName || 'your group' }}</p>
+        <p class="page-subtitle">Donations created by you</p>
       </div>
       <router-link to="/charity/my-donations/create" class="btn-primary">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon"><path d="M12 5v14M5 12h14"/></svg>
@@ -113,28 +113,26 @@ const loadCampaigns = async () => {
 };
 
 const loadKpiStats = async () => {
-  if (!myGroupId.value) return;
-  // Note: We might need a separate endpoint for group-specific stats if not already supported
-  // For now, we'll calculate from the loaded data or assume getDonationStats handles it if filtered (it doesn't usually)
-  // Let's assume we just want to show stats for the group. 
-  // If the backend doesn't support groupId in stats, we'll just show what we have.
-  const result = await charityService.getDonationStats(); // Ideally this would take { groupId: myGroupId.value }
+  const params: any = {
+    createdBy: authStore.user?.employeeId
+  };
+  const result = await charityService.getDonationStats(params);
   if (result.success && result.data) kpiStats.value = result.data;
 };
 
 const loadDonations = async () => {
-  if (!myGroupId.value) return;
   loading.value = true;
   try {
-    const params = {
+    const params: any = {
       page: pagination.value.currentPage,
-      limit: pagination.value.pageSize,
+      size: pagination.value.pageSize, // match backend 'size' param
       search: filters.value.search,
       status: filters.value.status,
       companyId: filters.value.companyId as any,
       campaignId: filters.value.campaignId as any,
-      groupId: myGroupId.value
+      createdBy: authStore.user?.employeeId
     };
+
     const result = await charityService.getDonations(params);
     if (result.success) {
       donations.value = result.data;
@@ -191,10 +189,15 @@ watch([() => filters.value.status, () => filters.value.companyId, () => filters.
 
 // Init
 onMounted(async () => {
-  const groupId = await loadMyGroup();
-  if (groupId) {
-    await Promise.all([loadCompanies(), loadCampaigns(), loadKpiStats(), loadDonations()]);
-  }
+  // We still load group info just to show the name if available, but it's not a filter requirement anymore
+  loadMyGroup();
+  
+  await Promise.all([
+    loadCompanies(), 
+    loadCampaigns(), 
+    loadKpiStats(), 
+    loadDonations()
+  ]);
 });
 </script>
 

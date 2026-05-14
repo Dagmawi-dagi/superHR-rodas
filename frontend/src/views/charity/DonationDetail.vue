@@ -431,15 +431,10 @@ const selectedInterval = ref(null)
 const uploadingEvidence = ref(false)
 
 const evidenceModalTitle = computed(() => {
-  if (selectedInterval.value) {
-    return `Interval Evidence: ${formatDate(selectedInterval.value.startDate)}`
-  }
   return 'Donation Evidence'
 })
 
 const openEvidenceModal = () => {
-  selectedItem.value = null
-  selectedInterval.value = null
   showEvidenceModal.value = true
 }
 
@@ -450,25 +445,14 @@ const handleEvidenceUpload = async (files) => {
   files.forEach(file => formData.append('documents', file))
   
   try {
-    let res
-    if (selectedInterval.value) {
-      res = await CharityService.uploadIntervalEvidence(
-        donationId, 
-        selectedInterval.value.intervalId, 
-        formData
-      )
-    } else {
-      res = await CharityService.uploadDonationEvidence(
-        donationId, 
-        formData
-      )
-    }
+    const res = await CharityService.uploadDonationEvidence(
+      donationId, 
+      formData
+    )
 
     if (res.success) {
       addToast('Evidence uploaded successfully')
       showEvidenceModal.value = false
-      selectedItem.value = null
-      selectedInterval.value = null
       loadDonation()
     } else {
       addToast(res.error || 'Upload failed', 'error')
@@ -494,16 +478,43 @@ const toggleBeneficiaryItems = (benId) => {
 }
 
 const beneficiariesWithItems = computed(() => {
-  if (!myBeneficiaries.value.length) return []
-  return myBeneficiaries.value.map(ben => {
-    const benItems = items.value.filter(item => item.beneficiaryId === ben.beneficiaryId)
-    const totalValue = benItems.reduce((sum, item) => sum + parseFloat(item.totalValue || 0), 0)
-    return {
-      ...ben,
-      items: benItems,
-      totalValue
+  if (!items.value.length) return []
+  
+  // Get unique beneficiaries from items
+  const benMap = new Map()
+  items.value.forEach(item => {
+    const bId = item.beneficiaryId
+    if (!bId) return
+
+    if (!benMap.has(bId)) {
+      // 1. Try to get beneficiary data from the item's joined object (backend include)
+      // 2. Fallback to the global beneficiaries list loaded in loadDependencies
+      const benInfo = item.beneficiary || beneficiaries.value.find(b => b.beneficiaryId === bId)
+      
+      benMap.set(bId, {
+        ...(benInfo || {}),
+        beneficiaryId: bId,
+        name: benInfo?.name || `Beneficiary #${bId}`,
+        type: benInfo?.type || 'individual',
+        Location: benInfo?.Location || benInfo?.BeneficiaryLocation || {},
+        items: [],
+        totalValue: 0
+      })
     }
   })
+
+  // Fill items and calculate totals
+  items.value.forEach(item => {
+    const bId = item.beneficiaryId
+    if (!bId) return
+    const ben = benMap.get(bId)
+    if (ben) {
+      ben.items.push(item)
+      ben.totalValue += parseFloat(item.totalValue || 0)
+    }
+  })
+
+  return Array.from(benMap.values())
 })
 
 // ── Interval state ──
@@ -604,23 +615,6 @@ const getIntervalDistributions = (item, intervalId) => {
   return [...filtered].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
 }
 
-const hasIntervalEvidence = (item, intervalId) => {
-  if (!item.DonationDistributionEvidences) return false
-  return item.DonationDistributionEvidences.some(ev => String(ev.intervalId) === String(intervalId))
-}
-
-const getIntervalEvidences = (item, intervalId) => {
-  if (!item.DonationDistributionEvidences) return []
-  return item.DonationDistributionEvidences.filter(ev => String(ev.intervalId) === String(intervalId))
-}
-
-const expandedIntervalEvidence = ref([]);
-const toggleIntervalEvidence = (intervalId) => {
-  const idx = expandedIntervalEvidence.value.indexOf(intervalId);
-  if (idx > -1) expandedIntervalEvidence.value.splice(idx, 1);
-  else expandedIntervalEvidence.value.push(intervalId);
-}
-
 // Helper to filter main table (only show non-interval distributions for recurring items)
 const summaryDistributions = (item) => {
   if (!item.DonationDistributions) return []
@@ -672,21 +666,27 @@ const loadDonation = async () => {
 }
 
 const loadDependencies = async () => {
-  // If donation has a groupId, load those beneficiaries
+  // 1. Get all beneficiaries for the general list (used for dropdowns etc)
+  const bens = await CharityService.getBeneficiaries()
+  if (bens.success) beneficiaries.value = bens.data
+
+  // 2. Identify the beneficiaries that "belong" to the context of this view
+  // charity_admin sees ALL beneficiaries if they are viewing from "All Donations"
+  // but we still want a list of beneficiaries that are relevant for the current group
   if (donation.value?.groupId) {
     const res = await CharityService.getGroupBeneficiaries(donation.value.groupId)
     if (res.success) myBeneficiaries.value = res.data
-  } else {
-    // Fallback: load user's group beneficiaries
+  } else if (authStore.userRole === 'charity_teamleader') {
+    // Fallback for teamleader: load their own group beneficiaries
     const grpRes = await CharityService.getMyGroup()
     if (grpRes.success && grpRes.data?.length) {
       const res = await CharityService.getGroupBeneficiaries(grpRes.data[0].groupId)
       if (res.success) myBeneficiaries.value = res.data
     }
+  } else if (authStore.userRole === 'charity_admin') {
+    // For admin, if no group is specified on donation, just use all beneficiaries
+    myBeneficiaries.value = beneficiaries.value
   }
-
-  const bens = await CharityService.getBeneficiaries()
-  if (bens.success) beneficiaries.value = bens.data
 }
 
 const loadGroups = async () => {
