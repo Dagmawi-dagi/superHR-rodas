@@ -92,7 +92,6 @@ exports.createGroup = async (req, res) => {
       headEmployeeId:     headEmployeeId     || null,
       viceHeadEmployeeId: viceHeadEmployeeId || null,
       members:            [...memberSet],
-      managerEmployeeId:  headEmployeeId     || null, // legacy field
     });
 
     res.status(201).json({ success: true, data: group });
@@ -116,7 +115,7 @@ exports.updateGroup = async (req, res) => {
     await group.update({
       ...(name               !== undefined && { name }),
       ...(description        !== undefined && { description }),
-      ...(headEmployeeId     !== undefined && { headEmployeeId, managerEmployeeId: headEmployeeId }),
+      ...(headEmployeeId     !== undefined && { headEmployeeId }),
       ...(viceHeadEmployeeId !== undefined && { viceHeadEmployeeId }),
       members: [...memberSet],
       ...(isActive           !== undefined && { isActive }),

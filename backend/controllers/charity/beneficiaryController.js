@@ -91,7 +91,7 @@ exports.getAllBeneficiaries = async (req, res) => {
           attributes: ['groupId', 'name'],
           include: {
             model: Employee,
-            as: 'manager',
+            as: 'head',
             attributes: ['employeeId', 'firstName', 'lastName']
           }
         },

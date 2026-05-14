@@ -43,8 +43,8 @@ module.exports = (sequelize, DataTypes) => {
         field: "end_date",
       },
       status: {
-        type: DataTypes.ENUM("pending", "distributed"),
-        defaultValue: "pending",
+          type: DataTypes.ENUM("pending", "active", "distributed", "completed"),
+          defaultValue: "pending",
       },
     },
     {

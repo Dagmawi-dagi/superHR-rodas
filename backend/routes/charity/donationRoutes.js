@@ -22,7 +22,7 @@ router.delete('/items/:itemId/distributions', authMiddleware(['admin', 'charity_
 router.put('/items/:itemId/distribution-date', authMiddleware(['admin', 'charity_admin']), donationController.updateDistributionDate);
 
 // ── STATUS TRANSITIONS ────────────────────────────────────────────────────────
-router.post('/:id/submit',          authMiddleware(['admin', 'charity_teamleader']), donationController.submitForApproval);
+// router.post('/:id/submit',          authMiddleware(['admin', 'charity_teamleader']), donationController.submitForApproval);
 router.post('/:id/approve',         authMiddleware(['admin', 'charity_admin']),      donationController.approveDonation);
 router.post('/:id/request-changes', authMiddleware(['admin', 'charity_admin']),      donationController.requestChanges);
 router.post('/:id/distribute',      authMiddleware(['admin', 'charity_admin']),      donationController.distributeDonation);
@@ -61,13 +61,18 @@ router.put('/items/:itemId/interval', authMiddleware(['admin', 'charity_admin'])
 router.get('/:id/approvals', authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getApprovalHistory);
 router.get('/:id/logs',      authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getDonationLogs);
 
-// ── DEDUCTIONS (legacy — kept for backward compat) ────────────────────────────
-router.post('/items/:itemId/deductions', authMiddleware(['admin', 'charity_admin']), donationController.addDeduction);
-router.get('/items/:itemId/deductions',  authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getItemDeductions);
 
 // ── STATS ──────────────────────────────────────────────────────────────────────
 router.get('/stats/summary',     authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getDonationStats);
 router.get('/stats/by-campaign', authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getDonationsByCampaign);
 router.get('/stats/by-company',  authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getDonationsByCompany);
+
+
+
+
+router.post('/:id/submit', authMiddleware(['admin', 'charity_teamleader']), donationController.submitForApproval);
+router.get('/:id/approvals', authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), donationController.getApprovalHistory);
+
+
 
 module.exports = router;

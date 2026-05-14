@@ -45,7 +45,7 @@ exports.getAllCampaigns = async (req, res) => {
     }
 
     // Allowed sort fields – only columns that exist in the campaigns table
-    const allowedSortFields = ['title', 'startDate', 'endDate', 'targetAmount', 'status', 'category', 'created_at'];
+    const allowedSortFields = ['title', 'startDate', 'endDate', 'status', 'category', 'created_at'];
     const order = buildSortingOptions(sortBy, sortOrder, allowedSortFields);
 
     const { count, rows: campaigns } = await Campaign.findAndCountAll({
@@ -108,7 +108,7 @@ exports.getCampaignById = async (req, res) => {
 // ------------------------------------------------------------------
 exports.createCampaign = async (req, res) => {
   try {
-    const { title, description, category, startDate, endDate, targetAmount } =
+    const { title, description, category, startDate, endDate } =
       req.body;
 
     if (!title) {
@@ -125,7 +125,6 @@ exports.createCampaign = async (req, res) => {
       category,
       startDate,
       endDate,
-      targetAmount,
       status: "inactive",
       createdBy: employeeId,
     });
@@ -153,7 +152,6 @@ exports.updateCampaign = async (req, res) => {
       category,
       startDate,
       endDate,
-      targetAmount,
       status,
     } = req.body;
 
@@ -170,7 +168,6 @@ exports.updateCampaign = async (req, res) => {
     if (category !== undefined) updates.category = category;
     if (startDate !== undefined) updates.startDate = startDate;
     if (endDate !== undefined) updates.endDate = endDate;
-    if (targetAmount !== undefined) updates.targetAmount = targetAmount;
     if (status !== undefined) updates.status = status;
 
     await campaign.update(updates);
@@ -227,19 +224,15 @@ exports.getCampaignProgress = async (req, res) => {
         },
       })) || 0;
 
-    const percentage =
-      campaign.targetAmount > 0
-        ? (parseFloat(donationsTotal) / parseFloat(campaign.targetAmount)) * 100
-        : 0;
+    const percentage = 0;
 
     res.json({
       success: true,
       data: {
         campaignId: campaign.campaignId,
         title: campaign.title,
-        targetAmount: campaign.targetAmount,
         raisedAmount: donationsTotal,
-        percentage: Math.round(percentage * 100) / 100,
+        percentage,
         status: campaign.status,
       },
     });

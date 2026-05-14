@@ -35,10 +35,6 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DATEONLY,
         field: "end_date",
       },
-      targetAmount: {
-        type: DataTypes.DECIMAL(15, 2),
-        field: "target_amount",
-      },
       status: {
         type: DataTypes.ENUM("inactive", "active", "completed", "cancelled"),
         defaultValue: "inactive",

@@ -37,7 +37,6 @@ module.exports = {
         category:           Sequelize.STRING(100),
         start_date:         Sequelize.DATEONLY,
         end_date:           Sequelize.DATEONLY,
-        target_amount:      { type: Sequelize.DECIMAL(15, 2) },
         status:             { type: Sequelize.ENUM('inactive', 'active', 'completed', 'cancelled'), defaultValue: 'inactive' },
         created_by:         { type: Sequelize.INTEGER, references: { model: 'employees', key: 'employee_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
         actual_end_date:    Sequelize.DATEONLY,
@@ -181,15 +180,7 @@ module.exports = {
         created_at:       { type: Sequelize.DATE, allowNull: false },
       }, { transaction: t });
 
-      // 12. Donation Approvals
-      await queryInterface.createTable('donation_approvals', {
-        approval_id: { type: Sequelize.INTEGER, autoIncrement: true, primaryKey: true },
-        donation_id: { type: Sequelize.INTEGER, references: { model: 'donations', key: 'donation_id' }, onUpdate: 'CASCADE', onDelete: 'CASCADE' },
-        approved_by: { type: Sequelize.INTEGER, references: { model: 'employees', key: 'employee_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
-        status:      { type: Sequelize.ENUM('pending', 'approved', 'rejected'), defaultValue: 'pending' },
-        comment:     Sequelize.TEXT,
-        created_at:  { type: Sequelize.DATE, allowNull: false },
-      }, { transaction: t });
+      
 
       // 13. Donation Logs
       await queryInterface.createTable('donation_logs', {
@@ -201,20 +192,7 @@ module.exports = {
         created_at:  { type: Sequelize.DATE, allowNull: false },
       }, { transaction: t });
 
-      // 14. Donation Deductions
-      await queryInterface.createTable('donation_deductions', {
-        deduction_id:                 { type: Sequelize.INTEGER, autoIncrement: true, primaryKey: true },
-        donation_item_id:             { type: Sequelize.INTEGER, references: { model: 'donation_items', key: 'donation_item_id' }, onUpdate: 'CASCADE', onDelete: 'CASCADE' },
-        distribution_id:              { type: Sequelize.INTEGER, references: { model: 'donation_distributions', key: 'distribution_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
-        interval_id:                  { type: Sequelize.INTEGER, references: { model: 'donation_item_intervals', key: 'interval_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
-        amount:                       { type: Sequelize.DECIMAL(15, 2), allowNull: false },
-        reason:                       { type: Sequelize.TEXT, allowNull: false },
-        from_beneficiary_id:          { type: Sequelize.INTEGER, references: { model: 'beneficiaries', key: 'beneficiary_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
-        reassigned_to_beneficiary_id: { type: Sequelize.INTEGER, references: { model: 'beneficiaries', key: 'beneficiary_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
-        deduction_date:               { type: Sequelize.DATEONLY, defaultValue: Sequelize.NOW },
-        created_by:                   { type: Sequelize.INTEGER, references: { model: 'employees', key: 'employee_id' }, onUpdate: 'CASCADE', onDelete: 'SET NULL' },
-        created_at:                   { type: Sequelize.DATE, allowNull: false },
-      }, { transaction: t });
+      
 
       // 15. Donation Item Adjustment Requests (NEW)
       await queryInterface.createTable('donation_item_adjustment_requests', {

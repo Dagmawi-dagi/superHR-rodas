@@ -28,8 +28,6 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "BeneficiaryLocation",
       tableName: "beneficiary_locations",
       timestamps: false,
-      paranoid: true, 
-      deletedAt: "deleted_at"
     },
   );
 

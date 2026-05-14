@@ -1,7 +1,6 @@
 const {
   Donation,
   DonationItem,
-  DonationApproval,
   DonationLog,
   DonationDistribution,
   DonationDistributionEvidence,
@@ -11,8 +10,8 @@ const {
   Beneficiary,
   BeneficiaryLocation,
   Employee,
-  DonationDeduction,
   sequelize,
+  BeneficiaryGroup
 } = require("../../models");
 const { Op } = require("sequelize");
 
@@ -153,13 +152,25 @@ exports.createDonation = async (req, res) => {
     }
 
     const employeeId = await getEmployeeIdFromUserId(req.user.userId);
-
+    const group = await BeneficiaryGroup.findOne({
+        where: {
+            [Op.or]: [
+                { headEmployeeId: employeeId },
+                { viceHeadEmployeeId: employeeId }
+            ]
+        }
+    });
+    if (!group) {
+      await t.rollback();
+      return res.status(403).json({ success: false, error: 'Only group head/vice can create donations' });
+    }
     // Create the donation
     const donation = await Donation.create(
       {
         companyId,
         campaignId,
         donationDate,
+        groupId:group.groupId,
         notes,
         status: "draft",
         totalValue: 0,
@@ -211,6 +222,7 @@ exports.getAllDonations = async (req, res) => {
     } = req.query;
     const { limit, offset } = getPagination(page, size);
 
+
     const where = {};
     if (status) where.status = status;
     if (companyId) where.companyId = parseInt(companyId);
@@ -224,6 +236,29 @@ exports.getAllDonations = async (req, res) => {
     } else if (endDate) {
       where.donationDate = { [Op.lte]: endDate };
     }
+
+
+    // If user is charity_teamleader, only show their group's donations
+    if (req.user.role === 'charity_teamleader') {
+        const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+        const group = await BeneficiaryGroup.findOne({
+            where: {
+                [Op.or]: [
+                    { headEmployeeId: employeeId },
+                    { viceHeadEmployeeId: employeeId },
+                    { members: { [Op.contains]: [employeeId] } }
+                ]
+            },
+            attributes: ['groupId']
+        });
+        if (group) {
+            where.groupId = group.groupId;
+        } else {
+            // No group → show nothing
+            where.groupId = -1;
+        }
+    }
+
 
     const include = [
       { model: DonationCompany, attributes: ["companyId", "name", "type"] },
@@ -258,6 +293,62 @@ exports.getAllDonations = async (req, res) => {
   }
 };
 
+exports.submitForApproval = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id } = req.params;
+
+    const donation = await Donation.findByPk(id, {
+      include: [{ model: DonationItem }],
+      transaction: t,
+    });
+
+    if (!donation || donation.status !== 'draft') {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Donation not found or not in draft' });
+    }
+
+    if (!donation.DonationItems || donation.DonationItems.length === 0) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Donation must have at least one item' });
+    }
+
+    await donation.update({ status: 'pending' }, { transaction: t });
+
+    const employeeId = await getEmployeeIdFromUserId(req.user.userId);
+    await logDonationAction(id, employeeId, 'SUBMIT_FOR_APPROVAL', {}, t);
+
+    await t.commit();
+
+    res.json({
+      success: true,
+      message: 'Donation submitted for approval',
+      data: { donationId: id, status: 'pending' },
+    });
+  } catch (error) {
+    await t.rollback();
+    console.error('Submit error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+
+exports.getApprovalHistory = async (req, res) => {
+  try {
+    const logs = await DonationLog.findAll({
+      where: {
+        donationId: req.params.id,
+        action: { [Op.in]: ['SUBMIT_FOR_APPROVAL', 'APPROVE', 'REQUEST_CHANGES'] }
+      },
+      include: [{ model: Employee, attributes: ['employeeId', 'firstName', 'lastName'] }],
+      order: [['created_at', 'DESC']]
+    });
+    res.json({ success: true, data: logs });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 // ------------------------------------------------------------------
 // GET DONATION BY ID (full details)
 // ------------------------------------------------------------------
@@ -268,7 +359,7 @@ exports.getDonationById = async (req, res) => {
     const donation = await Donation.findByPk(id, {
       include: [
         { model: DonationCompany, attributes: ['companyId', 'name', 'type', 'contactInfo'] },
-        { model: Campaign, attributes: ['campaignId', 'title', 'description', 'category', 'targetAmount'] },
+        { model: Campaign, attributes: ['campaignId', 'title', 'description', 'category'] },
         { model: Employee, as: 'creator', attributes: ['employeeId', 'firstName', 'lastName'] },
         { model: Employee, as: 'approver', attributes: ['employeeId', 'firstName', 'lastName'] },
         { model: Employee, as: 'distributor', attributes: ['employeeId', 'firstName', 'lastName'] },
@@ -297,20 +388,10 @@ exports.getDonationById = async (req, res) => {
             {
               model: DonationItemInterval   // ← add this
             },
-            {
-              model: DonationDeduction,
-              include: [
-                { model: Beneficiary, as: 'reassignedTo', attributes: ['name'] },
-                { model: Beneficiary, as: 'fromBeneficiary', attributes: ['name'] }
-              ]
-            }
+            
           ]
         },
-        {
-          model: DonationApproval,
-          include: [{ model: Employee, attributes: ['employeeId', 'firstName', 'lastName'] }],
-          order: [['created_at', 'DESC']]
-        }
+        
       ]
     });
 
@@ -617,73 +698,6 @@ exports.deleteDonationItem = async (req, res) => {
 };
 
 
-// ------------------------------------------------------------------
-// SUBMIT FOR APPROVAL (draft → pending)
-// ------------------------------------------------------------------
-exports.submitForApproval = async (req, res) => {
-  const t = await sequelize.transaction();
-  try {
-    const { id } = req.params;
-
-    const donation = await Donation.findByPk(id, {
-      include: [{ model: DonationItem }],
-      transaction: t,
-    });
-
-    if (!donation) {
-      await t.rollback();
-      return res
-        .status(404)
-        .json({ success: false, error: "Donation not found" });
-    }
-
-    if (donation.status !== "draft") {
-      await t.rollback();
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: `Cannot submit from status: ${donation.status}`,
-        });
-    }
-
-    if (!donation.DonationItems || donation.DonationItems.length === 0) {
-      await t.rollback();
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: "Donation must have at least one item",
-        });
-    }
-
-    await donation.update({ status: "pending" }, { transaction: t });
-
-    await DonationApproval.create(
-      {
-        donationId: id,
-        status: "pending",
-      },
-      { transaction: t },
-    );
-
-    const _empSubmit = await getEmployeeIdFromUserId(req.user.userId);
-    await logDonationAction(id, _empSubmit, "SUBMIT_FOR_APPROVAL", {}, t);
-
-    await t.commit();
-
-    res.json({
-      success: true,
-      message: "Donation submitted for approval",
-      data: { donationId: id, status: "pending" },
-    });
-  } catch (error) {
-    await t.rollback();
-    console.error("Submit error:", error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
 
 // ------------------------------------------------------------------
 // APPROVER requestChanges 
@@ -708,12 +722,7 @@ exports.requestChanges = async (req, res) => {
     const employeeId = await getEmployeeIdFromUserId(req.user.userId);
 
     await donation.update({ status: 'draft' }, { transaction: t });
-    await DonationApproval.create({
-      donationId: id,
-      approvedBy: employeeId,   // now using employee ID, not user ID
-      status: 'rejected',
-      comment: comment.trim(),
-    }, { transaction: t });
+
 
     await logDonationAction(id, employeeId, 'REQUEST_CHANGES', { comment }, t);
 
@@ -725,7 +734,22 @@ exports.requestChanges = async (req, res) => {
   }
 };
 
-
+// getApprovalHistory – replaced by a function that returns relevant logs
+exports.getApprovalHistory = async (req, res) => {
+  try {
+    const logs = await DonationLog.findAll({
+      where: {
+        donationId: req.params.id,
+        action: { [Op.in]: ['SUBMIT_FOR_APPROVAL', 'APPROVE', 'REQUEST_CHANGES', 'REJECT'] }
+      },
+      include: [{ model: Employee, attributes: ['employeeId', 'firstName', 'lastName'] }],
+      order: [['created_at', 'DESC']]
+    });
+    res.json({ success: true, data: logs });
+  } catch (error) { 
+    res.status(400).json({ success: false, error: error.message });
+   }
+};
 // ------------------------------------------------------------------
 // APPROVE DONATION (pending → approved)
 // ------------------------------------------------------------------
@@ -754,30 +778,6 @@ exports.approveDonation = async (req, res) => {
 
     await donation.update({ status: "approved", approvedBy: employeeId }, { transaction: t });
 
-    const approval = await DonationApproval.findOne({
-      where: { donationId: id, status: "pending" },
-      transaction: t,
-    });
-    if (approval) {
-      await approval.update(
-        {
-          status: "approved",
-          approvedBy: employeeId,
-          comment: comment || null,
-        },
-        { transaction: t },
-      );
-    } else {
-      await DonationApproval.create(
-        {
-          donationId: id,
-          approvedBy: employeeId,
-          status: "approved",
-          comment,
-        },
-        { transaction: t },
-      );
-    }
 
     await logDonationAction(id, employeeId, "APPROVE", { comment }, t);
 
@@ -1251,31 +1251,6 @@ exports.getDistributionById = async (req, res) => {
 };
 
 // ------------------------------------------------------------------
-// GET APPROVAL HISTORY FOR A DONATION
-// ------------------------------------------------------------------
-exports.getApprovalHistory = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const approvals = await DonationApproval.findAll({
-      where: { donationId: id },
-      include: [
-        {
-          model: Employee,
-          attributes: ["employeeId", "firstName", "lastName"],
-        },
-      ],
-      order: [["created_at", "ASC"]],
-    });
-
-    res.json({ success: true, data: approvals });
-  } catch (error) {
-    console.error("Get approval history error:", error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-// ------------------------------------------------------------------
 // GET LOGS FOR A DONATION
 // ------------------------------------------------------------------
 exports.getDonationLogs = async (req, res) => {
@@ -1361,50 +1336,9 @@ exports.getDonationsByCompany = async (req, res) => {
 
 
 
-// Add deduction to money item
-exports.addDeduction = async (req, res) => {
-  const t = await sequelize.transaction();
-  try {
-    const { itemId } = req.params;
-    const { amount, reason, reassignedToBeneficiaryId } = req.body;
-    const item = await DonationItem.findByPk(itemId, { transaction: t });
-    if (!item) throw new Error('Item not found');
-    if (item.type !== 'money') throw new Error('Only money items can have deductions');
-    const deduction = await DonationDeduction.create({
-      donationItemId: itemId,
-      amount,
-      reason,
-      reassignedToBeneficiaryId,
-      createdBy: req.user.userId
-    }, { transaction: t });
-    if (!reassignedToBeneficiaryId) {
-      item.unassignedDeduction = parseFloat(item.unassignedDeduction || 0) + parseFloat(amount);
-      await item.save({ transaction: t });
-    }
-    await t.commit();
-    res.status(201).json({ success: true, data: deduction });
-  } catch (error) {
-    await t.rollback();
-    res.status(400).json({ success: false, error: error.message });
-  }
-};
 
-// Get deductions for an item
-exports.getItemDeductions = async (req, res) => {
-  try {
-    const deductions = await DonationDeduction.findAll({
-      where: { donationItemId: req.params.itemId },
-      include: [
-        { model: Beneficiary, as: 'reassignedTo', attributes: ['name'] },
-        { model: Employee, attributes: ['firstName', 'lastName'] }
-      ],
-      order: [['created_at', 'DESC']]
-    });
-    res.json({ success: true, data: deductions });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
+
+
 
 // Return a distribution
 exports.returnDistribution = async (req, res) => {
@@ -1443,10 +1377,9 @@ exports.returnDistribution = async (req, res) => {
 exports.getDonationStats = async (req, res) => {
   try {
     const { groupId, createdBy } = req.query;
-    let effectiveGroupId = groupId;
-    let effectiveCreatedBy = createdBy;
+    let whereDonation = {};
 
-    // Auto-filter for team leaders if not explicitly provided (or even if it is)
+    // Auto-filter for team leaders
     if (req.user.role === 'charity_teamleader') {
       const employeeId = await getEmployeeIdFromUserId(req.user.userId);
       const involvedGroups = await BeneficiaryGroup.findAll({
@@ -1460,48 +1393,50 @@ exports.getDonationStats = async (req, res) => {
         attributes: ['groupId']
       });
       const involvedGroupIds = involvedGroups.map(g => g.groupId);
-      
-      if (groupId) {
-        if (!involvedGroupIds.includes(parseInt(groupId))) {
-          effectiveGroupId = -1; // No access to requested group
-        }
-      } else {
-        effectiveGroupId = involvedGroupIds.length ? { [Op.in]: involvedGroupIds } : -1;
-      }
+      whereDonation.groupId = involvedGroupIds.length ? { [Op.in]: involvedGroupIds } : -1;
+    } else if (groupId) {
+      whereDonation.groupId = groupId;
+    }
+    if (createdBy) {
+      whereDonation.createdBy = parseInt(createdBy);
     }
 
-    const whereDonation = {};
-    if (effectiveGroupId) whereDonation.groupId = effectiveGroupId;
-    if (effectiveCreatedBy) whereDonation.createdBy = parseInt(effectiveCreatedBy);
-
+    // 1. Total number of donations (non‑cancelled)
     const totalDonations = await Donation.count({ where: whereDonation });
 
-    // Net total value (already subtracts returns, excludes cancelled)
+    // 2. Net total value (non‑cancelled)
     const totalValue = await Donation.sum('total_value', {
       where: { ...whereDonation, status: { [Op.notIn]: ['cancelled'] } }
     }) || 0;
 
-    // Total returned value (across all donations)
-    const returnedValue = await DonationDistribution.sum('value', {
-      where: { isReturned: true },
-      include: [{
-        model: DonationItem,
-        include: [{
-          model: Donation,
-          where: whereDonation
-        }]
-      }]
-    }) || 0;
+    // 3. Returned value – use raw SQL to avoid join issues
+    let returnedValue = 0;
+    const donationIds = (await Donation.findAll({
+      attributes: ['donationId'],
+      where: whereDonation
+    })).map(d => d.donationId);
 
-    // Total value of cancelled donations
+    if (donationIds.length > 0) {
+      const result = await sequelize.query(`
+        SELECT COALESCE(SUM(dd.value), 0) AS total_returned
+        FROM donation_distributions dd
+        INNER JOIN donation_items di ON dd.donation_item_id = di.donation_item_id
+        WHERE dd.is_returned = TRUE
+          AND di.donation_id IN (${donationIds.join(',')})
+          AND dd.deleted_at IS NULL
+      `, { type: sequelize.QueryTypes.SELECT });
+      returnedValue = parseFloat(result[0].total_returned || 0);
+    }
+
+    // 4. Cancelled value
     const cancelledValue = await Donation.sum('total_value', {
       where: { ...whereDonation, status: 'cancelled' }
     }) || 0;
 
-    // Gross distributed value (before returns)
+    // 5. Gross value (distributed before returns)
     const grossValue = money(money(totalValue) + money(returnedValue));
 
-    // Status counts
+    // 6. Status counts (safe because no joins)
     const statusCounts = await Donation.findAll({
       where: whereDonation,
       attributes: [
@@ -1512,21 +1447,19 @@ exports.getDonationStats = async (req, res) => {
       raw: true
     });
 
-    // Value by type
-    const byType = await DonationItem.findAll({
-      include: [{
-        model: Donation,
-        where: whereDonation,
-        attributes: []
-      }],
-      attributes: [
-        'type',
-        [sequelize.fn('SUM', sequelize.col('DonationItem.total_value')), 'total']
-      ],
-      group: ['type'],
-      raw: true
-    });
+    // 7. Value by type – use raw SQL for safety
+    let byType = [];
+    if (donationIds.length > 0) {
+      byType = await sequelize.query(`
+        SELECT di.type, COALESCE(SUM(di.total_value), 0) AS total
+        FROM donation_items di
+        WHERE di.donation_id IN (${donationIds.join(',')})
+          AND di.deleted_at IS NULL
+        GROUP BY di.type
+      `, { type: sequelize.QueryTypes.SELECT });
+    }
 
+    // 8. Recent donations
     const recentDonations = await Donation.findAll({
       where: whereDonation,
       limit: 5,
@@ -1538,16 +1471,16 @@ exports.getDonationStats = async (req, res) => {
       success: true,
       data: {
         totalDonations,
-        totalValue,            // net distributed
-        grossValue,            // distributed before returns
-        returnedValue,         // total returned
-        cancelledValue,        // total cancelled
+        totalValue,
+        grossValue,
+        returnedValue,
+        cancelledValue,
         statusBreakdown: statusCounts.reduce((acc, curr) => {
-          acc[curr.status] = parseInt(curr.dataValues?.count ?? curr.count);
+          acc[curr.status] = parseInt(curr.count);
           return acc;
         }, {}),
         valueByType: byType.reduce((acc, curr) => {
-          acc[curr.type] = parseFloat(curr.dataValues?.total ?? curr.total);
+          acc[curr.type] = parseFloat(curr.total);
           return acc;
         }, {}),
         recentDonations
@@ -1558,7 +1491,6 @@ exports.getDonationStats = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
-
 
 exports.distributeItemForInterval = async (req, res) => {
   const t = await sequelize.transaction();
@@ -1885,16 +1817,7 @@ exports.reassignDistribution = async (req, res) => {
 
     // 3. Log the deduction/reassignment
     const employeeId = await getEmployeeIdFromUserId(req.user.userId);
-    await DonationDeduction.create({
-      donationItemId: item.donationItemId,
-      distributionId: dist.distributionId,
-      intervalId: dist.intervalId || null,
-      amount: parseFloat(amount) * parseFloat(item.unitValue), 
-      reason,
-      fromBeneficiaryId: dist.beneficiaryId,
-      reassignedToBeneficiaryId: toBeneficiaryId || null,
-      createdBy: employeeId
-    }, { transaction: t });
+    
 
     await logDonationAction(item.Donation.donationId, employeeId, 'REASSIGN_DISTRIBUTION', {
       fromBeneficiaryId: dist.beneficiaryId,

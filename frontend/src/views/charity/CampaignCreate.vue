@@ -35,10 +35,6 @@
               <label>Category</label>
               <input type="text" v-model="form.category" placeholder="e.g. Food Security" />
             </div>
-            <div class="form-field">
-              <label>Target Amount (ETB)</label>
-              <input type="number" v-model="form.targetAmount" placeholder="0.00" step="0.01" />
-            </div>
           </div>
           <div class="form-row">
             <div class="form-field">
