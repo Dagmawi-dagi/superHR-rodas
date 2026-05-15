@@ -193,7 +193,7 @@
                 <div class="dist-detail">
                   <div class="dist-header">
                     <h4 style="margin: 0; font-size: 14px;">Donation Items for {{ ben.name }}</h4>
-                    <button v-if="donation.status === 'draft'" @click="openAddItemModal(ben.beneficiaryId)" class="btn-sm distribute">+ Add Item</button>
+                    <!-- <button v-if="donation.status === 'draft'" @click="openAddItemModal(ben.beneficiaryId)" class="btn-sm distribute">+ Add Item</button> -->
                   </div>
 
                   <div v-if="ben.items?.length" style="margin-top: 12px;">
@@ -288,14 +288,17 @@
                                         </td>
                                         <td>{{ formatDate(interval.startDate) }} - {{ formatDate(interval.endDate) }}</td>
                                         <td>
-                                          <span v-if="item.type === 'money'">{{ formatCurrency(interval.amount) }}</span>
-                                          <span v-else>{{ item.quantity }}</span>
+                                          <span v-if="item.type === 'money'">{{ formatCurrency(interval.value) }}</span>
+                                          <span v-else>{{ interval.quantity }}</span>
                                         </td>
                                         <td v-if="item.type === 'money'">
                                           <span style="text-transform: capitalize;">{{ interval.paymentMethod || '-' }}</span>
                                         </td>
                                         <td v-if="item.type === 'money'">
                                           {{ formatDate(interval.paymentDate) }}
+                                        </td>
+                                        <td v-if="item.type !== 'money'" style="font-weight: 500;">
+                                          {{ formatCurrency(interval.value) }}
                                         </td>
                                         <td><span :class="['status-badge', `status-${interval.status}`]">{{ interval.status }}</span></td>
                                         <td class="actions-cell">

@@ -46,7 +46,7 @@
             </div>
             <div class="form-group" style="display:flex;align-items:flex-end;">
               <div class="computed-box" v-if="form.unitValue > 0">
-                <span class="computed-label">Total Allocated</span>
+                <span class="computed-label">Total Allocated Value</span>
                 <span class="computed-value">{{ formatCurrency(grandTotal) }}</span>
               </div>
             </div>
@@ -164,22 +164,42 @@
 
               <!-- MINI TABLE FOR RECURRING -->
               <div class="recurring-details" v-if="form.isRecurring && row.intervalCount > 0">
-                <div class="details-header">
+                <div class="details-header" :class="{ 'goods-header': form.type !== 'money' }">
                   <span>#</span>
                   <span>Due Date</span>
-                  <span>Amount (ETB)</span>
+                  <span>{{ form.type === 'money' ? 'Value (ETB)' : 'Quantity' }}</span>
                   <span v-if="form.type === 'money'">Method</span>
                   <span v-if="form.type === 'money'">Pay Date</span>
+                  <span v-if="form.type !== 'money'">Total Value</span>
                 </div>
-                <div v-for="(inv, idx) in row.intervals" :key="idx" class="details-row">
+                <div v-for="(inv, idx) in row.intervals" :key="idx" class="details-row" :class="{ 'goods-row': form.type !== 'money' }">
                   <span class="idx-box">{{ idx + 1 }}</span>
                   <span class="date-box">{{ formatDate(inv.startDate) }}</span>
-                  <input type="number" step="0.01" v-model.number="inv.amount" class="mini-input" />
+                  
+                  <!-- If money, user enters value. If goods, user enters quantity (stored in inv.value/inv.quantity) -->
+                  <input
+                    v-if="form.type === 'money'"
+                    type="number" step="0.01"
+                    v-model.number="inv.value"
+                    class="mini-input"
+                  />
+                  <input
+                    v-else
+                    type="number" step="0.01"
+                    v-model.number="inv.quantity"
+                    class="mini-input"
+                  />
+
                   <select v-if="form.type === 'money'" v-model="inv.paymentMethod" class="mini-select">
                     <option value="bank">Bank</option>
                     <option value="cash">Cash</option>
                   </select>
                   <input v-if="form.type === 'money'" type="date" v-model="inv.paymentDate" class="mini-input-date" />
+
+                  <!-- For goods, show the computed value of this specific period -->
+                  <span v-if="form.type !== 'money'" class="mini-calc-val">
+                    {{ formatCurrency((inv.quantity || 0) * (form.unitValue || 0)) }}
+                  </span>
                 </div>
                 <div class="details-footer">
                    <span>Total for this beneficiary:</span>
@@ -287,7 +307,8 @@ const loadMyBeneficiaries = async () => {
           r.intervals = ivs.map(iv => ({
             startDate: iv.startDate,
             endDate: iv.endDate,
-            amount: parseFloat(iv.amount),
+            value: parseFloat(iv.value),
+            quantity: parseFloat(iv.quantity),
             paymentMethod: iv.paymentMethod,
             paymentDate: iv.paymentDate || ''
           }))
@@ -309,7 +330,14 @@ const rowHasValue = (row) => {
 }
 
 const rowValue = (row) => {
-  if (form.isRecurring) return row.intervals.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0)
+  if (form.isRecurring) {
+    if (form.type === 'money') {
+      return row.intervals.reduce((s, i) => s + (parseFloat(i.value) || 0), 0)
+    } else {
+      // For goods, it is Sum of (quantity per period * unit value)
+      return row.intervals.reduce((s, i) => s + ((parseFloat(i.quantity) || 0) * (parseFloat(form.unitValue) || 0)), 0)
+    }
+  }
   if (form.type === 'money') return parseFloat(row.amount) || 0
   return (parseFloat(row.quantity) || 0) * (parseFloat(form.unitValue) || 0)
 }
@@ -334,7 +362,9 @@ const updateRowIntervals = (row) => {
     return
   }
   const newIvs = []
-  const base = form.type === 'money' ? (parseFloat(row.amount) || 0) : (parseFloat(form.unitValue) || 0)
+  const perPeriodQty = parseFloat(row.quantity) || 0
+  const uv = parseFloat(form.unitValue) || 0
+  const perPeriodValue = form.type === 'money' ? (parseFloat(row.amount) || 0) : (perPeriodQty * uv)
   
   for (let i = 0; i < row.intervalCount; i++) {
     let s = new Date(row.intervalStartDate); let e = new Date(row.intervalStartDate)
@@ -346,7 +376,8 @@ const updateRowIntervals = (row) => {
     newIvs.push({
       startDate: s.toISOString().split('T')[0],
       endDate: e.toISOString().split('T')[0],
-      amount: (old && old.amount > 0) ? old.amount : base,
+      value: (old && old.value > 0 && form.type === 'money') ? old.value : perPeriodValue,
+      quantity: (old && old.quantity > 0 && form.type !== 'money') ? old.quantity : perPeriodQty,
       paymentMethod: old ? old.paymentMethod : row.paymentMethod,
       paymentDate: old ? old.paymentDate : ''
     })
@@ -357,7 +388,14 @@ const updateRowIntervals = (row) => {
 watch(() => rows.value, (newRows) => {
   if (!form.isRecurring) return
   newRows.forEach(row => {
-    const needsGen = row.intervalCount !== row.intervals.length || (row.intervals[0] && row.intervalStartDate !== row.intervals[0].startDate)
+    const uv = parseFloat(form.unitValue) || 0
+    const qty = parseFloat(row.quantity) || 0
+    const expectedBase = form.type === 'money' ? (parseFloat(row.amount) || 0) : (qty * uv)
+
+    const needsGen = row.intervalCount !== row.intervals.length || 
+                     (row.intervals[0] && row.intervalStartDate !== row.intervals[0].startDate) ||
+                     (row.intervals[0] && (row.intervals[0].value === 0 || row.intervals[0].quantity === 0) && expectedBase > 0)
+    
     if (needsGen) updateRowIntervals(row)
   })
 }, { deep: true })
@@ -370,7 +408,11 @@ const formErrors = computed(() => {
   if (form.isRecurring) {
     filledRows.value.forEach(r => {
       if (!r.intervalStartDate) errs.push(`${r.name}: Start date required`)
-      if (r.intervals.some(i => !(i.amount > 0))) errs.push(`${r.name}: Amount required for all periods`)
+      if (form.type === 'money') {
+        if (r.intervals.some(i => !(i.value > 0))) errs.push(`${r.name}: Value required for all periods`)
+      } else {
+        if (r.intervals.some(i => !(i.quantity > 0))) errs.push(`${r.name}: Quantity required for all periods`)
+      }
     })
   }
   return errs
@@ -404,7 +446,17 @@ const buildPayload = (row) => {
     intervalType: row.intervalType,
     intervalCount: row.intervalCount,
     startDate: row.intervalStartDate,
-    intervals: row.intervals.map(i => ({ ...i, amount: Math.round(i.amount*100)/100 }))
+    intervals: row.intervals.map(i => {
+       const finalVal = form.type === 'money' ? i.value : (i.quantity * form.unitValue)
+       return { 
+         startDate: i.startDate,
+         endDate: i.endDate,
+         value: Math.round(finalVal * 100) / 100,
+         quantity: form.type === 'money' ? 1 : i.quantity,
+         paymentMethod: i.paymentMethod,
+         paymentDate: i.paymentDate || null
+       }
+    })
   } : null
 
   const base = {
@@ -415,9 +467,22 @@ const buildPayload = (row) => {
   }
 
   if (form.type === 'money') {
-    return { ...base, quantity: 1, unitValue: Math.round((parseFloat(row.amount)||0)*100)/100, paymentMethod: row.paymentMethod, interval: ivData }
+    return { 
+      ...base, 
+      quantity: 1, 
+      unitValue: Math.round((parseFloat(row.amount)||0)*100)/100, 
+      paymentMethod: row.paymentMethod, 
+      interval: ivData 
+    }
   } else {
-    return { ...base, quantity: parseFloat(row.quantity), unitValue: form.unitValue, interval: ivData }
+    // Parent quantity is total units over all intervals
+    const totalUnits = form.isRecurring ? row.intervals.reduce((s, i) => s + (parseFloat(i.quantity)||0), 0) : parseFloat(row.quantity)
+    return { 
+      ...base, 
+      quantity: totalUnits, 
+      unitValue: form.unitValue, 
+      interval: ivData 
+    }
   }
 }
 
@@ -433,7 +498,7 @@ onMounted(loadMyBeneficiaries)
 
 <style scoped>
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
-.modal { background: white; border-radius: 16px; width: 100%; max-width: 960px; max-height: 92vh; overflow-y: auto; display: flex; flex-direction: column; }
+.modal { background: white; border-radius: 16px; width: 100%; max-width: 1000px; max-height: 92vh; overflow-y: auto; display: flex; flex-direction: column; }
 .modal-header { padding: 20px 24px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: white; z-index: 20; }
 .section { padding: 20px 24px; border-bottom: 1px solid #f1f5f9; }
 .section-title { font-size: 15px; font-weight: 600; color: #1e293b; margin: 0 0 16px; display: flex; align-items: baseline; gap: 8px; }
@@ -475,10 +540,13 @@ input, select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px
 /* Recurring Details (Mini Table) */
 .recurring-details { margin: 0 10px 10px 42px; background: white; border: 1px solid #ddd6fe; border-radius: 10px; padding: 12px; }
 .details-header { display: grid; grid-template-columns: 30px 1fr 100px 100px 120px; gap: 10px; font-size: 10px; font-weight: 700; color: #7c3aed; text-transform: uppercase; border-bottom: 1px solid #f1f5f9; padding-bottom: 6px; margin-bottom: 6px; }
+.details-header.goods-header { grid-template-columns: 30px 1fr 100px 120px; }
 .details-row { display: grid; grid-template-columns: 30px 1fr 100px 100px 120px; gap: 10px; align-items: center; margin-bottom: 6px; }
+.details-row.goods-row { grid-template-columns: 30px 1fr 100px 120px; }
 .idx-box { font-size: 11px; font-weight: 700; color: #94a3b8; }
 .date-box { font-size: 11px; color: #475569; }
 .mini-input, .mini-select, .mini-input-date { padding: 4px 6px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 11px; width: 100%; }
+.mini-calc-val { font-size: 11px; color: #16a34a; font-weight: 600; text-align: right; }
 .details-footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 12px; font-size: 12px; }
 .details-footer strong { color: #7c3aed; font-size: 14px; }
 

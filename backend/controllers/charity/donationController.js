@@ -534,14 +534,15 @@ exports.addDonationItem = async (req, res) => {
           intervalCount: idx + 1,
           startDate: inv.startDate,
           endDate: inv.endDate,
-          amount: inv.amount || baseTotal,
+          value: inv.value || baseTotal, // Correctly use 'value' from frontend
+          quantity: inv.quantity || quantity || 1.00,
           paymentMethod: inv.paymentMethod || paymentMethod || "bank",
           paymentDate: inv.paymentDate || null,
           distributionDate: inv.distributionDate || distributionDate || null,
           status: "pending",
         }));
-        // Sum up all interval amounts for the final item total
-        finalTotal = intervalsToCreate.reduce((sum, inv) => sum + parseFloat(inv.amount || 0), 0);
+        // Sum up all interval values for the final item total
+        finalTotal = intervalsToCreate.reduce((sum, inv) => sum + parseFloat(inv.value || 0), 0);
       } else {
         // Auto-generate intervals if not provided
         for (let i = 0; i < count; i++) {
@@ -565,7 +566,8 @@ exports.addDonationItem = async (req, res) => {
             intervalCount: i + 1,
             startDate: start.toISOString().split("T")[0],
             endDate: end.toISOString().split("T")[0],
-            amount: baseTotal,
+            value: baseTotal,
+            quantity: quantity || 1.00,
             paymentMethod: paymentMethod || "bank",
             distributionDate: distributionDate || null,
             status: "pending",
@@ -1588,10 +1590,10 @@ exports.distributeItemForInterval = async (req, res) => {
       const beneficiary = await Beneficiary.findByPk(dist.beneficiaryId, { transaction: t });
       if (!beneficiary) throw new Error(`Beneficiary ${dist.beneficiaryId} not found`);
       
-      // Use interval amount if quantity is 1 and it's a money item, otherwise calculate
+      // Use interval value if quantity is 1 and it's a money item, otherwise calculate
       let value = 0;
       if (item.type === 'money' && parseFloat(dist.quantity) === 1) {
-        value = money(interval.amount || item.unitValue);
+        value = money(interval.value || item.unitValue);
       } else {
         value = money(parseFloat(dist.quantity) * parseFloat(item.unitValue));
       }

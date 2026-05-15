@@ -42,9 +42,14 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         field: "end_date",
       },
-      amount: {
+      value: {
         type: DataTypes.DECIMAL(15, 2),
         allowNull: true,
+      },
+      quantity: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: true,
+        defaultValue: 1.00
       },
       paymentMethod: {
         type: DataTypes.ENUM("bank", "cash"),
