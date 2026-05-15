@@ -46,23 +46,13 @@
             </div>
             <div class="form-group" style="display:flex;align-items:flex-end;">
               <div class="computed-box" v-if="form.unitValue > 0">
-                <span class="computed-label">Grand Total (all beneficiaries)</span>
+                <span class="computed-label">Total Allocated</span>
                 <span class="computed-value">{{ formatCurrency(grandTotal) }}</span>
               </div>
             </div>
           </div>
 
-          <!-- Money: show running total only -->
-          <div class="totals-bar" v-if="form.type === 'money' && rows.length > 0">
-            <span class="total-label">Total Amount</span>
-            <span class="total-value">{{ formatCurrency(grandTotal) }}</span>
-          </div>
-          <div class="totals-bar" v-if="form.type !== 'money' && form.type && form.unitValue > 0 && rows.length > 0">
-            <span class="total-label">Total Qty: {{ totalQty }}</span>
-            <span class="total-value">{{ formatCurrency(grandTotal) }}</span>
-          </div>
-
-          <!-- Recurring -->
+          <!-- Recurring Toggle -->
           <div class="recurring-row">
             <label class="toggle-label">
               <span class="custom-checkbox">
@@ -71,177 +61,154 @@
               </span>
               Recurring payment
             </label>
+            <small class="hint" v-if="form.isRecurring">Configure recurring schedules for each beneficiary below.</small>
           </div>
-
-          <template v-if="form.isRecurring">
-            <div class="form-row">
-              <div class="form-group">
-                <label>Interval</label>
-                <select v-model="form.intervalType">
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Number of intervals</label>
-                <input type="number" min="1" v-model.number="form.intervalCount" />
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Start Date</label>
-                <input type="date" v-model="form.intervalStartDate" />
-              </div>
-              <div class="form-group">
-                <label>Computed End Date</label>
-                <input :value="computedEndDate" disabled />
-              </div>
-            </div>
-            <div class="interval-totals" v-if="grandTotal > 0">
-              <div class="itotal-row">
-                <span>Per-interval total</span>
-                <strong>{{ formatCurrency(perIntervalTotal) }}</strong>
-              </div>
-              <div class="itotal-row">
-                <span>Grand total (all {{ form.intervalCount }} intervals)</span>
-                <strong>{{ formatCurrency(grandTotal * form.intervalCount) }}</strong>
-              </div>
-            </div>
-          </template>
         </div>
 
         <!-- ═══════════════ BENEFICIARY ENTRIES ═══════════════ -->
         <div class="section">
           <h4 class="section-title">
             Beneficiaries
-            <span class="section-subtitle">Enter values for each beneficiary in your group</span>
+            <span class="section-subtitle">
+              {{ form.isRecurring ? 'Configure individual schedules' : 'Enter values for each beneficiary' }}
+            </span>
           </h4>
 
-          <!-- Loading beneficiaries -->
           <div v-if="loadingBens" class="loading-bens">
             <div class="mini-spinner"></div>
-            Loading your beneficiaries...
+            Loading beneficiaries...
           </div>
 
-          <!-- No beneficiaries -->
           <div v-else-if="myBeneficiaries.length === 0" class="no-bens">
-            <p>No beneficiaries found in your group. Ask your charity admin to assign beneficiaries.</p>
+            <p>No beneficiaries found. Ask your admin to assign some to your group.</p>
           </div>
 
-          <!-- Beneficiary table -->
           <template v-else>
-            <div class="ben-table-header">
+            <!-- HEADER -->
+            <div class="ben-table-header" :class="{ 'recurring-header': form.isRecurring }">
               <span class="col-name">Beneficiary</span>
-              <span class="col-type">Type</span>
-              <template v-if="form.type === 'money'">
-                <span class="col-amount">Amount (ETB)</span>
-                <span class="col-method">Payment Method</span>
+              <template v-if="form.isRecurring">
+                <span class="col-interval">Interval</span>
+                <span class="col-count">Periods</span>
+                <span class="col-start">Start Date</span>
+                <span class="col-end">End Date</span>
               </template>
-              <template v-else-if="form.type">
-                <span class="col-qty">Quantity</span>
-                <span class="col-value">Value</span>
+              <template v-else>
+                <span class="col-type">Type</span>
+                <span class="col-amount" v-if="form.type === 'money'">Amount (ETB)</span>
+                <span class="col-method" v-if="form.type === 'money'">Method</span>
+                <span class="col-qty" v-if="form.type !== 'money'">Quantity</span>
+                <span class="col-value" v-if="form.type !== 'money'">Total Value</span>
               </template>
             </div>
 
+            <!-- ROWS -->
             <div
               v-for="row in rows"
               :key="row.beneficiaryId"
-              class="ben-row"
+              class="ben-row-wrapper"
               :class="{ 'has-value': rowHasValue(row) }"
             >
-              <!-- Name -->
-              <div class="col-name">
-                <div class="ben-avatar">{{ row.name.charAt(0) }}</div>
-                <span class="ben-name">{{ row.name }}</span>
-              </div>
-
-              <!-- Type badge -->
-              <div class="col-type">
-                <span class="type-badge" :class="row.benType">{{ row.benType }}</span>
-              </div>
-
-              <!-- Money inputs -->
-              <template v-if="form.type === 'money'">
-                <div class="col-amount">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    v-model.number="row.amount"
-                    placeholder="0.00"
-                    class="amount-input"
-                  />
+              <div class="ben-row-main" :class="{ 'recurring-grid': form.isRecurring }">
+                <div class="col-name">
+                  <div class="ben-avatar">{{ row.name.charAt(0) }}</div>
+                  <span class="ben-name">{{ row.name }}</span>
                 </div>
-                <div class="col-method">
-                  <select v-model="row.paymentMethod" class="method-select">
+
+                <template v-if="form.isRecurring">
+                  <div class="col-interval">
+                    <select v-model="row.intervalType">
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+                  <div class="col-count">
+                    <input type="number" min="0" v-model.number="row.intervalCount" placeholder="0" />
+                  </div>
+                  <div class="col-start">
+                    <input type="date" v-model="row.intervalStartDate" />
+                  </div>
+                  <div class="col-end">
+                    <span class="end-hint">{{ computeRowEndDate(row) || '—' }}</span>
+                  </div>
+                </template>
+
+                <template v-else>
+                  <div class="col-type">
+                    <span class="type-badge" :class="row.benType">{{ row.benType }}</span>
+                  </div>
+                  <template v-if="form.type === 'money'">
+                    <div class="col-amount">
+                      <input type="number" step="0.01" min="0" v-model.number="row.amount" placeholder="0.00" />
+                    </div>
+                    <div class="col-method">
+                      <select v-model="row.paymentMethod">
+                        <option value="bank">Bank</option>
+                        <option value="cash">Cash</option>
+                      </select>
+                    </div>
+                  </template>
+                  <template v-else>
+                    <div class="col-qty">
+                      <input type="number" step="0.01" min="0" v-model.number="row.quantity" placeholder="0" />
+                    </div>
+                    <div class="col-value">
+                      <span class="calc-text" :class="{ 'positive': rowValue(row) > 0 }">
+                        {{ form.unitValue > 0 ? formatCurrency(rowValue(row)) : '—' }}
+                      </span>
+                    </div>
+                  </template>
+                </template>
+              </div>
+
+              <!-- MINI TABLE FOR RECURRING -->
+              <div class="recurring-details" v-if="form.isRecurring && row.intervalCount > 0">
+                <div class="details-header">
+                  <span>#</span>
+                  <span>Due Date</span>
+                  <span>Amount (ETB)</span>
+                  <span v-if="form.type === 'money'">Method</span>
+                  <span v-if="form.type === 'money'">Pay Date</span>
+                </div>
+                <div v-for="(inv, idx) in row.intervals" :key="idx" class="details-row">
+                  <span class="idx-box">{{ idx + 1 }}</span>
+                  <span class="date-box">{{ formatDate(inv.startDate) }}</span>
+                  <input type="number" step="0.01" v-model.number="inv.amount" class="mini-input" />
+                  <select v-if="form.type === 'money'" v-model="inv.paymentMethod" class="mini-select">
                     <option value="bank">Bank</option>
                     <option value="cash">Cash</option>
                   </select>
+                  <input v-if="form.type === 'money'" type="date" v-model="inv.paymentDate" class="mini-input-date" />
                 </div>
-              </template>
-
-              <!-- Goods / Service inputs -->
-              <template v-else-if="form.type">
-                <div class="col-qty">
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    v-model.number="row.quantity"
-                    placeholder="0"
-                    class="qty-input"
-                  />
+                <div class="details-footer">
+                   <span>Total for this beneficiary:</span>
+                   <strong>{{ formatCurrency(rowValue(row)) }}</strong>
                 </div>
-                <div class="col-value">
-                  <span class="calc-value" :class="{ 'calc-positive': rowValue(row) > 0 }">
-                    {{ form.unitValue > 0 ? formatCurrency(rowValue(row)) : '—' }}
-                  </span>
-                </div>
-              </template>
+              </div>
             </div>
 
-            <!-- Summary footer -->
+            <!-- Footer Summary -->
             <div class="ben-table-footer" v-if="filledRows.length > 0">
-              <span>{{ filledRows.length }} of {{ rows.length }} beneficiar{{ filledRows.length === 1 ? 'y' : 'ies' }} assigned</span>
-              <strong>Total: {{ formatCurrency(grandTotal) }}</strong>
+              <span>{{ filledRows.length }} beneficiaries configured</span>
+              <strong>Grand Total: {{ formatCurrency(grandTotal) }}</strong>
             </div>
           </template>
         </div>
 
-        <!-- ═══════════════ PROGRESS (multi-submit) ═══════════════ -->
         <div class="progress-section" v-if="submitProgress.active">
-          <div class="progress-bar-wrap">
-            <div
-              class="progress-bar"
-              :style="{ width: `${(submitProgress.done / submitProgress.total) * 100}%` }"
-            ></div>
-          </div>
-          <p class="progress-text">
-            Saving item {{ submitProgress.done }} of {{ submitProgress.total }}...
-          </p>
+          <div class="progress-bar-wrap"><div class="progress-bar" :style="{ width: progressPercent + '%' }"></div></div>
+          <p class="progress-text">Saving {{ submitProgress.done }} of {{ submitProgress.total }}...</p>
         </div>
 
-        <!-- ═══════════════ ERRORS ═══════════════ -->
         <div class="error-list" v-if="formErrors.length">
           <p v-for="err in formErrors" :key="err" class="error-item">⚠ {{ err }}</p>
         </div>
 
         <div class="modal-actions">
-          <button type="button" @click="$emit('close')" class="btn-outline" :disabled="submitProgress.active">
-            Cancel
-          </button>
-          <button
-            type="submit"
-            class="btn-primary"
-            :disabled="!canSubmit || submitProgress.active"
-          >
-            {{ submitProgress.active
-              ? `Saving ${submitProgress.done}/${submitProgress.total}...`
-              : isEdit
-                ? 'Save Changes'
-                : `Add Items (${filledRows.length} beneficiar${filledRows.length === 1 ? 'y' : 'ies'})`
-            }}
+          <button type="button" @click="$emit('close')" class="btn-outline" :disabled="submitProgress.active">Cancel</button>
+          <button type="submit" class="btn-primary" :disabled="!canSubmit || submitProgress.active">
+            {{ submitProgress.active ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Items' }}
           </button>
         </div>
       </form>
@@ -264,449 +231,265 @@ const emit = defineEmits(['close', 'saved'])
 const authStore = useAuthStore()
 const isEdit = computed(() => !!props.itemToEdit)
 
-// ── My group's beneficiaries ─────────────────────────────────────────────────
-const loadingBens    = ref(false)
-const myBeneficiaries = ref([])      // raw beneficiaries from API
-
-// rows: one row per beneficiary, holds their input values
+// ── State ──
+const loadingBens = ref(false)
+const myBeneficiaries = ref([])
 const rows = ref([])
+const form = reactive({
+  type: 'money',
+  description: '',
+  unitValue: 0,
+  isRecurring: false,
+})
+const submitProgress = reactive({ active: false, done: 0, total: 0 })
 
+// ── Logic ──
 const loadMyBeneficiaries = async () => {
   loadingBens.value = true
   try {
     let bens = []
     const grpRes = await CharityService.getMyGroup()
     if (grpRes.success && grpRes.data?.length) {
-      const groupId = grpRes.data[0].groupId
-      const benRes = await CharityService.getGroupBeneficiaries(groupId)
-      if (benRes.success) {
-        bens = benRes.data
-      }
+      const benRes = await CharityService.getGroupBeneficiaries(grpRes.data[0].groupId)
+      if (benRes.success) bens = benRes.data
     }
-
     if (props.preSelectedBeneficiaryId) {
       bens = bens.filter(b => b.beneficiaryId === props.preSelectedBeneficiaryId)
     }
     myBeneficiaries.value = bens
-    buildRows(bens)
+    rows.value = bens.map(b => ({
+      beneficiaryId: b.beneficiaryId,
+      name: b.name,
+      benType: b.type,
+      amount: null,
+      paymentMethod: 'bank',
+      quantity: null,
+      intervalType: 'monthly',
+      intervalCount: 0,
+      intervalStartDate: '',
+      intervals: []
+    }))
+
+    // If Edit Mode, patch the specific row
+    if (isEdit.value && props.itemToEdit) {
+      const r = rows.value.find(row => row.beneficiaryId === props.itemToEdit.beneficiaryId)
+      if (r) {
+        form.type = props.itemToEdit.type
+        form.description = props.itemToEdit.description
+        form.unitValue = parseFloat(props.itemToEdit.unitValue)
+        form.isRecurring = !!props.itemToEdit.isRecurring
+        
+        if (form.isRecurring) {
+          const ivs = props.itemToEdit.DonationItemIntervals || []
+          r.intervalType = ivs[0]?.intervalType || 'monthly'
+          r.intervalCount = ivs.length
+          r.intervalStartDate = ivs[0]?.startDate || ''
+          r.intervals = ivs.map(iv => ({
+            startDate: iv.startDate,
+            endDate: iv.endDate,
+            amount: parseFloat(iv.amount),
+            paymentMethod: iv.paymentMethod,
+            paymentDate: iv.paymentDate || ''
+          }))
+        } else {
+          r.amount = parseFloat(props.itemToEdit.unitValue)
+          r.quantity = parseFloat(props.itemToEdit.quantity)
+          r.paymentMethod = props.itemToEdit.paymentMethod
+        }
+      }
+    }
   } finally {
     loadingBens.value = false
   }
 }
 
-const buildRows = (beneficiaries) => {
-  rows.value = beneficiaries.map(b => ({
-    beneficiaryId: b.beneficiaryId,
-    name: b.name,
-    benType: b.type,
-    amount: null,          // money type
-    paymentMethod: 'bank', // money type — per beneficiary
-    quantity: null,        // goods/service type
-  }))
-}
-
-// ── Form state ───────────────────────────────────────────────────────────────
-const form = reactive({
-  type: 'money',
-  description: '',
-  unitValue: 0,
-  isRecurring: false,
-  intervalType: 'monthly',
-  intervalCount: 1,
-  intervalStartDate: '',
-})
-
-// ── Computed totals ──────────────────────────────────────────────────────────
 const rowHasValue = (row) => {
-  if (form.type === 'money') return row.amount > 0
-  return row.quantity > 0
+  if (form.isRecurring) return row.intervalCount > 0
+  return form.type === 'money' ? row.amount > 0 : row.quantity > 0
 }
 
 const rowValue = (row) => {
+  if (form.isRecurring) return row.intervals.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0)
   if (form.type === 'money') return parseFloat(row.amount) || 0
   return (parseFloat(row.quantity) || 0) * (parseFloat(form.unitValue) || 0)
 }
 
 const filledRows = computed(() => rows.value.filter(rowHasValue))
-const totalQty   = computed(() => rows.value.reduce((s, r) => s + (parseFloat(r.quantity) || 0), 0))
+const grandTotal = computed(() => rows.value.reduce((s, r) => s + rowValue(r), 0))
+const totalQty = computed(() => rows.value.reduce((s, r) => s + (parseFloat(r.quantity) || 0), 0))
+const progressPercent = computed(() => (submitProgress.done / (submitProgress.total || 1)) * 100)
 
-const perIntervalTotal = computed(() => {
-  if (form.type === 'money') {
-    return rows.value.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+const computeRowEndDate = (row) => {
+  if (!row.intervalStartDate || !row.intervalCount) return ''
+  const d = new Date(row.intervalStartDate)
+  if (row.intervalType === 'daily') d.setDate(d.getDate() + row.intervalCount - 1)
+  else if (row.intervalType === 'weekly') d.setDate(d.getDate() + row.intervalCount * 7 - 1)
+  else if (row.intervalType === 'monthly') d.setMonth(d.getMonth() + row.intervalCount)
+  return d.toISOString().split('T')[0]
+}
+
+const updateRowIntervals = (row) => {
+  if (!form.isRecurring || !row.intervalStartDate || !row.intervalCount) {
+    row.intervals = []
+    return
   }
-  return rows.value.reduce((s, r) => s + rowValue(r), 0)
-})
+  const newIvs = []
+  const base = form.type === 'money' ? (parseFloat(row.amount) || 0) : (parseFloat(form.unitValue) || 0)
+  
+  for (let i = 0; i < row.intervalCount; i++) {
+    let s = new Date(row.intervalStartDate); let e = new Date(row.intervalStartDate)
+    if (row.intervalType === 'daily') { s.setDate(s.getDate() + i); e.setDate(e.getDate() + i) }
+    else if (row.intervalType === 'weekly') { s.setDate(s.getDate() + i*7); e.setDate(e.getDate() + (i+1)*7-1) }
+    else if (row.intervalType === 'monthly') { s.setMonth(s.getMonth() + i); e.setMonth(e.getMonth() + i+1); e.setDate(e.getDate()-1) }
 
-const grandTotal = computed(() => {
-  return perIntervalTotal.value
-  // Note: grandTotal over ALL intervals is perIntervalTotal × intervalCount
-  // Shown separately in the interval-totals block
-})
+    const old = row.intervals[i]
+    newIvs.push({
+      startDate: s.toISOString().split('T')[0],
+      endDate: e.toISOString().split('T')[0],
+      amount: (old && old.amount > 0) ? old.amount : base,
+      paymentMethod: old ? old.paymentMethod : row.paymentMethod,
+      paymentDate: old ? old.paymentDate : ''
+    })
+  }
+  row.intervals = newIvs
+}
 
-// ── Computed end date ────────────────────────────────────────────────────────
-const computedEndDate = computed(() => {
-  if (!form.intervalStartDate) return ''
-  const date = new Date(form.intervalStartDate)
-  if (form.intervalType === 'daily')        date.setDate(date.getDate() + form.intervalCount - 1)
-  else if (form.intervalType === 'weekly')  date.setDate(date.getDate() + form.intervalCount * 7 - 1)
-  else if (form.intervalType === 'monthly') date.setMonth(date.getMonth() + form.intervalCount)
-  return date.toISOString().split('T')[0]
-})
+watch(() => rows.value, (newRows) => {
+  if (!form.isRecurring) return
+  newRows.forEach(row => {
+    const needsGen = row.intervalCount !== row.intervals.length || (row.intervals[0] && row.intervalStartDate !== row.intervals[0].startDate)
+    if (needsGen) updateRowIntervals(row)
+  })
+}, { deep: true })
 
-// ── Validation ───────────────────────────────────────────────────────────────
 const formErrors = computed(() => {
-  const errors = []
-  if (!form.type) errors.push('Please select an item type.')
-  if (form.type !== 'money' && !(parseFloat(form.unitValue) > 0))
-    errors.push('Unit Value must be greater than 0 for goods and service items.')
-  if (filledRows.value.length === 0)
-    errors.push('Enter a value for at least one beneficiary.')
-  if (form.isRecurring && !form.intervalStartDate)
-    errors.push('Please set a start date for the recurring interval.')
-  return errors
+  const errs = []
+  if (!form.type) errs.push('Select item type')
+  if (form.type !== 'money' && !(form.unitValue > 0)) errs.push('Unit Value required')
+  if (filledRows.value.length === 0) errs.push('Configure at least one beneficiary')
+  if (form.isRecurring) {
+    filledRows.value.forEach(r => {
+      if (!r.intervalStartDate) errs.push(`${r.name}: Start date required`)
+      if (r.intervals.some(i => !(i.amount > 0))) errs.push(`${r.name}: Amount required for all periods`)
+    })
+  }
+  return errs
 })
 
 const canSubmit = computed(() => formErrors.value.length === 0)
 
-// ── Submit progress ───────────────────────────────────────────────────────────
-const submitProgress = reactive({ active: false, done: 0, total: 0 })
-
-// ── Editing: pre-fill form ────────────────────────────────────────────────────
-watch(() => props.itemToEdit, (item) => {
-  if (item) {
-    form.type        = item.type
-    form.description = item.description || ''
-    form.unitValue   = item.type === 'money' ? 0 : (parseFloat(item.unitValue) || 0)
-    form.isRecurring = !!item.isRecurring
-    if (item.isRecurring && item.DonationItemIntervals?.length) {
-      const iv = item.DonationItemIntervals[0]
-      form.intervalType       = iv.intervalType
-      form.intervalCount      = iv.intervalCount
-      form.intervalStartDate  = iv.startDate
-    }
-    // Pre-fill the matching row
-    rows.value.forEach(r => {
-      if (r.beneficiaryId === item.beneficiaryId) {
-        if (item.type === 'money') {
-          r.amount        = parseFloat(item.totalValue) || 0
-          r.paymentMethod = item.paymentMethod || 'bank'
-        } else {
-          r.quantity = parseFloat(item.quantity) || 0
-        }
-      }
-    })
-  }
-}, { immediate: true })
-
-// Reset rows when type changes so stale values don't accumulate
-watch(() => form.type, () => {
-  rows.value.forEach(r => { r.amount = null; r.quantity = null })
-})
-
-// ── Submit ────────────────────────────────────────────────────────────────────
-async function handleSubmit() {
+const handleSubmit = async () => {
   if (!canSubmit.value) return
-
-  const itemsToSave = filledRows.value
-  submitProgress.active = true
-  submitProgress.done   = 0
-  submitProgress.total  = itemsToSave.length
-
-  const interval = form.isRecurring && form.intervalStartDate ? {
-    intervalType:  form.intervalType,
-    intervalCount: form.intervalCount,
-    startDate:     form.intervalStartDate,
-  } : null
-
+  submitProgress.active = true; submitProgress.done = 0; submitProgress.total = filledRows.value.length
   const errors = []
 
-  if (isEdit.value && props.itemToEdit) {
-    // Edit mode: update just this one item
-    const row = rows.value.find(r => r.beneficiaryId === props.itemToEdit.beneficiaryId) || itemsToSave[0]
-    const payload = buildPayload(row, interval)
-    const res = await CharityService.updateDonationItem(props.itemToEdit.donationItemId, payload)
-    if (!res.success) errors.push(res.error || 'Failed to update item')
-    submitProgress.done = 1
-  } else {
-    // Add mode: create one item per beneficiary
-    for (const row of itemsToSave) {
-      const payload = buildPayload(row, interval)
-      const res = await CharityService.addDonationItem(props.donationId, payload)
-      if (!res.success) errors.push(`${row.name}: ${res.error || 'Failed'}`)
-      submitProgress.done++
+  for (const row of filledRows.value) {
+    const payload = buildPayload(row)
+    let res
+    if (isEdit.value && props.itemToEdit && row.beneficiaryId === props.itemToEdit.beneficiaryId) {
+      res = await CharityService.updateDonationItem(props.itemToEdit.donationItemId, payload)
+    } else {
+      res = await CharityService.addDonationItem(props.donationId, payload)
     }
+    if (!res.success) errors.push(`${row.name}: ${res.error}`)
+    submitProgress.done++
   }
-
   submitProgress.active = false
-
-  if (errors.length) {
-    alert('Some items failed:\n' + errors.join('\n'))
-  }
+  if (errors.length) alert('Failures:\n' + errors.join('\n'))
   emit('saved')
 }
 
-function buildPayload(row, interval) {
+const buildPayload = (row) => {
+  const ivData = form.isRecurring ? {
+    intervalType: row.intervalType,
+    intervalCount: row.intervalCount,
+    startDate: row.intervalStartDate,
+    intervals: row.intervals.map(i => ({ ...i, amount: Math.round(i.amount*100)/100 }))
+  } : null
+
+  const base = {
+    beneficiaryId: row.beneficiaryId,
+    type: form.type,
+    description: form.description,
+    totalValue: rowValue(row)
+  }
+
   if (form.type === 'money') {
-    const amount = Math.round(parseFloat(row.amount) * 100) / 100
-    return {
-      beneficiaryId:  row.beneficiaryId,
-      type:           'money',
-      description:    form.description,
-      quantity:       1,
-      unitValue:      amount,
-      paymentMethod:  row.paymentMethod || 'bank',
-      ...(interval ? { interval } : {}),
-    }
+    return { ...base, quantity: 1, unitValue: Math.round((parseFloat(row.amount)||0)*100)/100, paymentMethod: row.paymentMethod, interval: ivData }
   } else {
-    const qty = Math.round(parseFloat(row.quantity) * 100) / 100
-    const uv  = Math.round(parseFloat(form.unitValue) * 100) / 100
-    return {
-      beneficiaryId: row.beneficiaryId,
-      type:          form.type,
-      description:   form.description,
-      quantity:      qty,
-      unitValue:     uv,
-      ...(interval ? { interval } : {}),
-    }
+    return { ...base, quantity: parseFloat(row.quantity), unitValue: form.unitValue, interval: ivData }
   }
 }
 
-const money = (v) => Math.round(parseFloat(v || 0) * 100) / 100
-const formatCurrency = (v) =>
-  new Intl.NumberFormat('en-ET', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(money(v)) + ' ETB'
+const formatCurrency = (v) => new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(v || 0)
+const formatDate = (d) => {
+  if (!d) return '—'
+  const date = new Date(d)
+  return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][date.getMonth()]}-${date.getDate()}-${date.getFullYear()}`
+}
 
 onMounted(loadMyBeneficiaries)
 </script>
 
 <style scoped>
-/* ─── Overlay ─────────────────────────────────────────────────────────────── */
-.modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 1000; padding: 20px;
-}
-.modal {
-  background: white; border-radius: 16px;
-  width: 100%; max-width: 760px;
-  max-height: 90vh; overflow-y: auto;
-  display: flex; flex-direction: column;
-}
-
-/* ─── Header ─────────────────────────────────────────────────────────────── */
-.modal-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 20px 24px 16px;
-  border-bottom: 1px solid #f1f5f9;
-  position: sticky; top: 0; background: white; z-index: 1;
-}
-.modal-header h3 { font-size: 18px; font-weight: 600; color: #0f172a; margin: 0; }
-.close-btn {
-  background: none; border: none; font-size: 22px; cursor: pointer;
-  color: #94a3b8; line-height: 1; padding: 4px;
-}
-.close-btn:hover { color: #334155; }
-
-/* ─── Sections ───────────────────────────────────────────────────────────── */
-.section {
-  padding: 20px 24px;
-  border-bottom: 1px solid #f1f5f9;
-}
-.section:last-of-type { border-bottom: none; }
-.section-title {
-  font-size: 15px; font-weight: 600; color: #1e293b;
-  margin: 0 0 14px;
-  display: flex; align-items: baseline; gap: 8px;
-}
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+.modal { background: white; border-radius: 16px; width: 100%; max-width: 960px; max-height: 92vh; overflow-y: auto; display: flex; flex-direction: column; }
+.modal-header { padding: 20px 24px; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: white; z-index: 20; }
+.section { padding: 20px 24px; border-bottom: 1px solid #f1f5f9; }
+.section-title { font-size: 15px; font-weight: 600; color: #1e293b; margin: 0 0 16px; display: flex; align-items: baseline; gap: 8px; }
 .section-subtitle { font-size: 12px; font-weight: 400; color: #94a3b8; }
-
-/* ─── Form elements ──────────────────────────────────────────────────────── */
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
-.form-group { display: flex; flex-direction: column; gap: 5px; }
-label { font-size: 13px; font-weight: 500; color: #334155; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+label { font-size: 13px; font-weight: 500; color: #475569; }
+input, select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; }
 .req { color: #ef4444; }
-input, select {
-  padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px;
-  font-size: 14px; color: #0f172a; transition: border-color .15s;
-}
-input:focus, select:focus { outline: none; border-color: #7c3aed; }
 .hint { font-size: 11px; color: #94a3b8; margin-top: 2px; }
 
-/* ─── Computed boxes ─────────────────────────────────────────────────────── */
-.computed-box {
-  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
-  padding: 10px 14px; display: flex; flex-direction: column; gap: 3px;
-  width: 100%;
-}
-.computed-label { font-size: 11px; color: #94a3b8; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }
-.computed-value { font-size: 16px; font-weight: 600; color: #7c3aed; }
+.computed-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; display: flex; flex-direction: column; }
+.computed-label { font-size: 10px; color: #94a3b8; text-transform: uppercase; font-weight: 600; }
+.computed-value { font-size: 18px; font-weight: 700; color: #7c3aed; }
 
-.totals-bar {
-  display: flex; align-items: center; justify-content: space-between;
-  background: #f8f5ff; border: 1px solid #ddd6fe; border-radius: 8px;
-  padding: 8px 14px; margin-bottom: 14px; font-size: 14px;
-}
-.total-label { color: #6d28d9; font-weight: 500; }
-.total-value  { color: #4c1d95; font-weight: 700; font-size: 16px; }
+.recurring-row { margin-top: 12px; padding: 12px; background: #fdfaff; border: 1px solid #ede9fe; border-radius: 10px; }
+.toggle-label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; color: #6d28d9; }
 
-/* ─── Recurring ──────────────────────────────────────────────────────────── */
-.recurring-row { margin-bottom: 12px; }
-.toggle-label {
-  display: flex; align-items: center; gap: 8px;
-  font-size: 13px; color: #334155; cursor: pointer;
-}
-.custom-checkbox { position: relative; width: 18px; height: 18px; flex-shrink: 0; }
-.custom-checkbox input {
-  position: absolute; opacity: 0; width: 100%; height: 100%;
-  margin: 0; cursor: pointer; z-index: 1;
-  border: none; padding: 0;
-}
-.custom-checkbox .checkmark {
-  position: absolute; inset: 0;
-  border: 2px solid #cbd5e1; border-radius: 4px; background: white;
-  transition: all .15s;
-}
-.custom-checkbox input:checked ~ .checkmark {
-  background: #7c3aed; border-color: #7c3aed;
-}
-.custom-checkbox .checkmark::after {
-  content: ''; position: absolute;
-  top: 2px; left: 5px; width: 5px; height: 9px;
-  border: solid white; border-width: 0 2px 2px 0;
-  transform: rotate(45deg); opacity: 0;
-}
-.custom-checkbox input:checked ~ .checkmark::after { opacity: 1; }
+/* Beneficiary Table */
+.ben-table-header { display: grid; grid-template-columns: 2fr 100px 120px 120px; gap: 12px; padding: 10px; background: #f8fafc; border-radius: 8px; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 8px; }
+.recurring-header { grid-template-columns: 1.5fr 120px 80px 130px 120px; }
 
-.interval-totals {
-  background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;
-  padding: 10px 14px; margin-top: 12px;
-}
-.itotal-row {
-  display: flex; justify-content: space-between; font-size: 13px;
-  color: #166534; padding: 2px 0;
-}
+.ben-row-wrapper { border-radius: 12px; border: 1px solid transparent; margin-bottom: 8px; transition: all 0.2s; }
+.ben-row-wrapper.has-value { background: #f8f5ff; border-color: #ddd6fe; }
+.ben-row-main { display: grid; grid-template-columns: 2fr 100px 120px 120px; gap: 12px; align-items: center; padding: 10px; }
+.recurring-grid { grid-template-columns: 1.5fr 120px 80px 130px 120px; }
 
-/* ─── Loading / empty states ─────────────────────────────────────────────── */
-.loading-bens {
-  display: flex; align-items: center; gap: 10px;
-  font-size: 13px; color: #94a3b8; padding: 20px 0;
-}
-.mini-spinner {
-  width: 18px; height: 18px;
-  border: 2px solid #e2e8f0; border-top-color: #7c3aed;
-  border-radius: 50%; animation: spin .6s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-.no-bens {
-  background: #fef9c3; border: 1px solid #fde047; border-radius: 8px;
-  padding: 14px 16px; font-size: 13px; color: #713f12;
-}
+.col-name { display: flex; align-items: center; gap: 10px; }
+.ben-avatar { width: 32px; height: 32px; background: #7c3aed; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
+.ben-name { font-size: 14px; font-weight: 500; color: #1e293b; }
 
-/* ─── Beneficiary table ──────────────────────────────────────────────────── */
-.ben-table-header {
-  display: grid;
-  grid-template-columns: 2fr 100px 140px 120px;
-  gap: 8px;
-  padding: 6px 10px;
-  font-size: 11px; font-weight: 600; color: #94a3b8;
-  text-transform: uppercase; letter-spacing: .04em;
-  border-bottom: 1px solid #f1f5f9; margin-bottom: 6px;
-}
-.ben-row {
-  display: grid;
-  grid-template-columns: 2fr 100px 140px 120px;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  transition: all .15s;
-  margin-bottom: 4px;
-}
-.ben-row:hover { background: #fafafa; }
-.ben-row.has-value { background: #f8f5ff; border-color: #e9d5ff; }
-
-.col-name { display: flex; align-items: center; gap: 8px; overflow: hidden; }
-.ben-avatar {
-  width: 30px; height: 30px; min-width: 30px;
-  background: linear-gradient(135deg, #6a11cb, #7c3aed);
-  border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  color: white; font-size: 13px; font-weight: 700;
-}
-.ben-name { font-size: 13px; font-weight: 500; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.col-type { display: flex; align-items: center; }
-.type-badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: capitalize; }
-.type-badge.individual   { background: #e0f2fe; color: #0369a1; }
+.type-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; text-transform: capitalize; font-weight: 600; }
+.type-badge.individual { background: #e0f2fe; color: #0369a1; }
 .type-badge.organization { background: #f3e8ff; color: #6d28d9; }
 
-.col-amount, .col-qty { display: flex; align-items: center; }
-.col-value  { display: flex; align-items: center; }
-.col-method { display: flex; align-items: center; }
+.ben-row-main input, .ben-row-main select { padding: 5px 8px; font-size: 13px; border-radius: 6px; width: 100%; }
+.end-hint { font-size: 11px; color: #64748b; font-weight: 600; }
 
-.amount-input, .qty-input {
-  width: 100%; padding: 6px 10px;
-  border: 1px solid #e2e8f0; border-radius: 7px; font-size: 13px;
-}
-.amount-input:focus, .qty-input:focus { outline: none; border-color: #7c3aed; }
+/* Recurring Details (Mini Table) */
+.recurring-details { margin: 0 10px 10px 42px; background: white; border: 1px solid #ddd6fe; border-radius: 10px; padding: 12px; }
+.details-header { display: grid; grid-template-columns: 30px 1fr 100px 100px 120px; gap: 10px; font-size: 10px; font-weight: 700; color: #7c3aed; text-transform: uppercase; border-bottom: 1px solid #f1f5f9; padding-bottom: 6px; margin-bottom: 6px; }
+.details-row { display: grid; grid-template-columns: 30px 1fr 100px 100px 120px; gap: 10px; align-items: center; margin-bottom: 6px; }
+.idx-box { font-size: 11px; font-weight: 700; color: #94a3b8; }
+.date-box { font-size: 11px; color: #475569; }
+.mini-input, .mini-select, .mini-input-date { padding: 4px 6px; border: 1px solid #e2e8f0; border-radius: 4px; font-size: 11px; width: 100%; }
+.details-footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 12px; font-size: 12px; }
+.details-footer strong { color: #7c3aed; font-size: 14px; }
 
-.method-select {
-  width: 100%; padding: 6px 10px;
-  border: 1px solid #e2e8f0; border-radius: 7px; font-size: 13px;
-}
+.ben-table-footer { display: flex; justify-content: space-between; align-items: center; padding: 20px 10px 10px; border-top: 2px dashed #f1f5f9; margin-top: 10px; }
+.ben-table-footer strong { font-size: 18px; color: #4c1d95; }
 
-.calc-value { font-size: 13px; color: #94a3b8; font-weight: 500; }
-.calc-value.calc-positive { color: #16a34a; font-weight: 600; }
+.modal-actions { padding: 20px 24px; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 12px; position: sticky; bottom: 0; background: white; z-index: 10; }
+.btn-primary { background: linear-gradient(135deg, #6a11cb, #7c3aed); color: white; border: none; padding: 10px 24px; border-radius: 10px; font-weight: 600; cursor: pointer; }
+.btn-outline { background: white; border: 1px solid #e2e8f0; padding: 10px 24px; border-radius: 10px; color: #64748b; font-weight: 500; cursor: pointer; }
 
-.ben-table-footer {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 10px 10px 4px;
-  font-size: 13px; color: #64748b;
-  border-top: 1px solid #f1f5f9; margin-top: 8px;
-}
-.ben-table-footer strong { color: #4c1d95; font-size: 15px; }
-
-/* ─── Progress ───────────────────────────────────────────────────────────── */
-.progress-section { padding: 14px 24px; }
-.progress-bar-wrap {
-  height: 6px; background: #e2e8f0; border-radius: 10px; overflow: hidden; margin-bottom: 8px;
-}
-.progress-bar {
-  height: 100%; background: linear-gradient(90deg, #6a11cb, #7c3aed);
-  transition: width .3s ease; border-radius: 10px;
-}
-.progress-text { font-size: 13px; color: #7c3aed; font-weight: 500; text-align: center; }
-
-/* ─── Errors ─────────────────────────────────────────────────────────────── */
-.error-list { padding: 0 24px 12px; }
-.error-item { font-size: 13px; color: #dc2626; margin-bottom: 4px; }
-
-/* ─── Actions ────────────────────────────────────────────────────────────── */
-.modal-actions {
-  display: flex; justify-content: flex-end; gap: 12px;
-  padding: 16px 24px;
-  border-top: 1px solid #f1f5f9;
-  position: sticky; bottom: 0; background: white;
-}
-.btn-outline {
-  background: white; border: 1px solid #e2e8f0; color: #475569;
-  padding: 9px 20px; border-radius: 9px; font-size: 14px; cursor: pointer;
-  transition: all .15s;
-}
-.btn-outline:hover:not(:disabled) { background: #f8fafc; }
-.btn-primary {
-  background: linear-gradient(135deg, #6a11cb, #7c3aed);
-  color: white; border: none; padding: 9px 20px;
-  border-radius: 9px; font-size: 14px; font-weight: 500; cursor: pointer;
-  transition: opacity .15s;
-}
-.btn-primary:disabled { opacity: .55; cursor: not-allowed; }
-
-/* ─── Responsive ─────────────────────────────────────────────────────────── */
-@media (max-width: 600px) {
-  .form-row { grid-template-columns: 1fr; }
-  .ben-table-header,
-  .ben-row { grid-template-columns: 1fr 80px 110px; }
-  .col-method { display: none; }
-}
+@keyframes spin { to { transform: rotate(360deg); } }
+.mini-spinner { width: 18px; height: 18px; border: 2px solid #e2e8f0; border-top-color: #7c3aed; border-radius: 50%; animation: spin .6s linear infinite; }
+.loading-bens { display: flex; align-items: center; gap: 10px; padding: 30px; color: #94a3b8; justify-content: center; }
 </style>

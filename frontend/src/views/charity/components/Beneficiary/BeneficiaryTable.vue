@@ -23,7 +23,7 @@
           <td>
             <span :class="['type-badge', `type-${ben.type}`]">{{ ben.type }}</span>
           </td>
-          <td>{{ ben.BeneficiaryGroup ? `${ben.BeneficiaryGroup.name} - ${ ben.BeneficiaryGroup.manager.firstName} ${ ben.BeneficiaryGroup.manager.lastName }`: 'Unassigned' }}</td>
+          <td>{{ ben.BeneficiaryGroup ? `${ben.BeneficiaryGroup.name} - ${ ben.BeneficiaryGroup.head.firstName} ${ ben.BeneficiaryGroup.head.lastName }`: 'Unassigned' }}</td>
           <td>{{ ben.BeneficiaryLocation ? `${ben.BeneficiaryLocation.region}, ${ben.BeneficiaryLocation.city}` : 'N/A' }}</td>
           <td>{{ ben.contactInfo?.phone || ben.contactInfo?.email || 'N/A' }}</td>
           <td>{{ ben.creator ? `${ben.creator.firstName} ${ben.creator.lastName}` : 'N/A' }}</td>

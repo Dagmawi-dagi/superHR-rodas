@@ -42,6 +42,25 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         field: "end_date",
       },
+      amount: {
+        type: DataTypes.DECIMAL(15, 2),
+        allowNull: true,
+      },
+      paymentMethod: {
+        type: DataTypes.ENUM("bank", "cash"),
+        defaultValue: "bank",
+        field: "payment_method",
+      },
+      paymentDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        field: "payment_date",
+      },
+      distributionDate: {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+        field: "distribution_date",
+      },
       status: {
           type: DataTypes.ENUM("pending", "active", "distributed", "completed"),
           defaultValue: "pending",

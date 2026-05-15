@@ -162,7 +162,7 @@ const router = createRouter({
           path: 'charity/beneficiaries/:id/edit',
           name: 'beneficiaries-edit',
           component: () => import('@/views/charity/BeneficiaryCreate.vue'),
-          meta: { title: 'Edit Beneficiary', roles: ['admin', 'charity_admin'] },
+          meta: { title: 'Edit Beneficiary', roles: ['admin', 'charity_admin','charity_teamleader'] },
         },
         {
           path: 'charity/companies',

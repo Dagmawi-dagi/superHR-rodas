@@ -15,14 +15,6 @@
       </div>
       <div class="header-actions">
         <StatusBadge :status="donation.status" />
-        <button v-if="donation.status === 'approved'" @click="openEvidenceModal" class="btn-secondary" style="background: #ede9fe; color: #7c3aed; border: 1px solid #ddd6fe;">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px; margin-right: 4px; vertical-align: middle;">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          Upload Evidence
-        </button>
         <button v-if="canSubmit" @click="submitDonation" class="btn-primary" :disabled="submitting">Submit for Approval</button>
         <button v-if="canApprove" @click="approveDonation" class="btn-primary" :disabled="approving">Approve</button>
         <button v-if="canApprove" @click="showRequestChangesModal = true" class="btn-warning" :disabled="submittingChanges">Request Changes</button>
@@ -104,7 +96,7 @@
       </div>
     </div>
 
-    <!-- Requested Changes Section (only show if there are rejected approvals) -->
+    <!-- Requested Changes Section (based on logs) -->
     <div v-if="requestedChanges.length > 0" class="changes-requested-section">
       <div class="changes-section-header" @click="toggleChangesTimeline" style="cursor: pointer;">
         <div class="changes-icon">⚠️</div>
@@ -119,7 +111,6 @@
         </button>
       </div>
       
-      <!-- Timeline of all change requests -->
       <transition name="timeline-collapse">
         <div v-show="isChangesTimelineOpen" class="changes-timeline">
           <div 
@@ -168,16 +159,17 @@
         </thead>
         <tbody>
           <template v-for="ben in beneficiariesWithItems" :key="ben.beneficiaryId">
+            <!-- Beneficiary Row -->
             <tr>
               <td>
                 <div class="col-name" style="display: flex; align-items: center; gap: 8px;">
-                  <div class="ben-avatar" style="width: 24px; height: 24px; font-size: 11px; display: flex; align-items: center; justify-content: center; background: #e2e8f0; border-radius: 50%;">{{ ben.name.charAt(0) }}</div>
+                  <div class="ben-avatar" style="width: 24px; height: 24px; font-size: 11px; display: flex; align-items: center; justify-content: center; background: #e2e8f0; border-radius: 50%;">{{ ben.name?.charAt(0) || 'B' }}</div>
                   <span class="ben-name" style="font-weight: 600;">{{ ben.name }}</span>
                 </div>
               </td>
               <td><span :class="['type-badge', ben.type]">{{ ben.type }}</span></td>
               <td>{{ ben.Location?.city || '-' }}</td>
-              <td>{{ ben.items.length }}</td>
+              <td>{{ ben.items?.length || 0 }}</td>
               <td class="total-cell">{{ formatCurrency(ben.totalValue) }}</td>
               <td class="actions-cell">
                 <button class="action-btn toggle-dist" @click="toggleBeneficiaryItems(ben.beneficiaryId)" title="Donation Items">
@@ -194,7 +186,8 @@
                 </button>
               </td>
             </tr>
-            <!-- Items for this beneficiary (expandable) -->
+
+            <!-- Expanded Items Table for Beneficiary -->
             <tr v-if="expandedBeneficiaries.includes(ben.beneficiaryId)">
               <td colspan="6" class="dist-detail-cell">
                 <div class="dist-detail">
@@ -202,21 +195,24 @@
                     <h4 style="margin: 0; font-size: 14px;">Donation Items for {{ ben.name }}</h4>
                     <button v-if="donation.status === 'draft'" @click="openAddItemModal(ben.beneficiaryId)" class="btn-sm distribute">+ Add Item</button>
                   </div>
-                  <div v-if="ben.items.length" style="margin-top: 12px;">
-                     <table class="mini-table">
-                        <thead>
+
+                  <div v-if="ben.items?.length" style="margin-top: 12px;">
+                    <table class="mini-table">
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>Description</th>
+                          <th>Qty/Amount</th>
+                          <th>Total</th>
+                          <th>Recurring</th>
+                          <th>Status</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <template v-for="item in ben.items" :key="item.donationItemId">
+                          <!-- Item Row -->
                           <tr>
-                            <th>Type</th>
-                            <th>Description</th>
-                            <th>Qty/Amount</th>
-                            <th>Total</th>
-                            <th>Recurring</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr v-for="item in ben.items" :key="item.donationItemId">
                             <td><span :class="['type-badge', `type-${item.type}`]">{{ getTypeLabel(item.type) }}</span></td>
                             <td>{{ item.description || '-' }}</td>
                             <td>
@@ -226,48 +222,106 @@
                             <td>{{ formatCurrency(item.totalValue) }}</td>
                             <td>
                               <div v-if="item.isRecurring" style="text-transform: capitalize;">
-                                ✓ {{ item.DonationItemIntervals?.length }} {{ item.DonationItemIntervals?.[0]?.intervalType?.replace('ly', 's') }}
+                                ✓ {{ item.DonationItemIntervals?.length || 0 }} {{ item.DonationItemIntervals?.[0]?.intervalType?.replace('ly', 's') || 'Intervals' }}
                               </div>
                               <span v-else>No</span>
                             </td>
                             <td><StatusBadge :status="item.status" /></td>
                             <td class="actions-cell">
-                                <button
-                                  v-if="donation?.status === 'approved' && item.status !== 'distributed' && !item.isRecurring"
-                                  @click="markItemAsDistributed(item)"
-                                  class="action-btn distribute-item"
-                                  :title="(!donation.DonationDistributionEvidences?.length) ? 'Upload evidence first' : 'Mark Item Distributed'"
-                                >
-                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-2.25-1.313M21 7.5v2.25m0-2.25-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3 2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75 2.25-1.313M12 21.75V19.5m0 2.25-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
-                                  </svg>
-                                </button>
-                                <span v-if="item.status === 'distributed'" class="distributed-badge" title="Distributed">✓</span>
+                              <button
+                                v-if="donation?.status === 'approved' && item.status !== 'distributed' && !item.isRecurring"
+                                @click="markItemAsDistributed(item)"
+                                class="action-btn distribute-item"
+                                :title="(!donation.DonationDistributionEvidences?.length) ? 'Upload evidence first' : 'Mark Item Distributed'"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-2.25-1.313M21 7.5v2.25m0-2.25-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3 2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75 2.25-1.313M12 21.75V19.5m0 2.25-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
+                                </svg>
+                              </button>
+                              <span v-if="item.status === 'distributed'" class="distributed-badge" title="Distributed">✓</span>
 
-                                <button v-if="donation?.status === 'draft'" @click="openEditItemModal(item)" class="action-btn edit" title="Edit">
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                    <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
-                                  </svg>
-                                </button>
+                              <button v-if="donation?.status === 'draft'" @click="openEditItemModal(item)" class="action-btn edit" title="Edit">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                  <path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z" />
+                                </svg>
+                              </button>
 
-                                <button v-if="donation?.status === 'draft'" @click="deleteItem(item)" class="action-btn delete" title="Delete">
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                  </svg>
-                                </button>
+                              <button v-if="donation?.status === 'draft'" @click="deleteItem(item)" class="action-btn delete" title="Delete">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                  <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                </svg>
+                              </button>
 
-                                <!-- Toggle intervals view (only for recurring items) -->
-                                <button v-if="item.isRecurring" class="action-btn toggle-interval" @click="toggleIntervalView(item.donationItemId)" title="View Intervals">
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M9 18l6-6-6-6" v-if="!expandedIntervals.includes(item.donationItemId)" />
-                                    <path d="M6 9l6 6 6-6" v-else />
-                                  </svg>
-                                </button>
+                              <!-- Toggle intervals view (only for recurring items) -->
+                              <button v-if="item.isRecurring" class="action-btn toggle-interval" @click="toggleIntervalView(item.donationItemId)" title="View Intervals">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                  <path d="M9 18l6-6-6-6" v-if="!expandedIntervals.includes(item.donationItemId)" />
+                                  <path d="M6 9l6 6 6-6" v-else />
+                                </svg>
+                              </button>
                             </td>
                           </tr>
-                        </tbody>
-                     </table>
+
+                          <!-- Expanded Intervals Row for Item -->
+                          <tr v-if="expandedIntervals.includes(item.donationItemId) && item.isRecurring">
+                            <td colspan="7" class="interval-detail-cell">
+                              <div class="interval-detail">
+                                <h4 style="margin: 0 0 8px; font-size: 13px;">Recurring Periods for {{ item.description || 'Item' }}</h4>
+                                <div v-if="item.DonationItemIntervals?.length">
+                                  <table class="mini-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Period</th>
+                                        <th>Date Range</th>
+                                        <th>{{ item.type === 'money' ? 'Amount' : 'Quantity' }}</th>
+                                        <th v-if="item.type === 'money'">Method</th>
+                                        <th v-if="item.type === 'money'">Pay Date</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      <tr v-for="interval in item.DonationItemIntervals" :key="interval.intervalId">
+                                        <td>
+                                          <div style="font-weight: 600; text-transform: capitalize;">{{ interval.intervalType }} #{{ interval.intervalCount }}</div>
+                                        </td>
+                                        <td>{{ formatDate(interval.startDate) }} - {{ formatDate(interval.endDate) }}</td>
+                                        <td>
+                                          <span v-if="item.type === 'money'">{{ formatCurrency(interval.amount) }}</span>
+                                          <span v-else>{{ item.quantity }}</span>
+                                        </td>
+                                        <td v-if="item.type === 'money'">
+                                          <span style="text-transform: capitalize;">{{ interval.paymentMethod || '-' }}</span>
+                                        </td>
+                                        <td v-if="item.type === 'money'">
+                                          {{ formatDate(interval.paymentDate) }}
+                                        </td>
+                                        <td><span :class="['status-badge', `status-${interval.status}`]">{{ interval.status }}</span></td>
+                                        <td class="actions-cell">
+                                          <button v-if="donation?.status === 'approved' && interval.status !== 'distributed'"
+                                                  @click="markIntervalAsDistributed(interval, item)"
+                                                  class="btn-sm distribute">
+                                            Mark Distributed
+                                          </button>
+                                          <button v-if="donation?.status === 'approved'"
+                                                  @click="openIntervalEvidenceModal(interval, item)"
+                                                  class="btn-sm evidence"
+                                                  title="Evidence">
+                                            Evidence
+                                          </button>
+                                        </td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
+                                <p v-else class="no-dist">No intervals generated for this recurring item.</p>
+                              </div>
+                            </td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
                   </div>
                   <p v-else class="no-dist">No items assigned to this beneficiary yet.</p>
                 </div>
@@ -276,11 +330,14 @@
           </template>
         </tbody>
       </table>
+
       <div v-else class="empty-items">
         <p>No beneficiaries receiving items from this donation yet.</p>
       </div>
     </div>
 
+    <!-- Modals (Cancel, Request Changes, Evidence Upload, Add/Edit Item, Distribute, Reassign, Return, Interval Dist) -->
+    <!-- (Keep all existing modal markup here – it remains unchanged) -->
     <!-- Status Transition Modals -->
     <!-- Cancel Modal -->
     <div v-if="showCancelModal" class="modal-overlay" @click.self="closeCancelModal">
@@ -396,12 +453,6 @@ const authStore = useAuthStore()
 
 const donationId = parseInt(route.params.id)
 const donation = ref(null)
-const isChangesTimelineOpen = ref(false) // Start expanded by default
-
-// Toggle changes timeline
-const toggleChangesTimeline = () => {
-  isChangesTimelineOpen.value = !isChangesTimelineOpen.value
-}
 const items = computed(() => donation.value?.DonationItems || [])
 const loading = ref(false)
 const submitting = ref(false)
@@ -412,25 +463,162 @@ const savingItem = ref(false)
 
 const showCancelModal = ref(false)
 const showAddItemModal = ref(false)
-const showEditItemModal = ref(false)
 const editingItem = ref(null)
 
 const toasts = ref([])
 const expandedItems = ref([])
 const expandedIntervals = ref([])
-const expandedIntervalDists = ref([])
 
 const showRequestChangesModal = ref(false)
 const requestChangesComment = ref('')
 const submittingChanges = ref(false)
 
-// Evidence modal state (Unified)
 const showEvidenceModal = ref(false)
 const selectedItem = ref(null)
 const selectedInterval = ref(null)
 const uploadingEvidence = ref(false)
 
+const beneficiaries = ref([])
+const myBeneficiaries = ref([])
+const showDistributeModal = ref(false)
+const distributingItem = ref(null)
+const distributingSaving = ref(false)
+
+const groups = ref([])
+
+const expandedBeneficiaries = ref([])
+const toggleBeneficiaryItems = (benId) => {
+  const idx = expandedBeneficiaries.value.indexOf(benId)
+  if (idx > -1) expandedBeneficiaries.value.splice(idx, 1)
+  else expandedBeneficiaries.value.push(benId)
+}
+
+const beneficiariesWithItems = computed(() => {
+  // Primary source: the list of beneficiaries that belong to this donation's group or the user's group
+  let source = myBeneficiaries.value.length > 0 ? [...myBeneficiaries.value] : []
+  
+  // Fallback: if we have items but no group-specific list (e.g. general admin view),
+  // extract unique beneficiaries from the items themselves
+  if (source.length === 0 && items.value.length > 0) {
+    const seenIds = new Set()
+    items.value.forEach(item => {
+      if (item.beneficiary && !seenIds.has(item.beneficiaryId)) {
+        source.push(item.beneficiary)
+        seenIds.add(item.beneficiaryId)
+      }
+    })
+  }
+
+  // Map each beneficiary to their items and total value
+  return source.map(ben => {
+    const benItems = items.value.filter(item => item.beneficiaryId === ben.beneficiaryId)
+    const totalValue = benItems.reduce((sum, item) => sum + parseFloat(item.totalValue || 0), 0)
+    
+    // Support different property names for Location based on API response structure
+    const loc = ben.Location || ben.BeneficiaryLocation || {}
+    
+    return {
+      ...ben,
+      items: benItems,
+      totalValue,
+      Location: loc
+    }
+  })
+})
+
+const openIntervalDistModal = ref(false)
+const distributionDate = ref('')
+const distributingInterval = ref(false)
+const intervalDistRows = ref([])
+
+const showReturnModal = ref(false)
+const returningDist = ref(null)
+const returnReason = ref('')
+const returning = ref(false)
+
+const showReassignModal = ref(false)
+const selectedDistForReassign = ref(null)
+const selectedItemForReassign = ref(null)
+
+const openReassignModal = (dist, item) => {
+  selectedDistForReassign.value = dist
+  selectedItemForReassign.value = item
+  showReassignModal.value = true
+}
+
+const addToast = (msg, type='success') => {
+  const id = Date.now()
+  toasts.value.push({ id, message: msg, type })
+  setTimeout(() => removeToast(id), 5000)
+}
+const removeToast = (id) => toasts.value = toasts.value.filter(t => t.id !== id)
+
+const formatDate = (d) => {
+  if (!d) return 'N/A'
+  const date = new Date(d)
+  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+  return `${months[date.getMonth()]}-${date.getDate()}-${date.getFullYear()}`
+}
+const formatCurrency = (v) => v ? new Intl.NumberFormat('en-US',{style:'currency',currency:'ETB'}).format(v) : '0.00'
+const getTypeLabel = (t) => ({ money:'Money', goods:'Goods', service:'Service' })[t] || t
+const getFileUrl = (relativePath) => {
+  if (!relativePath) return '#';
+  if (relativePath.startsWith('http')) return relativePath;
+  const BACKEND_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+  return `${BACKEND_BASE}${relativePath}`;
+}
+const expandedEvidence = ref([]);
+const toggleEvidence = (itemId) => {
+  const idx = expandedEvidence.value.indexOf(itemId);
+  if (idx > -1) expandedEvidence.value.splice(idx, 1);
+  else expandedEvidence.value.push(itemId);
+}
+
+const returnedAmount = computed(() => {
+  if (!donation.value?.DonationItems) return 0;
+  let total = 0;
+  donation.value.DonationItems.forEach(item => {
+    item.DonationDistributions?.forEach(dist => {
+      if (dist.isReturned) total += parseFloat(dist.value || 0);
+    });
+  });
+  return total;
+});
+
+const unassignedAmount = computed(() => {
+  if (!donation.value?.DonationItems) return 0;
+  return donation.value.DonationItems.reduce((acc, item) => {
+    return acc + parseFloat(item.unassignedDeduction || 0);
+  }, 0);
+});
+
+const canSubmit = computed(() => donation.value?.status === 'draft')
+const canApprove = computed(() => donation.value?.status === 'pending' && ['admin','charity_admin'].includes(authStore.user?.role))
+const canDistribute = computed(() => donation.value?.status === 'approved')
+const canCancel = computed(() => donation.value?.status !== 'cancelled')
+
+const requestedChanges = computed(() => {
+  if (!donation.value?.DonationLogs) return []
+  return donation.value.DonationLogs
+    .filter(log => log.action === 'REQUEST_CHANGES')
+    .map(log => ({
+      approvalId: log.logId,
+      comment: log.metadata?.comment || '',
+      createdAt: log.created_at,
+      Employee: log.Employee || null
+    }))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+})
+
+const isChangesTimelineOpen = ref(false)
+const toggleChangesTimeline = () => {
+  isChangesTimelineOpen.value = !isChangesTimelineOpen.value
+}
+
 const evidenceModalTitle = computed(() => {
+  if (selectedInterval.value) {
+    return `Evidence for interval ${selectedInterval.value.startDate} to ${selectedInterval.value.endDate}`
+  }
   return 'Donation Evidence'
 })
 
@@ -462,229 +650,31 @@ const handleEvidenceUpload = async (files) => {
   }
 }
 
-const beneficiaries = ref([])
-const myBeneficiaries = ref([])
-const showDistributeModal = ref(false)
-const distributingItem = ref(null)
-const distributingSaving = ref(false)
-
-const groups = ref([])
-
-const expandedBeneficiaries = ref([])
-const toggleBeneficiaryItems = (benId) => {
-  const idx = expandedBeneficiaries.value.indexOf(benId)
-  if (idx > -1) expandedBeneficiaries.value.splice(idx, 1)
-  else expandedBeneficiaries.value.push(benId)
-}
-
-const beneficiariesWithItems = computed(() => {
-  if (!items.value.length) return []
-  
-  // Get unique beneficiaries from items
-  const benMap = new Map()
-  items.value.forEach(item => {
-    const bId = item.beneficiaryId
-    if (!bId) return
-
-    if (!benMap.has(bId)) {
-      // 1. Try to get beneficiary data from the item's joined object (backend include)
-      // 2. Fallback to the global beneficiaries list loaded in loadDependencies
-      const benInfo = item.beneficiary || beneficiaries.value.find(b => b.beneficiaryId === bId)
-      
-      benMap.set(bId, {
-        ...(benInfo || {}),
-        beneficiaryId: bId,
-        name: benInfo?.name || `Beneficiary #${bId}`,
-        type: benInfo?.type || 'individual',
-        Location: benInfo?.Location || benInfo?.BeneficiaryLocation || {},
-        items: [],
-        totalValue: 0
-      })
-    }
-  })
-
-  // Fill items and calculate totals
-  items.value.forEach(item => {
-    const bId = item.beneficiaryId
-    if (!bId) return
-    const ben = benMap.get(bId)
-    if (ben) {
-      ben.items.push(item)
-      ben.totalValue += parseFloat(item.totalValue || 0)
-    }
-  })
-
-  return Array.from(benMap.values())
-})
-
-// ── Interval state ──
-const showIntervalDistModal = ref(false)
-const distributionDate = ref('')
-const distributingInterval = ref(false)
-const intervalDistRows = ref([])
-
-// ── Return distribution state ──
-const showReturnModal = ref(false)
-const returningDist = ref(null)
-const returnReason = ref('')
-const returning = ref(false)
-
-// ── Reassign distribution state ──
-const showReassignModal = ref(false)
-const selectedDistForReassign = ref(null)
-const selectedItemForReassign = ref(null)
-
-const openReassignModal = (dist, item) => {
-  selectedDistForReassign.value = dist
-  selectedItemForReassign.value = item
-  showReassignModal.value = true
-}
-
-// ── Helper functions ──
-const addToast = (msg, type='success') => {
-  const id = Date.now()
-  toasts.value.push({ id, message: msg, type })
-  setTimeout(() => removeToast(id), 5000)
-}
-const removeToast = (id) => toasts.value = toasts.value.filter(t => t.id !== id)
-
-const formatDate = (d) => {
-  if (!d) return 'N/A'
-  const date = new Date(d)
-  const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
-  return `${months[date.getMonth()]}-${date.getDate()}-${date.getFullYear()}`
-}
-const formatCurrency = (v) => v ? new Intl.NumberFormat('en-US',{style:'currency',currency:'ETB'}).format(v) : '0.00'
-const getTypeLabel = (t) => ({ money:'Money', goods:'Goods', service:'Service' })[t] || t
-const getFileUrl = (relativePath) => {
-  if (!relativePath) return '#';
-  if (relativePath.startsWith('http')) return relativePath;
-  const BACKEND_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
-  return `${BACKEND_BASE}${relativePath}`;
-}
-const expandedEvidence = ref([]);
-const toggleEvidence = (itemId) => {
-  const idx = expandedEvidence.value.indexOf(itemId);
-  if (idx > -1) expandedEvidence.value.splice(idx, 1);
-  else expandedEvidence.value.push(itemId);
-}
-
-// ── Computed: total returned amount ──
-const returnedAmount = computed(() => {
-  if (!donation.value?.DonationItems) return 0;
-  let total = 0;
-  donation.value.DonationItems.forEach(item => {
-    item.DonationDistributions?.forEach(dist => {
-      if (dist.isReturned) total += parseFloat(dist.value || 0);
-    });
-  });
-  return total;
-});
-
-const unassignedAmount = computed(() => {
-  if (!donation.value?.DonationItems) return 0;
-  return donation.value.DonationItems.reduce((acc, item) => {
-    return acc + parseFloat(item.unassignedDeduction || 0);
-  }, 0);
-});
-
-const canSubmit = computed(() => donation.value?.status === 'draft')
-const canApprove = computed(() => donation.value?.status === 'pending' && ['admin','finance','charity'].includes(authStore.user?.role))
-const canDistribute = computed(() => donation.value?.status === 'approved')
-const canCancel = computed(() => donation.value?.status !== 'cancelled')
-
-// Get ALL "rejected" approvals (change requests) ordered by most recent first
-const requestedChanges = computed(() => {
-  if (!donation.value?.DonationApprovals) return []
-  return donation.value.DonationApprovals
-    .filter(a => a.status === 'rejected')
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-})
-
-const toggleIntervalDistributions = (intervalId) => {
-  const idx = expandedIntervalDists.value.indexOf(intervalId)
-  if (idx > -1) expandedIntervalDists.value.splice(idx, 1)
-  else expandedIntervalDists.value.push(intervalId)
-}
-
-const getIntervalDistributions = (item, intervalId) => {
-  if (!item.DonationDistributions) return []
-  // Show only distributions specific to this interval
-  const filtered = item.DonationDistributions.filter(d => String(d.intervalId) === String(intervalId))
-  // Sort by created_at descending (newest first)
-  return [...filtered].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
-}
-
-// Helper to filter main table (only show non-interval distributions for recurring items)
-const summaryDistributions = (item) => {
-  if (!item.DonationDistributions) return []
-  let filtered = item.DonationDistributions
-  if (item.isRecurring) {
-    filtered = item.DonationDistributions.filter(d => d.intervalId === null)
-  }
-  // Sort by created_at descending (newest first)
-  return [...filtered].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
-}
-
-const getReassignHistory = (item, distId) => {
-  if (!item.DonationDeductions) return []
-  const dist = item.DonationDistributions?.find(d => d.distributionId === distId)
-  if (!dist) return []
-
-  return item.DonationDeductions.filter(d => {
-    // 1. Deduction was from THIS specific distribution (matches exactly)
-    if (d.distributionId === distId) return true
-    
-    // 2. Deduction was reassigned TO THIS beneficiary in THIS specific interval
-    // We check both beneficiaryId and intervalId to ensure it belongs to this period
-    if (d.reassignedToBeneficiaryId === dist.beneficiaryId && String(d.intervalId) === String(dist.intervalId)) {
-      return true
-    }
-    
-    return false
-  })
-}
-
-const getReassignedHistory = (item, distId) => {
-  return getReassignHistory(item, distId).filter(h => h.reassignedToBeneficiaryId !== null)
-}
-
-const getDeductedHistory = (item, distId) => {
-  return getReassignHistory(item, distId).filter(h => h.reassignedToBeneficiaryId === null)
-}
-
-// ── Data loading ──
 const loadDonation = async () => {
   loading.value = true
   const res = await CharityService.getDonationById(donationId)
   if (res.success) {
     donation.value = res.data
-    await loadDependencies() // Load beneficiaries after donation so we have groupId
+    await loadDependencies()
   }
   else addToast('Failed to load donation', 'error')
   loading.value = false
 }
 
 const loadDependencies = async () => {
-  // 1. Get all beneficiaries for the general list (used for dropdowns etc)
   const bens = await CharityService.getBeneficiaries()
   if (bens.success) beneficiaries.value = bens.data
 
-  // 2. Identify the beneficiaries that "belong" to the context of this view
-  // charity_admin sees ALL beneficiaries if they are viewing from "All Donations"
-  // but we still want a list of beneficiaries that are relevant for the current group
   if (donation.value?.groupId) {
     const res = await CharityService.getGroupBeneficiaries(donation.value.groupId)
     if (res.success) myBeneficiaries.value = res.data
   } else if (authStore.userRole === 'charity_teamleader') {
-    // Fallback for teamleader: load their own group beneficiaries
     const grpRes = await CharityService.getMyGroup()
     if (grpRes.success && grpRes.data?.length) {
       const res = await CharityService.getGroupBeneficiaries(grpRes.data[0].groupId)
       if (res.success) myBeneficiaries.value = res.data
     }
   } else if (authStore.userRole === 'charity_admin') {
-    // For admin, if no group is specified on donation, just use all beneficiaries
     myBeneficiaries.value = beneficiaries.value
   }
 }
@@ -694,7 +684,6 @@ const loadGroups = async () => {
   if (res.success) groups.value = res.data
 }
 
-// ── Status transitions (donation level) ──
 const submitDonation = async () => {
   submitting.value = true
   const res = await CharityService.submitDonation(donationId)
@@ -729,7 +718,6 @@ const cancelDonation = async () => {
   canceling.value = false
 }
 
-// ── Request changes ──
 const submitRequestChanges = async () => {
   if (!requestChangesComment.value.trim()) return
   submittingChanges.value = true
@@ -745,7 +733,6 @@ const submitRequestChanges = async () => {
   submittingChanges.value = false
 }
 
-// ── Items management ──
 const preSelectedBenId = ref(null)
 const openAddItemModal = (benId = null) => {
   editingItem.value = null
@@ -776,7 +763,6 @@ const deleteItem = async (item) => {
   else addToast(res.error || 'Delete failed', 'error')
 }
 
-// ── Distribution view toggle ──
 const toggleDistributions = (itemId) => {
   const idx = expandedItems.value.indexOf(itemId)
   if (idx > -1) expandedItems.value.splice(idx, 1)
@@ -787,11 +773,7 @@ const toggleDistributions = (itemId) => {
 }
 const toggleDistView = (itemId, mode) => distViewMode.value[itemId] = mode
 const distViewMode = ref({})
-const intervalDistViewMode = ref({})
 
-const toggleIntervalDistView = (intervalId, mode) => intervalDistViewMode.value[intervalId] = mode
-
-// Generic helper to group any set of distributions
 const getGroupedDistributions = (distributions) => {
   if (!distributions) return {}
   const groupsData = {}
@@ -806,7 +788,6 @@ const getGroupedDistributions = (distributions) => {
   return groupsData
 }
 
-// ── Grouped distributions (for main item group view) ──
 const groupedDistributions = (item) => {
   return getGroupedDistributions(item.DonationDistributions)
 }
@@ -818,7 +799,6 @@ const getGroupName = (groupId) => {
   return mgr ? `${mgr} <${group.name}>` : group.name
 }
 
-// ── Distribute (bulk for approved donations) ──
 const handleDistribute = async (payload) => {
   distributingSaving.value = true
   const res = await CharityService.distributeItem(distributingItem.value.donationItemId, payload)
@@ -827,14 +807,6 @@ const handleDistribute = async (payload) => {
   distributingSaving.value = false
 }
 
-// ── Per-item evidence upload ──
-const openEvidenceModalForItem = (item) => {
-  selectedItem.value = item
-  selectedInterval.value = null
-  showEvidenceModal.value = true
-}
-
-// ── Per-item mark distributed ──
 const markItemAsDistributed = async (item) => {
   if (!confirm(`Mark "${item.description}" as distributed?`)) return
   const res = await CharityService.markItemDistributed(item.donationItemId)
@@ -842,16 +814,13 @@ const markItemAsDistributed = async (item) => {
   else addToast(res.error || 'Failed', 'error')
 }
 
-// ── Mark Interval as Distributed ──
 const markIntervalAsDistributed = async (interval, item) => {
   if (!confirm(`Mark period "${interval.startDate} to ${interval.endDate}" as distributed?`)) return
-  distributingInterval.value = true
   const res = await CharityService.distributeItemForInterval(
     item.donationItemId,
     interval.intervalId,
-    { distributions: [] } // Sending empty array to trigger "mark existing as distributed" logic in backend
+    { distributions: [] }
   )
-  distributingInterval.value = false
   if (res.success) {
     addToast('Interval marked as distributed')
     loadDonation()
@@ -860,91 +829,26 @@ const markIntervalAsDistributed = async (interval, item) => {
   }
 }
 
-// ── Return distribution ──
-const openReturnModal = (dist) => {
-  returningDist.value = dist
-  returnReason.value = ''
-  showReturnModal.value = true
-}
-const confirmReturn = async () => {
-  if (!returningDist.value || !returnReason.value.trim()) return
-  returning.value = true
-  const res = await CharityService.returnDistribution(
-    returningDist.value.distributionId,
-    returnReason.value.trim()
-  )
-  returning.value = false
-  if (res.success) {
-    addToast('Distribution marked as returned')
-    showReturnModal.value = false
-    loadDonation()
-  } else {
-    addToast(res.error || 'Failed to return distribution', 'error')
-  }
+const openIntervalEvidenceModal = (interval, item) => {
+  selectedInterval.value = interval
+  selectedItem.value = item
+  intervalFiles.value = []
+  showIntervalEvidenceModal.value = true
 }
 
-// ── Interval toggle ──
 const toggleIntervalView = (itemId) => {
   const idx = expandedIntervals.value.indexOf(itemId)
   if (idx > -1) expandedIntervals.value.splice(idx, 1)
   else expandedIntervals.value.push(itemId)
 }
 
-// ── Interval distribution ──
-const openIntervalDistributionModal = (interval, item) => {
-  selectedInterval.value = interval
-  selectedItem.value = item // keep reference to item for evidence
-  distributionDate.value = ''
-  intervalDistRows.value = [{ beneficiaryId: '', quantity: 0 }]
-  showIntervalDistModal.value = true
-}
-
-const addIntervalRow = () => intervalDistRows.value.push({ beneficiaryId: '', quantity: 0 })
-const removeIntervalRow = (idx) => intervalDistRows.value.splice(idx, 1)
-
-const submitIntervalDistribution = async () => {
-  if (!selectedInterval.value || !distributionDate.value) return
-  const payload = intervalDistRows.value.map(r => ({
-    beneficiaryId: r.beneficiaryId,
-    quantity: r.quantity,
-  }))
-  distributingInterval.value = true
-  const res = await CharityService.distributeItemForInterval(
-    selectedItem.value?.donationItemId,
-    selectedInterval.value.intervalId,
-    { distributions: payload }
-  )
-  distributingInterval.value = false
-  if (res.success) {
-    addToast('Distribution successful')
-    showIntervalDistModal.value = false
-    loadDonation()
-  } else {
-    addToast(res.error || 'Failed', 'error')
-  }
-}
-
-// ── Interval evidence ──
-const openIntervalEvidenceModal = (interval, item) => {
-  selectedInterval.value = interval
-  selectedItem.value = item
-  showEvidenceModal.value = true
-}
-
-const getIntervalUnassigned = (item, intervalId) => {
-  if (!item.DonationDeductions) return 0
-  return item.DonationDeductions
-    .filter(d => String(d.intervalId) === String(intervalId) && !d.reassignedToBeneficiaryId)
-    .reduce((sum, d) => sum + parseFloat(d.amount || 0), 0)
-}
-
-// ── Mount ──
 onMounted(async () => {
   await loadDonation()
   await loadDependencies()
   await loadGroups()
 })
 </script>
+
 
 <style scoped>
 .donation-detail { padding: 16px; max-width: 1200px; margin: 0 auto; background: #f5f7fb; min-height: 100vh; }
@@ -1385,4 +1289,17 @@ onMounted(async () => {
   margin-top: 0;
 }
 
+.toggle-interval { color: #8b5cf6; }
+.interval-detail-cell { background: #fafbfc; padding: 12px; }
+.interval-detail h4 { margin-bottom: 8px; }
+.interval-detail .mini-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+.interval-detail .mini-table th { background: #e2e8f0; padding: 4px 8px; text-align: left; }
+.interval-detail .mini-table td { padding: 4px 8px; border-bottom: 1px solid #e2e8f0; }
+.status-badge { padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: capitalize; }
+.status-pending { background: #f1f5f9; color: #475569; }
+.status-active { background: #dbeafe; color: #1e40af; }
+.status-distributed { background: #dcfce7; color: #166534; }
+.btn-sm { padding: 4px 10px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer; }
+.btn-sm.distribute { color: #10b981; border-color: #10b981; }
+.btn-sm.evidence { color: #8b5cf6; border-color: #8b5cf6; }
 </style>

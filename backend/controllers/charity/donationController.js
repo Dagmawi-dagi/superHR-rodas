@@ -364,34 +364,35 @@ exports.getDonationById = async (req, res) => {
         { model: Employee, as: 'approver', attributes: ['employeeId', 'firstName', 'lastName'] },
         { model: Employee, as: 'distributor', attributes: ['employeeId', 'firstName', 'lastName'] },
         {
-          model: DonationDistributionEvidence   // MOVED HERE (direct under Donation)
+          model: DonationDistributionEvidence,   // directly on donation
         },
         {
           model: DonationItem,
           include: [
             {
-              model: Beneficiary, 
-              as: 'beneficiary', 
+              model: Beneficiary,
+              as: 'beneficiary',
               attributes: ['beneficiaryId', 'name', 'type', 'groupId'],
               include: [{ model: BeneficiaryLocation, attributes: ['city'] }]
             },
             {
               model: DonationDistribution,
               include: [
-                { 
-                  model: Beneficiary, 
+                {
+                  model: Beneficiary,
                   attributes: ['beneficiaryId', 'name', 'type', 'groupId'],
                   include: [{ model: BeneficiaryLocation, attributes: ['city'] }]
                 }
               ]
             },
-            {
-              model: DonationItemInterval   // ← add this
-            },
-            
+            { model: DonationItemInterval },
           ]
         },
-        
+        {
+          model: DonationLog,                       // <-- at the top level, not inside DonationItem
+          include: [{ model: Employee, attributes: ['employeeId', 'firstName', 'lastName'] }],
+          order: [['created_at', 'DESC']],
+        },
       ]
     });
 
@@ -526,31 +527,52 @@ exports.addDonationItem = async (req, res) => {
       if (isNaN(count) || count <= 0)
         throw new Error("Interval count must be positive");
 
-      for (let i = 0; i < count; i++) {
-        let start = new Date(interval.startDate);
-        let end = new Date(interval.startDate);
-
-        if (interval.intervalType === "daily") {
-          start.setDate(start.getDate() + i);
-          end.setDate(end.getDate() + i);
-        } else if (interval.intervalType === "weekly") {
-          start.setDate(start.getDate() + i * 7);
-          end.setDate(end.getDate() + (i + 1) * 7 - 1);
-        } else if (interval.intervalType === "monthly") {
-          start.setMonth(start.getMonth() + i);
-          end.setMonth(end.getMonth() + i + 1);
-          end.setDate(end.getDate() - 1);
-        }
-
-        intervalsToCreate.push({
+      // If specific intervals are provided from frontend
+      if (interval.intervals && Array.isArray(interval.intervals) && interval.intervals.length > 0) {
+        intervalsToCreate = interval.intervals.map((inv, idx) => ({
           intervalType: interval.intervalType,
-          intervalCount: i + 1, // Use as sequence number
-          startDate: start.toISOString().split("T")[0],
-          endDate: end.toISOString().split("T")[0],
+          intervalCount: idx + 1,
+          startDate: inv.startDate,
+          endDate: inv.endDate,
+          amount: inv.amount || baseTotal,
+          paymentMethod: inv.paymentMethod || paymentMethod || "bank",
+          paymentDate: inv.paymentDate || null,
+          distributionDate: inv.distributionDate || distributionDate || null,
           status: "pending",
-        });
+        }));
+        // Sum up all interval amounts for the final item total
+        finalTotal = intervalsToCreate.reduce((sum, inv) => sum + parseFloat(inv.amount || 0), 0);
+      } else {
+        // Auto-generate intervals if not provided
+        for (let i = 0; i < count; i++) {
+          let start = new Date(interval.startDate);
+          let end = new Date(interval.startDate);
+
+          if (interval.intervalType === "daily") {
+            start.setDate(start.getDate() + i);
+            end.setDate(end.getDate() + i);
+          } else if (interval.intervalType === "weekly") {
+            start.setDate(start.getDate() + i * 7);
+            end.setDate(end.getDate() + (i + 1) * 7 - 1);
+          } else if (interval.intervalType === "monthly") {
+            start.setMonth(start.getMonth() + i);
+            end.setMonth(end.getMonth() + i + 1);
+            end.setDate(end.getDate() - 1);
+          }
+
+          intervalsToCreate.push({
+            intervalType: interval.intervalType,
+            intervalCount: i + 1,
+            startDate: start.toISOString().split("T")[0],
+            endDate: end.toISOString().split("T")[0],
+            amount: baseTotal,
+            paymentMethod: paymentMethod || "bank",
+            distributionDate: distributionDate || null,
+            status: "pending",
+          });
+        }
+        finalTotal = money(baseTotal * count);
       }
-      finalTotal = money(baseTotal * count); // grand total over all intervals
     }
 
     const item = await DonationItem.create(
@@ -1565,7 +1587,15 @@ exports.distributeItemForInterval = async (req, res) => {
     for (const dist of distributions) {
       const beneficiary = await Beneficiary.findByPk(dist.beneficiaryId, { transaction: t });
       if (!beneficiary) throw new Error(`Beneficiary ${dist.beneficiaryId} not found`);
-      const value = money(parseFloat(dist.quantity) * parseFloat(item.unitValue));
+      
+      // Use interval amount if quantity is 1 and it's a money item, otherwise calculate
+      let value = 0;
+      if (item.type === 'money' && parseFloat(dist.quantity) === 1) {
+        value = money(interval.amount || item.unitValue);
+      } else {
+        value = money(parseFloat(dist.quantity) * parseFloat(item.unitValue));
+      }
+
       const distribution = await DonationDistribution.create({
         donationItemId: itemId,
         beneficiaryId: dist.beneficiaryId,
