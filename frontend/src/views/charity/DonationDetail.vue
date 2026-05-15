@@ -200,7 +200,7 @@
                     <table class="mini-table">
                       <thead>
                         <tr>
-                          <th>Type</th>
+                          <th>Type </th>
                           <th>Description</th>
                           <th>Qty/Amount</th>
                           <th>Total</th>
