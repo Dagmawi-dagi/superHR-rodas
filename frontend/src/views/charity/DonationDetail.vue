@@ -202,7 +202,7 @@
                         <tr>
                           <th>Type </th>
                           <th>Description</th>
-                          <th>Qty/Amount</th>
+                          <th>Value / Qty</th>
                           <th>Total</th>
                           <th>Recurring</th>
                           <th>Status</th>
@@ -216,7 +216,7 @@
                             <td><span :class="['type-badge', `type-${item.type}`]">{{ getTypeLabel(item.type) }}</span></td>
                             <td>{{ item.description || '-' }}</td>
                             <td>
-                              <span v-if="item.type === 'money'">{{ formatCurrency(item.totalValue) }}</span>
+                              <span v-if="item.type === 'money'">-</span>
                               <span v-else>{{ item.quantity }}</span>
                             </td>
                             <td>{{ formatCurrency(item.totalValue) }}</td>
@@ -226,13 +226,36 @@
                               </div>
                               <span v-else>No</span>
                             </td>
-                            <td><StatusBadge :status="item.status" /></td>
+                            <td>
+                              <StatusBadge :status="item.status" />
+                              <span v-if="hasPendingAdjustment(item)" 
+                                    class="status-badge" 
+                                    style="background: #fef3c7; color: #b45309; margin-left: 8px;"
+                                    title="An adjustment request is awaiting review">
+                                Pending Adj.
+                              </span>
+                            </td>
                             <td class="actions-cell">
+                              <button
+                                v-if="donation?.status === 'approved' && item.status !== 'distributed' && !item.isRecurring"
+                                @click="openAdjustmentModal(item)"
+                                class="action-btn adjustment"
+                                title="Request Adjustment"
+                                style="color: #f59e0b;"
+                                :disabled="hasPendingAdjustment(item)"
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                  <path d="M12 20h9" />
+                                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                </svg>
+                              </button>
+
                               <button
                                 v-if="donation?.status === 'approved' && item.status !== 'distributed' && !item.isRecurring"
                                 @click="markItemAsDistributed(item)"
                                 class="action-btn distribute-item"
-                                :title="(!donation.DonationDistributionEvidences?.length) ? 'Upload evidence first' : 'Mark Item Distributed'"
+                                :title="hasPendingAdjustment(item) ? 'Wait for adjustment approval' : ((!donation.DonationDistributionEvidences?.length) ? 'Upload evidence first' : 'Mark Item Distributed')"
+                                :disabled="hasPendingAdjustment(item)"
                               >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
                                   <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-2.25-1.313M21 7.5v2.25m0-2.25-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3 2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75 2.25-1.313M12 21.75V19.5m0 2.25-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
@@ -274,7 +297,8 @@
                                       <tr>
                                         <th>Period</th>
                                         <th>Date Range</th>
-                                        <th>{{ item.type === 'money' ? 'Amount' : 'Quantity' }}</th>
+                                        <th>{{ item.type === 'money' ? 'Value' : 'Quantity' }}</th>
+                                        <th v-if="item.type !== 'money'">Value</th>
                                         <th v-if="item.type === 'money'">Method</th>
                                         <th v-if="item.type === 'money'">Pay Date</th>
                                         <th>Status</th>
@@ -291,27 +315,56 @@
                                           <span v-if="item.type === 'money'">{{ formatCurrency(interval.value) }}</span>
                                           <span v-else>{{ interval.quantity }}</span>
                                         </td>
+                                        <td v-if="item.type !== 'money'" style="font-weight: 500;">
+                                          {{ formatCurrency(interval.value) }}
+                                        </td>
                                         <td v-if="item.type === 'money'">
                                           <span style="text-transform: capitalize;">{{ interval.paymentMethod || '-' }}</span>
                                         </td>
                                         <td v-if="item.type === 'money'">
                                           {{ formatDate(interval.paymentDate) }}
                                         </td>
-                                        <td v-if="item.type !== 'money'" style="font-weight: 500;">
-                                          {{ formatCurrency(interval.value) }}
+                                        <td>
+                                          <span :class="['status-badge', `status-${interval.status}`]">{{ interval.status }}</span>
+                                          <span v-if="hasPendingAdjustment(interval)" 
+                                                class="status-badge" 
+                                                style="background: #fef3c7; color: #b45309; margin-left: 8px;"
+                                                title="An adjustment request is awaiting review">
+                                            Pending Adj.
+                                          </span>
                                         </td>
-                                        <td><span :class="['status-badge', `status-${interval.status}`]">{{ interval.status }}</span></td>
                                         <td class="actions-cell">
                                           <button v-if="donation?.status === 'approved' && interval.status !== 'distributed'"
-                                                  @click="markIntervalAsDistributed(interval, item)"
-                                                  class="btn-sm distribute">
-                                            Mark Distributed
+                                                  @click="openAdjustmentModal(item, interval)"
+                                                  class="action-btn adjustment"
+                                                  title="Request Adjustment"
+                                                  style="color: #f59e0b;"
+                                                  :disabled="hasPendingAdjustment(interval)">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                              <path d="M12 20h9" />
+                                              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                            </svg>
                                           </button>
+
+                                          <button v-if="donation?.status === 'approved' && interval.status !== 'distributed'"
+                                                  @click="markIntervalAsDistributed(interval, item)"
+                                                  class="action-btn distribute-item"
+                                                  :disabled="hasPendingAdjustment(interval)"
+                                                  :title="hasPendingAdjustment(interval) ? 'Wait for adjustment approval' : 'Mark distributed'">
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-6">
+                                              <path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-2.25-1.313M21 7.5v2.25m0-2.25-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3 2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75 2.25-1.313M12 21.75V19.5m0 2.25-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
+                                            </svg>
+                                          </button>
+
                                           <button v-if="donation?.status === 'approved'"
                                                   @click="openIntervalEvidenceModal(interval, item)"
-                                                  class="btn-sm evidence"
-                                                  title="Evidence">
-                                            Evidence
+                                                  class="action-btn evidence"
+                                                  title="Upload Evidence">
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                              <polyline points="7 10 12 15 17 10" />
+                                              <line x1="12" y1="15" x2="12" y2="3" />
+                                            </svg>
                                           </button>
                                         </td>
                                       </tr>
@@ -432,6 +485,15 @@
         {{ toast.message }}
       </div>
     </div>
+
+    <RequestAdjustmentModal
+      :is-open="showAdjustmentModal"
+      :item="adjustmentTargetItem"
+      :interval="adjustmentTargetInterval"
+      :beneficiaries="myBeneficiaries"
+      @close="showAdjustmentModal = false"
+      @success="addToast($event || 'Adjustment request submitted')"
+    />
   </div>
   <div v-else class="loading-state">
     <div class="spinner"></div>
@@ -449,6 +511,7 @@ import AddItemModal from './components/DonationItem/AddItemModal.vue'
 import DistributeItemModal from './components/Donation/DistributeItemModal.vue'
 import ReassignDistributionModal from './components/Donation/ReassignDistributionModal.vue'
 import EvidenceUploadModal from './components/Donation/EvidenceUploadModal.vue'
+import RequestAdjustmentModal from './components/Donation/RequestAdjustmentModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -486,6 +549,20 @@ const myBeneficiaries = ref([])
 const showDistributeModal = ref(false)
 const distributingItem = ref(null)
 const distributingSaving = ref(false)
+
+const showAdjustmentModal = ref(false)
+const adjustmentTargetItem = ref(null)
+const adjustmentTargetInterval = ref(null)
+
+const openAdjustmentModal = (item, interval = null) => {
+  adjustmentTargetItem.value = item
+  adjustmentTargetInterval.value = interval
+  showAdjustmentModal.value = true
+}
+
+const hasPendingAdjustment = (target) => {
+  return target.DonationItemAdjustmentRequests?.some(r => r.status === 'pending')
+}
 
 const groups = ref([])
 

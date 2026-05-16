@@ -7,6 +7,7 @@ module.exports = (sequelize, DataTypes) => {
       DonationItemInterval.belongsTo(models.DonationItem, { foreignKey: "donationItemId" });
       DonationItemInterval.hasMany(models.DonationDistribution, { foreignKey: "intervalId" });
       DonationItemInterval.hasMany(models.DonationDistributionEvidence, { foreignKey: "intervalId" });
+      DonationItemInterval.hasMany(models.DonationItemAdjustmentRequest, { foreignKey: "intervalId" });
     }
   }
 

@@ -6,6 +6,7 @@ const {
   DonationDistributionEvidence,
   DonationCompany,
   DonationItemInterval,
+  DonationItemAdjustmentRequest,
   Campaign,
   Beneficiary,
   BeneficiaryLocation,
@@ -385,7 +386,8 @@ exports.getDonationById = async (req, res) => {
                 }
               ]
             },
-            { model: DonationItemInterval },
+            { model: DonationItemInterval, include: [{ model: DonationItemAdjustmentRequest }] },
+            { model: DonationItemAdjustmentRequest },
           ]
         },
         {
@@ -654,8 +656,39 @@ exports.updateDonationItem = async (req, res) => {
       updates.paymentMethod = paymentMethod;
     }
 
-    // Recalculate total if quantity/unitValue changed
-    if (quantity !== undefined || unitValue !== undefined) {
+    const { interval } = req.body;
+    let finalTotal = updates.totalValue;
+
+    // Handle interval / recurring updates
+    if (interval && interval.intervals) {
+      // 1. Remove old intervals
+      await DonationItemInterval.destroy({ where: { donationItemId: itemId }, transaction: t });
+
+      // 2. Map and create new ones
+      const intervalsToCreate = interval.intervals.map((inv, idx) => ({
+        donationItemId: itemId,
+        intervalType: interval.intervalType,
+        intervalCount: idx + 1,
+        startDate: inv.startDate,
+        endDate: inv.endDate,
+        value: inv.value,
+        quantity: inv.quantity || 1.00,
+        paymentMethod: inv.paymentMethod || paymentMethod || item.paymentMethod || "bank",
+        paymentDate: inv.paymentDate || null,
+        distributionDate: inv.distributionDate || distributionDate || item.distributionDate || null,
+        status: "pending",
+      }));
+
+      for (const inv of intervalsToCreate) {
+        await DonationItemInterval.create(inv, { transaction: t });
+      }
+
+      // 3. Recalculate total value based on intervals
+      finalTotal = intervalsToCreate.reduce((sum, inv) => sum + parseFloat(inv.value || 0), 0);
+      updates.totalValue = money(finalTotal);
+      updates.isRecurring = true;
+    } else if (quantity !== undefined || unitValue !== undefined) {
+      // Standard recalculation for non-recurring or interval-less update
       const qty = quantity !== undefined ? parseFloat(quantity) : parseFloat(item.quantity);
       const val = unitValue !== undefined ? parseFloat(unitValue) : parseFloat(item.unitValue);
       updates.totalValue = money(qty * val);

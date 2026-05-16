@@ -260,6 +260,10 @@ watch([() => filters.value.status, () => filters.value.companyId, () => filters.
 
 // Init
 onMounted(async () => {
+  // Default to 'pending' status for admins so they see what needs attention
+  if (['admin', 'charity_admin'].includes(authStore.user?.role)) {
+    filters.value.status = 'pending';
+  }
   await Promise.all([loadCompanies(), loadCampaigns(), loadKpiStats(), loadDonations()]);
 });
 </script>

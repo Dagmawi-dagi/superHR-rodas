@@ -462,6 +462,7 @@ class CharityService {
     amount: number
     reason: string
     toBeneficiaryId?: number
+    intervalId?: number
   }) {
     try { const r = await api.post(`/charity/donations/items/${itemId}/adjustments`, data); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }

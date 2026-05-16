@@ -2,6 +2,7 @@
 const {
   DonationItemAdjustmentRequest,
   DonationItem,
+  DonationItemInterval,
   Donation,
   Beneficiary,
   BeneficiaryGroup,
@@ -36,7 +37,7 @@ exports.requestAdjustment = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { itemId } = req.params;
-    const { type, amount, reason, toBeneficiaryId } = req.body;
+    const { type, amount, reason, toBeneficiaryId, intervalId } = req.body;
 
     if (!type || !amount || !reason) {
       await t.rollback();
@@ -70,28 +71,43 @@ exports.requestAdjustment = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Adjustments can only be requested on approved donations' });
     }
 
+    let baseValue = money(item.totalValue);
+    if (intervalId) {
+      const interval = await DonationItemInterval.findByPk(intervalId, { transaction: t });
+      if (!interval) {
+        await t.rollback();
+        return res.status(404).json({ success: false, error: 'Interval not found' });
+      }
+      baseValue = money(interval.value);
+    }
+
     const employeeId = await getEmployeeIdFromUserId(req.user.userId);
     // Verify caller is head/vice of the beneficiary's group
     await assertHeadOrVice(employeeId, item.beneficiaryId);
 
-    // Validate amount against item total
-    if (['deduct', 'return'].includes(type) && parsedAmount > money(item.totalValue)) {
+    // Validate amount against base value (either item or interval)
+    if (['deduct', 'return', 'reassign'].includes(type) && parsedAmount > baseValue) {
       await t.rollback();
-      return res.status(400).json({ success: false, error: `Amount (${parsedAmount}) exceeds item total value (${money(item.totalValue)})` });
+      return res.status(400).json({ success: false, error: `Amount (${parsedAmount}) exceeds current value (${baseValue})` });
     }
 
-    // Check for existing pending request on same item
+    // Check for existing pending request on same target
     const existingPending = await DonationItemAdjustmentRequest.findOne({
-      where: { donationItemId: itemId, status: 'pending' },
+      where: { 
+        donationItemId: itemId, 
+        intervalId: intervalId || null,
+        status: 'pending' 
+      },
       transaction: t,
     });
     if (existingPending) {
       await t.rollback();
-      return res.status(400).json({ success: false, error: 'There is already a pending adjustment request for this item. Wait for it to be reviewed.' });
+      return res.status(400).json({ success: false, error: 'There is already a pending adjustment request for this target. Wait for it to be reviewed.' });
     }
 
     const adjustment = await DonationItemAdjustmentRequest.create({
       donationItemId:  parseInt(itemId),
+      intervalId:      intervalId || null,
       beneficiaryId:   item.beneficiaryId,
       type,
       amount:          parsedAmount,
@@ -105,7 +121,13 @@ exports.requestAdjustment = async (req, res) => {
       donationId: donation.donationId,
       userId:     employeeId,
       action:     'ADJUSTMENT_REQUESTED',
-      metadata:   { adjustmentId: adjustment.adjustmentId, type, amount: parsedAmount, beneficiaryId: item.beneficiaryId },
+      metadata:   { 
+        adjustmentId: adjustment.adjustmentId, 
+        type, 
+        amount: parsedAmount, 
+        beneficiaryId: item.beneficiaryId,
+        intervalId: intervalId || null
+      },
     }, { transaction: t });
 
     await t.commit();
@@ -144,6 +166,7 @@ exports.getAllPendingAdjustments = async (req, res) => {
       where: { status: 'pending' },
       include: [
         { model: DonationItem, as: 'item', include: [{ model: Donation }] },
+        { model: DonationItemInterval, as: 'interval' },
         { model: Beneficiary,  as: 'beneficiary',   attributes: ['beneficiaryId', 'name'] },
         { model: Beneficiary,  as: 'toBeneficiary',  attributes: ['beneficiaryId', 'name'] },
         { model: Employee,     as: 'requester',      attributes: ['employeeId', 'firstName', 'lastName'] },
@@ -183,47 +206,82 @@ exports.reviewAdjustment = async (req, res) => {
 
     const employeeId = await getEmployeeIdFromUserId(req.user.userId);
 
-    // If approved — apply the change to the donation item
+    // If approved — apply the change to the donation item and optional interval
     if (status === 'approved') {
       const item = adjustment.item;
-      const currentTotal = money(item.totalValue);
-      const amt          = money(adjustment.amount);
-      let newTotal = currentTotal;
+      const amt  = money(adjustment.amount);
+      
+      let itemTotalDelta = 0;
+      let unassignedDelta = 0;
 
-      switch (adjustment.type) {
-        case 'deduct':
-          newTotal = money(currentTotal - amt);
-          if (newTotal < 0) {
-            await t.rollback();
-            return res.status(400).json({ success: false, error: 'Deduction would make item total negative' });
+      // 1. If it's an interval adjustment, update the interval first
+      if (adjustment.intervalId) {
+        const interval = await DonationItemInterval.findByPk(adjustment.intervalId, { transaction: t });
+        if (interval) {
+          const currentInvVal = money(interval.value);
+          let newInvVal = currentInvVal;
+
+          switch (adjustment.type) {
+            case 'deduct':
+              newInvVal = money(currentInvVal - amt);
+              itemTotalDelta = -amt;
+              unassignedDelta = amt;
+              break;
+            case 'increase':
+              newInvVal = money(currentInvVal + amt);
+              itemTotalDelta = amt;
+              break;
+            case 'return':
+              newInvVal = money(currentInvVal - amt);
+              itemTotalDelta = -amt;
+              break;
+            case 'reassign':
+              newInvVal = money(currentInvVal - amt);
+              itemTotalDelta = -amt;
+              unassignedDelta = amt;
+              break;
           }
-          await item.update({ totalValue: newTotal, unassignedDeduction: money(money(item.unassignedDeduction) + amt) }, { transaction: t });
-          break;
-
-        case 'increase':
-          newTotal = money(currentTotal + amt);
-          await item.update({ totalValue: newTotal }, { transaction: t });
-          break;
-
-        case 'return':
-          newTotal = money(currentTotal - amt);
-          if (newTotal < 0) {
+          if (newInvVal < 0) {
             await t.rollback();
-            return res.status(400).json({ success: false, error: 'Return would make item total negative' });
+            return res.status(400).json({ success: false, error: 'Adjustment would make interval value negative' });
           }
-          await item.update({ totalValue: newTotal }, { transaction: t });
-          break;
-
-        case 'reassign':
-          // Move the amount from this item to the target beneficiary's item (or unassigned pool)
-          await item.update({
-            totalValue:          money(currentTotal - amt),
-            unassignedDeduction: money(money(item.unassignedDeduction) + amt),
-          }, { transaction: t });
-          break;
+          await interval.update({ value: newInvVal }, { transaction: t });
+        }
+      } else {
+        // 2. Direct Item Adjustment
+        switch (adjustment.type) {
+          case 'deduct':
+            itemTotalDelta = -amt;
+            unassignedDelta = amt;
+            break;
+          case 'increase':
+            itemTotalDelta = amt;
+            break;
+          case 'return':
+            itemTotalDelta = -amt;
+            break;
+          case 'reassign':
+            itemTotalDelta = -amt;
+            unassignedDelta = amt;
+            break;
+        }
       }
 
-      // Recalculate donation total
+      // 3. Update Parent Item
+      const newTotalValue = money(money(item.totalValue) + itemTotalDelta);
+      const newUnassigned = money(money(item.unassignedDeduction) + unassignedDelta);
+
+      if (newTotalValue < 0) {
+        await t.rollback();
+        return res.status(400).json({ success: false, error: 'Adjustment would make item total negative' });
+      }
+
+      await item.update({ 
+        totalValue: newTotalValue, 
+        unassignedDeduction: newUnassigned 
+      }, { transaction: t });
+
+      // 4. Recalculate Donation Total
       const allItems = await DonationItem.findAll({
         where: { donationId: item.donationId },
         attributes: ['totalValue'],

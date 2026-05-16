@@ -95,7 +95,7 @@
               </template>
               <template v-else>
                 <span class="col-type">Type</span>
-                <span class="col-amount" v-if="form.type === 'money'">Amount (ETB)</span>
+                <span class="col-amount" v-if="form.type === 'money'">Value (ETB)</span>
                 <span class="col-method" v-if="form.type === 'money'">Method</span>
                 <span class="col-qty" v-if="form.type !== 'money'">Quantity</span>
                 <span class="col-value" v-if="form.type !== 'money'">Total Value</span>

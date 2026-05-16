@@ -142,9 +142,8 @@ const roleMenus = {
       name: 'Administrative', path: '/charity/donations', icon: 'ShieldCheckIcon',
       dropdownMenu: [
         { name: 'All Donations',      path: '/charity/donations',                 icon: 'ArchiveBoxIcon' },
-        { name: 'Pending Approvals',  path: '/charity/donations/pending-approvals',icon: 'CheckBadgeIcon' },
         { name: 'Adjustment Requests',path: '/charity/donations/adjustments',      icon: 'AdjustmentsHorizontalIcon' },
-        { name: 'Beneficiaries List', path: '/charity/beneficiaries',             icon: 'UsersIcon' },
+        { name: 'Beneficiaries',      path: '/charity/beneficiaries',             icon: 'UsersIcon' },
         { name: 'Beneficiary Groups', path: '/charity/groups',                  icon: 'RectangleStackIcon' },
       ],
     },
@@ -152,7 +151,6 @@ const roleMenus = {
       name: 'Personal Work', path: '/charity/my-donations', icon: 'UserIcon',
       dropdownMenu: [
         { name: 'My Donations',     path: '/charity/my-donations',        icon: 'ListBulletIcon' },
-        { name: 'Create Donation',   path: '/charity/my-donations/create', icon: 'PlusCircleIcon' },
         { name: 'My Beneficiaries', path: '/charity/my-beneficiaries',     icon: 'UsersIcon' },
       ],
     },
@@ -163,13 +161,7 @@ const roleMenus = {
   // ── charity_teamleader ─────────────────────────────────────────────────────
   charity_teamleader: [
     { name: 'Dashboard',        path: '/dashboard',            icon: 'HomeIcon' },
-    {
-      name: 'Donations',        path: '/charity/my-donations', icon: 'ArchiveBoxIcon',
-      dropdownMenu: [
-        { name: 'My Donations',     path: '/charity/my-donations',        icon: 'ListBulletIcon' },
-        { name: 'Create Donation',   path: '/charity/my-donations/create', icon: 'PlusCircleIcon' },
-      ],
-    },
+    { name: 'My Donations',     path: '/charity/my-donations',     icon: 'ArchiveBoxIcon' },
     { name: 'My Beneficiaries', path: '/charity/my-beneficiaries', icon: 'UsersIcon' },
   ],
 
