@@ -107,8 +107,6 @@ const roleTitle = computed(() => {
     attendance: 'Attendance Manager',
     charity_admin: 'Charity Admin',
     charity_teamleader: 'Team Leader',
-    // legacy
-    charity: 'Charity Manager',
   }
   return titles[userRole.value] || 'User'
 })
@@ -122,16 +120,6 @@ const roleMenus = {
     { name: 'Leave Requests', path: '/leaves', icon: 'CalendarIcon' },
     { name: 'Salary',    path: '/salary',    icon: 'CurrencyDollarIcon' },
     { name: 'Reports',   path: '/reports',   icon: 'ChartBarIcon' },
-    {
-      name: 'Charity', path: '/charity/donations', icon: 'HeartIcon',
-      dropdownMenu: [
-        { name: 'Donations',          path: '/charity/donations',    icon: 'ArchiveBoxIcon' },
-        { name: 'Campaigns',          path: '/charity/campaigns',    icon: 'SpeakerWaveIcon' },
-        { name: 'Beneficiary Groups', path: '/charity/groups',       icon: 'UserGroupIcon' },
-        { name: 'Beneficiaries',      path: '/charity/beneficiaries',icon: 'UsersIcon' },
-        { name: 'Companies',          path: '/charity/companies',    icon: 'BuildingOffice2Icon' },
-      ],
-    },
     { name: 'Settings', path: '/settings', icon: 'CogIcon' },
   ],
 
@@ -145,6 +133,8 @@ const roleMenus = {
         { name: 'Adjustment Requests',path: '/charity/donations/adjustments',      icon: 'AdjustmentsHorizontalIcon' },
         { name: 'Beneficiaries',      path: '/charity/beneficiaries',             icon: 'UsersIcon' },
         { name: 'Beneficiary Groups', path: '/charity/groups',                  icon: 'RectangleStackIcon' },
+        { name: 'Campaigns',          path: '/charity/campaigns',    icon: 'SpeakerWaveIcon' },
+        { name: 'Donation Companies', path: '/charity/companies',    icon: 'BuildingOffice2Icon' },
       ],
     },
     {
@@ -154,8 +144,7 @@ const roleMenus = {
         { name: 'My Beneficiaries', path: '/charity/my-beneficiaries',     icon: 'UsersIcon' },
       ],
     },
-    { name: 'Campaigns',          path: '/charity/campaigns',    icon: 'SpeakerWaveIcon' },
-    { name: 'Donation Companies', path: '/charity/companies',    icon: 'BuildingOffice2Icon' },
+   
   ],
 
   // ── charity_teamleader ─────────────────────────────────────────────────────
@@ -190,19 +179,7 @@ const roleMenus = {
     { name: 'Dashboard',   path: '/dashboard', icon: 'HomeIcon' },
     { name: 'My Attendance',path: '/attendance',icon: 'ClockIcon' },
   ],
-  // legacy
-  charity: [
-    { name: 'Dashboard', path: '/dashboard', icon: 'HomeIcon' },
-    {
-      name: 'Charity', path: '/charity/donations', icon: 'HeartIcon',
-      dropdownMenu: [
-        { name: 'Donations',    path: '/charity/donations',    icon: 'ArchiveBoxIcon' },
-        { name: 'Beneficiaries',path: '/charity/beneficiaries',icon: 'UsersIcon' },
-        { name: 'Campaigns',    path: '/charity/campaigns',    icon: 'SpeakerWaveIcon' },
-        { name: 'Companies',    path: '/charity/companies',    icon: 'BuildingOffice2Icon' },
-      ],
-    },
-  ],
+
 }
 
 const menuItems = computed(() => roleMenus[userRole.value] || roleMenus.employee)
