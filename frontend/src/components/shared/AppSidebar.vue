@@ -126,25 +126,12 @@ const roleMenus = {
   // ── charity_admin ──────────────────────────────────────────────────────────
   charity_admin: [
     { name: 'Dashboard', path: '/dashboard', icon: 'HomeIcon' },
-    {
-      name: 'Administrative', path: '/charity/donations', icon: 'ShieldCheckIcon',
-      dropdownMenu: [
-        { name: 'All Donations',      path: '/charity/donations',                 icon: 'ArchiveBoxIcon' },
-        { name: 'Adjustment Requests',path: '/charity/donations/adjustments',      icon: 'AdjustmentsHorizontalIcon' },
-        { name: 'Beneficiaries',      path: '/charity/beneficiaries',             icon: 'UsersIcon' },
-        { name: 'Beneficiary Groups', path: '/charity/groups',                  icon: 'RectangleStackIcon' },
-        { name: 'Campaigns',          path: '/charity/campaigns',    icon: 'SpeakerWaveIcon' },
-        { name: 'Donation Companies', path: '/charity/companies',    icon: 'BuildingOffice2Icon' },
-      ],
-    },
-    {
-      name: 'Personal Work', path: '/charity/my-donations', icon: 'UserIcon',
-      dropdownMenu: [
-        { name: 'My Donations',     path: '/charity/my-donations',        icon: 'ListBulletIcon' },
-        { name: 'My Beneficiaries', path: '/charity/my-beneficiaries',     icon: 'UsersIcon' },
-      ],
-    },
-   
+    { name: 'All Donations',      path: '/charity/donations',                 icon: 'ArchiveBoxIcon' },
+    { name: 'Adjustment Requests',path: '/charity/donations/adjustments',      icon: 'AdjustmentsHorizontalIcon' },
+    { name: 'Beneficiaries',      path: '/charity/beneficiaries',             icon: 'UsersIcon' },
+    { name: 'Beneficiary Groups', path: '/charity/groups',                  icon: 'RectangleStackIcon' },
+    { name: 'Campaigns',          path: '/charity/campaigns',    icon: 'SpeakerWaveIcon' },
+    { name: 'Donation Companies', path: '/charity/companies',    icon: 'BuildingOffice2Icon' },
   ],
 
   // ── charity_teamleader ─────────────────────────────────────────────────────
