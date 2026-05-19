@@ -1,6 +1,6 @@
 <template>
   <!-- Cancel Confirmation Modal -->
-  <div v-if="showCancelModal" class="modal-overlay" @click.self="$emit('close-cancel-modal')">
+  <div v-if="showCancelModal" class="modal-overlay">
     <div class="modal">
       <h3>Cancel Donation</h3>
       <p>

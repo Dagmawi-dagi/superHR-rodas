@@ -83,7 +83,7 @@ export interface DonationItem {
   paymentMethod?: 'bank' | 'cash'
   unassignedDeduction?: number
   isRecurring?: boolean
-  status?: 'pending' | 'distributed'
+  status?: 'pending' | 'distributed' | 'returned'
   beneficiary?: Beneficiary
   DonationDistributions?: DonationDistribution[]
   DonationDistributionEvidences?: DonationDistributionEvidence[]
@@ -169,9 +169,12 @@ export interface DonationLog {
 export interface AdjustmentRequest {
   adjustmentId: number
   donationItemId: number
+  intervalId?: number
   beneficiaryId: number
+  itemType: 'money' | 'goods' | 'service'
   type: 'deduct' | 'increase' | 'reassign' | 'return'
-  amount: number
+  quantity: number
+  value: number
   reason: string
   toBeneficiaryId?: number
   status: 'pending' | 'approved' | 'rejected'
@@ -459,7 +462,9 @@ class CharityService {
   // ── Adjustment Requests (v3 NEW) ───────────────────────────────────────────
   async requestAdjustment(itemId: number, data: {
     type: 'deduct' | 'increase' | 'reassign' | 'return'
-    amount: number
+    quantity?: number
+    value?: number
+    amount?: number // legacy fallback
     reason: string
     toBeneficiaryId?: number
     intervalId?: number
@@ -556,7 +561,7 @@ class CharityService {
   getStatusLabel(status: string): string {
     const labels: Record<string, string> = {
       draft: 'Draft', pending: 'Pending Approval', approved: 'Approved',
-      distributed: 'Distributed', cancelled: 'Cancelled',
+      distributed: 'Distributed', returned: 'Returned', cancelled: 'Cancelled',
       inactive: 'Inactive', active: 'Active', completed: 'Completed',
       // adjustment statuses
       deduct: 'Deduction', increase: 'Increase', reassign: 'Reassign', return: 'Return',

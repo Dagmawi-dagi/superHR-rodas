@@ -121,9 +121,9 @@
       </div>
     </form>
 
-    <!-- Add Location Modal (existing) -->
-    <div v-if="showLocationModal" class="modal-overlay" @click.self="showLocationModal = false">
-      <div class="modal">
+    <!-- Add Location Modal -->
+    <div v-if="showLocationModal" class="modal-overlay">
+      <div class="modal-box">
         <h3>Add New Location</h3>
         <div class="form-group">
           <label>Region <span class="req">*</span></label>
@@ -151,7 +151,7 @@
     </div>
 
     <!-- Add Group Modal -->
-    <div v-if="showGroupModal" class="modal-overlay" @click.self="showGroupModal = false">
+    <div v-if="showGroupModal" class="modal-overlay">
       <div class="modal">
         <h3>Add New Beneficiary Group</h3>
         <div class="form-group">

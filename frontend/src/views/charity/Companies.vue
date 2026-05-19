@@ -47,7 +47,7 @@
     </div>
 
     <!-- Toggle Status Modal (optional) -->
-    <div v-if="showToggleModal" class="modal-overlay" @click.self="closeToggleModal">
+    <div v-if="showToggleModal" class="modal-overlay">
       <div class="modal">
         <h3>{{ toggleAction === 'deactivate' ? 'Deactivate' : 'Activate' }} Company</h3>
         <p>Are you sure you want to {{ toggleAction }} <strong>{{ companyToToggle?.name }}</strong>?</p>

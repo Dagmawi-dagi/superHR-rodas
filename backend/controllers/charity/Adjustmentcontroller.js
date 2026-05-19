@@ -12,6 +12,7 @@ const {
 } = require('../../models');
 
 const money = (val) => Math.round(parseFloat(val || 0) * 100) / 100;
+const qty   = (val) => Math.round(parseFloat(val || 0) * 100) / 100;
 
 const getEmployeeIdFromUserId = async (userId) => {
   if (!userId) return null;
@@ -37,11 +38,14 @@ exports.requestAdjustment = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { itemId } = req.params;
-    const { type, amount, reason, toBeneficiaryId, intervalId } = req.body;
+    const { type, amount, quantity, value, reason, toBeneficiaryId, intervalId } = req.body;
 
-    if (!type || !amount || !reason) {
+    // Use specific fields if provided, otherwise fallback to generic 'amount'
+    const rawVal = value !== undefined ? value : (quantity !== undefined ? quantity : amount);
+
+    if (!type || (rawVal === undefined) || !reason) {
       await t.rollback();
-      return res.status(400).json({ success: false, error: 'type, amount, and reason are required' });
+      return res.status(400).json({ success: false, error: 'type, quantity/value, and reason are required' });
     }
     if (!['deduct', 'increase', 'reassign', 'return'].includes(type)) {
       await t.rollback();
@@ -52,7 +56,7 @@ exports.requestAdjustment = async (req, res) => {
       return res.status(400).json({ success: false, error: 'toBeneficiaryId is required for reassign' });
     }
 
-    const parsedAmount = money(amount);
+    const parsedAmount = qty(rawVal); // This is Qty for goods, Value for money
     if (parsedAmount <= 0) {
       await t.rollback();
       return res.status(400).json({ success: false, error: 'Amount must be greater than zero' });
@@ -71,24 +75,32 @@ exports.requestAdjustment = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Adjustments can only be requested on approved donations' });
     }
 
-    let baseValue = money(item.totalValue);
+    let baseLimit = (item.type === 'money') ? money(item.totalValue) : qty(item.quantity);
     if (intervalId) {
       const interval = await DonationItemInterval.findByPk(intervalId, { transaction: t });
       if (!interval) {
         await t.rollback();
         return res.status(404).json({ success: false, error: 'Interval not found' });
       }
-      baseValue = money(interval.value);
+      baseLimit = (item.type === 'money') ? money(interval.value) : qty(interval.quantity);
     }
 
     const employeeId = await getEmployeeIdFromUserId(req.user.userId);
     // Verify caller is head/vice of the beneficiary's group
     await assertHeadOrVice(employeeId, item.beneficiaryId);
 
-    // Validate amount against base value (either item or interval)
-    if (['deduct', 'return', 'reassign'].includes(type) && parsedAmount > baseValue) {
+    // Validate amount against base limit (either item or interval)
+    if (['deduct', 'return', 'reassign'].includes(type) && parsedAmount > baseLimit) {
       await t.rollback();
-      return res.status(400).json({ success: false, error: `Amount (${parsedAmount}) exceeds current value (${baseValue})` });
+      const label = (item.type === 'money') ? 'Value' : 'Quantity';
+      return res.status(400).json({ success: false, error: `Requested ${label} (${parsedAmount}) exceeds current ${label} (${baseLimit})` });
+    }
+
+    // Enforce COMPLETE return
+    if (type === 'return' && parsedAmount !== baseLimit) {
+      await t.rollback();
+      const label = (item.type === 'money') ? 'Value' : 'Quantity';
+      return res.status(400).json({ success: false, error: `Return must be for the complete remaining ${label} (${baseLimit})` });
     }
 
     // Check for existing pending request on same target
@@ -109,8 +121,10 @@ exports.requestAdjustment = async (req, res) => {
       donationItemId:  parseInt(itemId),
       intervalId:      intervalId || null,
       beneficiaryId:   item.beneficiaryId,
+      itemType:        item.type,
       type,
-      amount:          parsedAmount,
+      quantity:        item.type === 'money' ? 1.00 : parsedAmount,
+      value:           item.type === 'money' ? parsedAmount : money(parsedAmount * (item.unitValue || 0)),
       reason,
       toBeneficiaryId: toBeneficiaryId || null,
       status:          'pending',
@@ -133,7 +147,7 @@ exports.requestAdjustment = async (req, res) => {
     await t.commit();
     res.status(201).json({ success: true, message: 'Adjustment request submitted for admin review', data: adjustment });
   } catch (err) {
-    await t.rollback();
+    if (t) await t.rollback();
     console.error('requestAdjustment error:', err);
     res.status(err.message.includes('Only the group') || err.message.includes('Beneficiary') ? 403 : 500)
       .json({ success: false, error: err.message });
@@ -206,80 +220,126 @@ exports.reviewAdjustment = async (req, res) => {
 
     const employeeId = await getEmployeeIdFromUserId(req.user.userId);
 
-    // If approved — apply the change to the donation item and optional interval
+    // If approved — apply the change
     if (status === 'approved') {
       const item = adjustment.item;
-      const amt  = money(adjustment.amount);
+      const unitVal  = parseFloat(item.unitValue) || 0;
       
-      let itemTotalDelta = 0;
-      let unassignedDelta = 0;
+      let qtyDelta = 0;
+      let valDelta = 0;
+      let unassignedValDelta = 0;
 
-      // 1. If it's an interval adjustment, update the interval first
+      // Determine deltas based on adjustment record (already has quantity/value)
+      if (adjustment.itemType === 'money') {
+        valDelta = parseFloat(adjustment.value);
+        qtyDelta = 0; 
+      } else {
+        qtyDelta = parseFloat(adjustment.quantity);
+        valDelta = parseFloat(adjustment.value);
+      }
+
+      // Handle specific adjustment types for the source item
+      switch (adjustment.type) {
+        case 'deduct':
+          qtyDelta = -qtyDelta;
+          valDelta = -valDelta;
+          unassignedValDelta = Math.abs(valDelta);
+          break;
+        case 'increase':
+          // qtyDelta and valDelta are already positive
+          break;
+        case 'return':
+          qtyDelta = -qtyDelta;
+          valDelta = -valDelta;
+          break;
+        case 'reassign':
+          qtyDelta = -qtyDelta;
+          valDelta = -valDelta;
+          break;
+      }
+
+      // 1. Update Interval if applicable
       if (adjustment.intervalId) {
         const interval = await DonationItemInterval.findByPk(adjustment.intervalId, { transaction: t });
         if (interval) {
-          const currentInvVal = money(interval.value);
-          let newInvVal = currentInvVal;
-
-          switch (adjustment.type) {
-            case 'deduct':
-              newInvVal = money(currentInvVal - amt);
-              itemTotalDelta = -amt;
-              unassignedDelta = amt;
-              break;
-            case 'increase':
-              newInvVal = money(currentInvVal + amt);
-              itemTotalDelta = amt;
-              break;
-            case 'return':
-              newInvVal = money(currentInvVal - amt);
-              itemTotalDelta = -amt;
-              break;
-            case 'reassign':
-              newInvVal = money(currentInvVal - amt);
-              itemTotalDelta = -amt;
-              unassignedDelta = amt;
-              break;
-          }
-          if (newInvVal < 0) {
+          const newInvQty = qty(parseFloat(interval.quantity || 0) + qtyDelta);
+          const newInvVal = money(parseFloat(interval.value || 0) + valDelta);
+          
+          if (newInvVal < 0 || newInvQty < 0) {
             await t.rollback();
-            return res.status(400).json({ success: false, error: 'Adjustment would make interval value negative' });
+            return res.status(400).json({ success: false, error: 'Adjustment would make interval value/quantity negative' });
           }
-          await interval.update({ value: newInvVal }, { transaction: t });
-        }
-      } else {
-        // 2. Direct Item Adjustment
-        switch (adjustment.type) {
-          case 'deduct':
-            itemTotalDelta = -amt;
-            unassignedDelta = amt;
-            break;
-          case 'increase':
-            itemTotalDelta = amt;
-            break;
-          case 'return':
-            itemTotalDelta = -amt;
-            break;
-          case 'reassign':
-            itemTotalDelta = -amt;
-            unassignedDelta = amt;
-            break;
+          
+          const intervalUpdates = { quantity: newInvQty, value: newInvVal };
+          if (adjustment.type === 'return') {
+            intervalUpdates.status = 'returned';
+          }
+          await interval.update(intervalUpdates, { transaction: t });
         }
       }
 
-      // 3. Update Parent Item
-      const newTotalValue = money(money(item.totalValue) + itemTotalDelta);
-      const newUnassigned = money(money(item.unassignedDeduction) + unassignedDelta);
+      // 2. Update Source Item
+      const newItemQty = qty(parseFloat(item.quantity || 0) + qtyDelta);
+      const newItemVal = money(parseFloat(item.totalValue || 0) + valDelta);
+      const newUnassigned = money(parseFloat(item.unassignedDeduction || 0) + unassignedValDelta);
 
-      if (newTotalValue < 0) {
+      if (newItemVal < 0 || newItemQty < 0) {
         await t.rollback();
         return res.status(400).json({ success: false, error: 'Adjustment would make item total negative' });
       }
 
-      await item.update({ 
-        totalValue: newTotalValue, 
+      const itemUpdates = { 
+        quantity: newItemQty,
+        totalValue: newItemVal, 
         unassignedDeduction: newUnassigned 
-      }, { transaction: t });
+      };
+
+      // Mark main item as returned ONLY if it was a direct return (not an interval return)
+      if (adjustment.type === 'return' && !adjustment.intervalId) {
+        itemUpdates.status = 'returned';
+      }
+
+      await item.update(itemUpdates, { transaction: t });
+
+      // 3. Handle REASSIGNMENT Target
+      if (adjustment.type === 'reassign' && adjustment.toBeneficiaryId) {
+        const targetQty = Math.abs(qtyDelta);
+        const targetVal = Math.abs(valDelta);
+
+        // Find matching item for target beneficiary
+        let targetItem = await DonationItem.findOne({
+          where: {
+            donationId: item.donationId,
+            beneficiaryId: adjustment.toBeneficiaryId,
+            type: item.type,
+            description: item.description,
+            unitValue: item.unitValue,
+            status: 'pending' 
+          },
+          transaction: t
+        });
+
+        if (targetItem) {
+          await targetItem.update({
+            quantity: qty(parseFloat(targetItem.quantity) + targetQty),
+            totalValue: money(parseFloat(targetItem.totalValue) + targetVal)
+          }, { transaction: t });
+        } else {
+          targetItem = await DonationItem.create({
+            donationId: item.donationId,
+            beneficiaryId: adjustment.toBeneficiaryId,
+            type: item.type,
+            description: item.description,
+            quantity: targetQty,
+            unitValue: item.unitValue,
+            totalValue: targetVal,
+            paymentMethod: item.paymentMethod,
+            distributionDate: item.distributionDate,
+            isRecurring: false, 
+            status: 'pending'
+          }, { transaction: t });
+        }
+      }
 
       // 4. Recalculate Donation Total
       const allItems = await DonationItem.findAll({
@@ -287,7 +347,7 @@ exports.reviewAdjustment = async (req, res) => {
         attributes: ['totalValue'],
         transaction: t,
       });
-      const newDonationTotal = money(allItems.reduce((sum, i) => sum + money(i.totalValue), 0));
+      const newDonationTotal = money(allItems.reduce((sum, i) => sum + parseFloat(i.totalValue), 0));
       await Donation.update({ totalValue: newDonationTotal }, { where: { donationId: item.donationId }, transaction: t });
     }
 
@@ -301,14 +361,21 @@ exports.reviewAdjustment = async (req, res) => {
         donationId: donation.donationId,
         userId:     employeeId,
         action:     `ADJUSTMENT_${status.toUpperCase()}`,
-        metadata:   { adjustmentId: adjustment.adjustmentId, type: adjustment.type, amount: adjustment.amount, adminComment },
+        metadata:   { 
+          adjustmentId: adjustment.adjustmentId, 
+          type: adjustment.type, 
+          quantity: adjustment.quantity,
+          value: adjustment.value,
+          adminComment,
+          intervalId: adjustment.intervalId 
+        },
       }, { transaction: t });
     }
 
     await t.commit();
     res.json({ success: true, message: `Adjustment ${status}`, data: adjustment });
   } catch (err) {
-    await t.rollback();
+    if (t) await t.rollback();
     console.error('reviewAdjustment error:', err);
     res.status(500).json({ success: false, error: err.message });
   }

@@ -60,9 +60,9 @@
       @remove-toast="removeToast"
     />
 
-    <!-- Change Status Modal -->
-    <div v-if="showStatusModal" class="modal-overlay" @click.self="closeStatusModal">
-      <div class="modal">
+    <!-- Status Update Modal -->
+    <div v-if="showStatusModal" class="modal-overlay">
+      <div class="modal-box">
         <h3>Change Status for {{ campaignToModify?.title }}</h3>
         <p>Current: <strong>{{ getStatusLabel(campaignToModify?.status) }}</strong></p>
         <div class="form-group">

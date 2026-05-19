@@ -1,5 +1,5 @@
 <template>
-  <div v-if="isOpen" class="modal-overlay" @click.self="$emit('close')">
+  <div v-if="isOpen" class="modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
         <h3 class="modal-title">Request Adjustment</h3>
@@ -16,71 +16,93 @@
           <span class="value">{{ interval.intervalType }} #{{ interval.intervalCount }} ({{ formatDate(interval.startDate) }})</span>
         </div>
         <div class="info-row">
-          <span class="label">Current Value:</span>
-          <span class="value highlight">{{ formatCurrency(currentValue) }}</span>
+          <span class="label">Current {{ itemType === 'money' ? 'Value' : 'Quantity' }}:</span>
+          <span class="value highlight">
+            {{ itemType === 'money' ? formatCurrency(currentValue) : currentValue }}
+            <span v-if="itemType !== 'money'" style="font-size: 11px; font-weight: normal; color: #94a3b8; margin-left: 4px;">units</span>
+          </span>
         </div>
       </div>
 
-      <form @submit.prevent="handleSubmit" class="modal-form">
-        <div class="form-group">
-          <label>Adjustment Type <span class="req">*</span></label>
-          <div class="type-grid">
-            <button 
-              v-for="t in types" :key="t.id"
-              type="button"
-              class="type-btn"
-              :class="[{ active: form.type === t.id }, t.id]"
-              @click="form.type = t.id"
-            >
-              {{ t.label }}
-            </button>
-          </div>
-        </div>
-
-        <div class="form-row">
+      <form @submit.prevent="handlePrimaryAction" class="modal-form">
+        <template v-if="!isConfirming">
           <div class="form-group">
-            <label>Amount / Quantity <span class="req">*</span></label>
-            <input 
-              v-model.number="form.amount" 
-              type="number" 
-              step="0.01" 
-              min="0.01" 
-              :max="['deduct', 'return', 'reassign'].includes(form.type) ? currentValue : undefined"
-              required 
-              placeholder="0.00"
-            />
-            <small class="hint" v-if="itemType !== 'money'">Enter units for goods/service</small>
-          </div>
-
-          <div class="form-group" v-if="form.type === 'reassign'">
-            <label>Transfer To <span class="req">*</span></label>
-            <select v-model="form.toBeneficiaryId" required>
-              <option value="">Select recipient</option>
-              <option 
-                v-for="ben in otherBeneficiaries" 
-                :key="ben.beneficiaryId" 
-                :value="ben.beneficiaryId"
+            <label>Adjustment Type <span class="req">*</span></label>
+            <div class="type-grid">
+              <button 
+                v-for="t in types" :key="t.id"
+                type="button"
+                class="type-btn"
+                :class="[{ active: form.type === t.id }, t.id]"
+                @click="form.type = t.id"
               >
-                {{ ben.name }}
-              </option>
-            </select>
+                {{ t.label }}
+              </button>
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label>Reason for Request <span class="req">*</span></label>
-          <textarea 
-            v-model="form.reason" 
-            rows="3" 
-            required 
-            placeholder="Explain why this adjustment is needed..."
-          ></textarea>
+          <div class="form-row">
+            <div class="form-group">
+              <label>{{ itemType === 'money' ? 'Value (ETB)' : 'Quantity' }} <span class="req">*</span></label>
+              <input 
+                v-model.number="form.amount" 
+                type="number" 
+                step="0.01" 
+                min="0.01" 
+                :max="['deduct', 'return', 'reassign'].includes(form.type) ? currentValue : undefined"
+                :disabled="form.type === 'return'"
+                required 
+                :placeholder="itemType === 'money' ? '0.00' : '0'"
+              />
+              <small class="hint" v-if="itemType !== 'money'">The number of units to {{ form.type }}</small>
+            </div>
+
+            <div class="form-group" v-if="form.type === 'reassign'">
+              <label>Transfer To <span class="req">*</span></label>
+              <select v-model="form.toBeneficiaryId" required>
+                <option value="">Select recipient</option>
+                <option 
+                  v-for="ben in otherBeneficiaries" 
+                  :key="ben.beneficiaryId" 
+                  :value="ben.beneficiaryId"
+                >
+                  {{ ben.name }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Reason for Request <span class="req">*</span></label>
+            <textarea 
+              v-model="form.reason" 
+              rows="3" 
+              required 
+              placeholder="Explain why this adjustment is needed..."
+            ></textarea>
+          </div>
+        </template>
+
+        <!-- Confirmation View -->
+        <div v-else class="confirm-view">
+          <div class="confirm-banner">
+             <!-- <span class="confirm-icon">❓</span> -->
+             <h4 class="confirm-title">Are you sure you want to submit this request?</h4>
+          </div>
+          <div class="confirm-summary">
+            <p><strong>Type:</strong> {{ types.find(t => t.id === form.type)?.label }}</p>
+            <p><strong>{{ itemType === 'money' ? 'Value' : 'Quantity' }}:</strong> {{ itemType === 'money' ? formatCurrency(form.amount) : form.amount + ' units' }}</p>
+            <p v-if="form.type === 'reassign'"><strong>Transfer To:</strong> {{ otherBeneficiaries.find(b => b.beneficiaryId === form.toBeneficiaryId)?.name }}</p>
+            <p><strong>Reason:</strong> {{ form.reason }}</p>
+          </div>
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn-secondary" @click="$emit('close')">Cancel</button>
+          <button type="button" class="btn-secondary" @click="isConfirming ? (isConfirming = false) : $emit('close')">
+            {{ isConfirming ? 'Back' : 'Cancel' }}
+          </button>
           <button type="submit" class="btn-primary" :disabled="submitting || !isValid">
-            {{ submitting ? 'Submitting...' : 'Submit Request' }}
+            {{ submitting ? 'Submitting...' : isConfirming ? 'Yes, Submit Request' : 'Next' }}
           </button>
         </div>
       </form>
@@ -89,12 +111,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import charityService from '@/stores/charity'
 
 const props = defineProps({
-  isOpen: Boolean,
-  item: { type: Object, required: true },
+  isOpen: { type: Boolean, default: false },
+  item: { type: Object, default: null },
   interval: { type: Object, default: null },
   beneficiaries: { type: Array, default: () => [] }
 })
@@ -102,6 +124,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'success'])
 
 const submitting = ref(false)
+const isConfirming = ref(false)
 
 const form = reactive({
   type: 'deduct',
@@ -109,6 +132,26 @@ const form = reactive({
   reason: '',
   toBeneficiaryId: ''
 })
+
+// Reset on open
+watch(() => props.isOpen, (val) => {
+  if (val) {
+    isConfirming.value = false
+    form.type = 'deduct'
+    form.amount = null
+    form.reason = ''
+    form.toBeneficiaryId = ''
+  }
+})
+
+const handlePrimaryAction = () => {
+  if (!isValid.value) return
+  if (!isConfirming.value) {
+    isConfirming.value = true
+  } else {
+    handleSubmit()
+  }
+}
 
 const types = [
   { id: 'deduct',   label: 'Deduct' },
@@ -118,37 +161,61 @@ const types = [
 ]
 
 const beneficiaryName = computed(() => {
-  return props.item.beneficiary?.name || 'Beneficiary'
+  if (!props.item) return 'Beneficiary'
+  return props.item.beneficiary?.name || props.item.Beneficiary?.name || 'Beneficiary'
 })
 
-const itemType = computed(() => props.item.type)
+const itemType = computed(() => {
+  if (!props.item) return 'money'
+  return props.item.type || 'money'
+})
 
 const currentValue = computed(() => {
-  if (props.interval) return parseFloat(props.interval.value)
-  return parseFloat(props.item.totalValue)
+  if (!props.item) return 0
+  if (props.item.type === 'money') {
+    if (props.interval) return parseFloat(props.interval.value || 0)
+    return parseFloat(props.item.totalValue || 0)
+  } else {
+    if (props.interval) return parseFloat(props.interval.quantity || 0)
+    return parseFloat(props.item.quantity || 0)
+  }
 })
 
 const otherBeneficiaries = computed(() => {
+  if (!props.item) return props.beneficiaries
   return props.beneficiaries.filter(b => b.beneficiaryId !== props.item.beneficiaryId)
 })
 
 const isValid = computed(() => {
+  if (!props.item) return false
   if (!form.type || !form.amount || !form.reason) return false
   if (form.type === 'reassign' && !form.toBeneficiaryId) return false
   if (['deduct', 'return', 'reassign'].includes(form.type) && form.amount > currentValue.value) return false
+  if (form.type === 'return' && form.amount !== currentValue.value) return false
   return true
 })
 
+watch(() => form.type, (newType) => {
+  if (newType === 'return') {
+    form.amount = currentValue.value
+  }
+})
+
 const handleSubmit = async () => {
-  if (!isValid.value) return
+  if (!isValid.value || !props.item) return
   submitting.value = true
   
   const payload = {
     type: form.type,
-    amount: form.amount,
     reason: form.reason,
     toBeneficiaryId: form.type === 'reassign' ? form.toBeneficiaryId : undefined,
     intervalId: props.interval?.intervalId
+  }
+
+  if (itemType.value === 'money') {
+    payload.value = form.amount
+  } else {
+    payload.quantity = form.amount
   }
 
   const res = await charityService.requestAdjustment(props.item.donationItemId, payload)
@@ -157,10 +224,10 @@ const handleSubmit = async () => {
   if (res.success) {
     emit('success', res.message)
     emit('close')
-    // Reset form
     form.amount = null
     form.reason = ''
     form.toBeneficiaryId = ''
+    isConfirming.value = false
   } else {
     alert(res.error || 'Failed to submit request')
   }
@@ -169,10 +236,13 @@ const handleSubmit = async () => {
 const formatDate = (d) => {
   if (!d) return ''
   const date = new Date(d)
-  return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][date.getMonth()]}-${date.getDate()}`
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  return `${months[date.getMonth()]}-${date.getDate()}`
 }
 
-const formatCurrency = (v) => new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(v || 0)
+const formatCurrency = (v) => {
+  return new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(v || 0)
+}
 </script>
 
 <style scoped>

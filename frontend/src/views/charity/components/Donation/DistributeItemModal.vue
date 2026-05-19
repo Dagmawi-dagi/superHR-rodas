@@ -1,5 +1,5 @@
 <template>
-  <div class="modal-overlay" @click.self="$emit('close')">
+  <div class="modal-overlay">
     <div class="modal" style="max-width: 700px">
       <h3>Distribute: {{ item?.description || 'Item' }}</h3>
       <div class="item-info">

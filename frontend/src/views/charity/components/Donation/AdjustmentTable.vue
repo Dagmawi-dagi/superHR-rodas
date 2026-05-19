@@ -3,9 +3,12 @@
     <table class="adj-table">
       <thead>
         <tr>
+          <th>Item ID</th>
+          <th>Interval ID</th>
           <th>Type</th>
           <th>Beneficiary</th>
-          <th>Amount</th>
+          <th>Item Type</th>
+          <th>Value / Quantity</th>
           <th>Requester</th>
           <th>Date</th>
           <th>Status</th>
@@ -14,6 +17,8 @@
       </thead>
       <tbody>
         <tr v-for="adj in adjustments" :key="adj.adjustmentId">
+          <td style="font-size: 11px; font-weight: 600; color: #64748b;">#{{ adj.donationItemId }}</td>
+          <td style="font-size: 11px; font-weight: 600; color: #64748b;">{{ adj.intervalId ? '#' + adj.intervalId : '—' }}</td>
           <td>
             <span :class="['type-badge', adj.type]">
               {{ charityService.getAdjustmentTypeLabel(adj.type) }}
@@ -25,7 +30,17 @@
               <span v-if="adj.toBeneficiary" class="reassign-tag">→ {{ adj.toBeneficiary.name }}</span>
             </div>
           </td>
-          <td class="amount-cell">{{ charityService.formatCurrency(adj.amount) }}</td>
+          <td>
+            <span style="text-transform: capitalize; font-size: 13px;">{{ adj.itemType }}</span>
+          </td>
+          <td class="amount-cell">
+            <span v-if="adj.itemType === 'money'">
+              {{ charityService.formatCurrency(adj.value) }}
+            </span>
+            <span v-else>
+              {{ adj.quantity }} <small style="color: #94a3b8; font-weight: normal;">units</small>
+            </span>
+          </td>
           <td>{{ adj.requester ? `${adj.requester.firstName} ${adj.requester.lastName}` : '—' }}</td>
           <td class="date-cell">{{ charityService.formatDate(adj.createdAt) }}</td>
           <td>

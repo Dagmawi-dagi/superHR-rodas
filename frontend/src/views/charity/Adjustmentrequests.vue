@@ -65,7 +65,7 @@
     </div>
 
     <!-- Review Modal (standard) -->
-    <div v-if="reviewModal.open" class="modal-overlay" @click.self="closeReview">
+    <div v-if="reviewModal.open" class="modal-overlay">
       <div class="modal-box">
         <h3 class="modal-title">
           {{ reviewModal.action === 'approved' ? '✓ Approve' : '✗ Reject' }} Adjustment
@@ -74,36 +74,91 @@
           {{ reviewModal.action === 'approved' ? 'This will immediately apply the change.' : 'The team leader will be notified.' }}
         </p>
 
-        <div class="modal-detail">
-          <div class="modal-detail-row">
-            <span>Type</span><strong>{{ charityService.getAdjustmentTypeLabel(reviewModal.adjustment?.type) }}</strong>
+        <template v-if="!reviewModal.confirming">
+          <div class="modal-detail">
+            <div class="modal-detail-row">
+              <span>Item ID</span><strong>#{{ reviewModal.adjustment?.donationItemId }}</strong>
+            </div>
+            <div class="modal-detail-row" v-if="reviewModal.adjustment?.intervalId">
+              <span>Interval ID</span><strong>#{{ reviewModal.adjustment?.intervalId }}</strong>
+            </div>
+            <div class="modal-detail-row">
+              <span>Type</span><strong>{{ charityService.getAdjustmentTypeLabel(reviewModal.adjustment?.type) }}</strong>
+            </div>
+            <div class="modal-detail-row">
+              <span>Beneficiary</span><strong>{{ reviewModal.adjustment?.beneficiary?.name }}</strong>
+            </div>
+            <div class="modal-detail-row">
+              <span>Value / Qty</span>
+              <strong>
+                {{ reviewModal.adjustment?.itemType === 'money' 
+                   ? charityService.formatCurrency(reviewModal.adjustment?.value) 
+                   : reviewModal.adjustment?.quantity }}
+                <span v-if="reviewModal.adjustment?.itemType !== 'money'" style="font-size: 11px; font-weight: normal; margin-left: 4px;">units</span>
+              </strong>
+            </div>
           </div>
-          <div class="modal-detail-row">
-            <span>Beneficiary</span><strong>{{ reviewModal.adjustment?.beneficiary?.name }}</strong>
-          </div>
-          <div class="modal-detail-row">
-            <span>Amount</span><strong>{{ charityService.formatCurrency(reviewModal.adjustment?.amount) }}</strong>
-          </div>
-        </div>
 
-        <div class="form-field">
-          <label>Comment <span v-if="reviewModal.action === 'rejected'" class="req">*</span></label>
-          <textarea
-            v-model="reviewModal.comment"
-            rows="3"
-            :placeholder="reviewModal.action === 'approved' ? 'Optional comment...' : 'Explain why...'"
-          ></textarea>
-          <span v-if="reviewModal.error" class="error-text">{{ reviewModal.error }}</span>
+          <div class="form-field">
+            <label>Comment <span v-if="reviewModal.action === 'rejected'" class="req">*</span></label>
+            <textarea
+              v-model="reviewModal.comment"
+              rows="3"
+              :placeholder="reviewModal.action === 'approved' ? 'Optional comment...' : 'Explain why...'"
+            ></textarea>
+            <span v-if="reviewModal.error" class="error-text">{{ reviewModal.error }}</span>
+          </div>
+        </template>
+
+        <!-- Confirmation View -->
+        <div v-else class="confirm-view">
+          <div class="confirm-banner" style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding: 14px; background: #fdfaff; border: 1px solid #ede9fe; border-radius: 12px;">
+             <span style="font-size: 24px;">❓</span>
+             <h4 style="margin: 0; color: #6d28d9; font-size: 16px; font-weight: 600;">
+               Are you sure you want to {{ reviewModal.action }} this request?
+             </h4>
+          </div>
+          
+          <div class="confirm-summary" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px;">
+            <div style="display: flex; justify-content: space-between; font-size: 14px;">
+              <span style="color: #64748b;">Action:</span>
+              <strong :style="{ color: reviewModal.action === 'approved' ? '#10b981' : '#ef4444', textTransform: 'uppercase' }">
+                {{ reviewModal.action }}
+              </strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px;">
+              <span style="color: #64748b;">Type:</span>
+              <strong style="color: #1e293b;">{{ charityService.getAdjustmentTypeLabel(reviewModal.adjustment?.type) }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px;">
+              <span style="color: #64748b;">Beneficiary:</span>
+              <strong style="color: #1e293b;">{{ reviewModal.adjustment?.beneficiary?.name }}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 14px;">
+              <span style="color: #64748b;">{{ reviewModal.adjustment?.itemType === 'money' ? 'Value' : 'Quantity' }}:</span>
+              <strong style="color: #7c3aed;">
+                {{ reviewModal.adjustment?.itemType === 'money' ? charityService.formatCurrency(reviewModal.adjustment?.value) : reviewModal.adjustment?.quantity + ' units' }}
+              </strong>
+            </div>
+            <div style="border-top: 1px solid #f1f5f9; margin-top: 4px; padding-top: 12px;">
+              <span style="display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px;">Admin Comment:</span>
+              <p style="margin: 0; font-size: 14px; color: #475569; font-style: italic; background: #fff; padding: 8px; border-radius: 6px; border: 1px solid #f1f5f9;">
+                {{ reviewModal.comment || '(No comment provided)' }}
+              </p>
+            </div>
+          </div>
         </div>
 
         <div class="modal-footer">
-          <button class="btn-cancel" @click="closeReview">Cancel</button>
+          <button class="btn-cancel" @click="reviewModal.confirming ? (reviewModal.confirming = false) : closeReview()">
+            {{ reviewModal.confirming ? 'Back' : 'Cancel' }}
+          </button>
           <button
             :class="reviewModal.action === 'approved' ? 'btn-approve' : 'btn-reject'"
             :disabled="reviewModal.submitting"
             @click="submitReview"
           >
-            {{ reviewModal.submitting ? 'Processing...' : 'Confirm' }}
+            {{ reviewModal.submitting ? 'Processing...' : reviewModal.confirming ? 'Yes, Proceed' : 'Next' }}
           </button>
         </div>
       </div>
@@ -143,7 +198,15 @@ const filteredAdjustments = computed(() => {
   return list
 })
 
-const reviewModal = ref({ open: false, adjustment: null as AdjustmentRequest | null, action: 'approved' as any, comment: '', error: '', submitting: false })
+const reviewModal = ref({ 
+  open: false, 
+  adjustment: null as AdjustmentRequest | null, 
+  action: 'approved' as any, 
+  comment: '', 
+  error: '', 
+  submitting: false,
+  confirming: false // NEW
+})
 
 const loadAdjustments = async () => {
   loading.value = true
@@ -153,20 +216,29 @@ const loadAdjustments = async () => {
 }
 
 const openReview = (adj: AdjustmentRequest, action: 'approved' | 'rejected') => {
-  reviewModal.value = { open: true, adjustment: adj, action, comment: '', error: '', submitting: false }
+  reviewModal.value = { open: true, adjustment: adj, action, comment: '', error: '', submitting: false, confirming: false }
 }
-const closeReview = () => { reviewModal.value.open = false }
+const closeReview = () => { reviewModal.value.open = false; reviewModal.value.confirming = false; }
 
 const submitReview = async () => {
   if (reviewModal.value.action === 'rejected' && !reviewModal.value.comment.trim()) {
     reviewModal.value.error = 'Please provide a reason for rejection'; return
   }
+  
+  if (!reviewModal.value.confirming) {
+    reviewModal.value.confirming = true
+    return
+  }
+
   reviewModal.value.submitting = true
   reviewModal.value.error = ''
   const res = await charityService.reviewAdjustment(reviewModal.value.adjustment!.adjustmentId, reviewModal.value.action, reviewModal.value.comment || undefined)
   reviewModal.value.submitting = false
   if (res.success) { closeReview(); await loadAdjustments() }
-  else reviewModal.value.error = res.error || 'Failed to process'
+  else {
+    reviewModal.value.error = res.error || 'Failed to process'
+    reviewModal.value.confirming = false // allow retry
+  }
 }
 
 const openViewDetail = (adj: AdjustmentRequest) => {

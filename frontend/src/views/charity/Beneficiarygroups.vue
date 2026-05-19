@@ -37,7 +37,7 @@
     </div>
 
     <!-- Create/Edit Modal (existing logic preserved) -->
-    <div v-if="modal.open" class="modal-overlay" @click.self="closeModal">
+    <div v-if="modal.open" class="modal-overlay">
       <div class="modal-box">
         <h3 class="modal-title">{{ modal.isEdit ? 'Edit Group' : 'New Beneficiary Group' }}</h3>
 

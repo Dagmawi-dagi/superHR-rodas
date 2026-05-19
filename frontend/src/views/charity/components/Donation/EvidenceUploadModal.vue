@@ -1,5 +1,5 @@
 <template>
-  <div v-if="isOpen" class="modal-overlay" @click.self="close">
+  <div v-if="isOpen" class="modal-overlay">
     <div class="modal-content evidence-modal">
       <div class="modal-header">
         <div>

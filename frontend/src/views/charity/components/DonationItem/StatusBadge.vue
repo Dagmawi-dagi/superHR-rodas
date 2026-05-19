@@ -12,6 +12,7 @@ const label = computed(() => ({
   pending: 'Pending',
   approved: 'Approved',
   distributed: 'Distributed',
+  returned: 'Returned',
   cancelled: 'Cancelled'
 }[props.status] || props.status))
 </script>
@@ -22,5 +23,6 @@ const label = computed(() => ({
 .status-pending { background: #fef3c7; color: #b45309; }
 .status-approved { background: #dbeafe; color: #1d4ed8; }
 .status-distributed { background: #dcfce7; color: #15803d; }
+.status-returned { background: #fdf2f8; color: #9d174d; }
 .status-cancelled { background: #fee2e2; color: #b91c1c; }
 </style>

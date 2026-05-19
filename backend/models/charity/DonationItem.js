@@ -28,7 +28,7 @@ module.exports = (sequelize, DataTypes) => {
     paymentMethod:      { type: DataTypes.ENUM('bank', 'cash'), defaultValue: 'bank', field: 'payment_method' },
     unassignedDeduction:{ type: DataTypes.DECIMAL(15, 2), defaultValue: 0, field: 'unassigned_deduction' },
     isRecurring:        { type: DataTypes.BOOLEAN, defaultValue: false, field: 'is_recurring' },
-    status:             { type: DataTypes.ENUM('pending', 'distributed'), defaultValue: 'pending' },
+    status:             { type: DataTypes.ENUM('pending', 'returned', 'distributed'), defaultValue: 'pending' },
   }, {
     sequelize,
     modelName: 'DonationItem',

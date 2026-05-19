@@ -200,6 +200,7 @@
                     <table class="mini-table">
                       <thead>
                         <tr>
+                          <th>Item ID</th>
                           <th>Type </th>
                           <th>Description</th>
                           <th>Value / Qty</th>
@@ -212,7 +213,8 @@
                       <tbody>
                         <template v-for="item in ben.items" :key="item.donationItemId">
                           <!-- Item Row -->
-                          <tr>
+                          <tr :class="{ 'row-returned': item.status === 'returned' }">
+                            <td style="font-size: 11px; font-weight: 600; color: #64748b;">#{{ item.donationItemId }}</td>
                             <td><span :class="['type-badge', `type-${item.type}`]">{{ getTypeLabel(item.type) }}</span></td>
                             <td>{{ item.description || '-' }}</td>
                             <td>
@@ -237,7 +239,7 @@
                             </td>
                             <td class="actions-cell">
                               <button
-                                v-if="donation?.status === 'approved' && item.status !== 'distributed' && !item.isRecurring"
+                                v-if="donation?.status === 'approved' && item.status === 'pending' && !item.isRecurring"
                                 @click="openAdjustmentModal(item)"
                                 class="action-btn adjustment"
                                 title="Request Adjustment"
@@ -251,7 +253,7 @@
                               </button>
 
                               <button
-                                v-if="donation?.status === 'approved' && item.status !== 'distributed' && !item.isRecurring"
+                                v-if="donation?.status === 'approved' && item.status === 'pending' && !item.isRecurring"
                                 @click="markItemAsDistributed(item)"
                                 class="action-btn distribute-item"
                                 :title="hasPendingAdjustment(item) ? 'Wait for adjustment approval' : ((!donation.DonationDistributionEvidences?.length) ? 'Upload evidence first' : 'Mark Item Distributed')"
@@ -262,6 +264,7 @@
                                 </svg>
                               </button>
                               <span v-if="item.status === 'distributed'" class="distributed-badge" title="Distributed">✓</span>
+                              <span v-if="item.status === 'returned'" class="returned-badge" style="color: #9d174d; font-size: 18px; margin-left: 4px;" title="Returned">↩</span>
 
                               <button v-if="donation?.status === 'draft'" @click="openEditItemModal(item)" class="action-btn edit" title="Edit">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -295,6 +298,7 @@
                                   <table class="mini-table">
                                     <thead>
                                       <tr>
+                                        <th>ID</th>
                                         <th>Period</th>
                                         <th>Date Range</th>
                                         <th>{{ item.type === 'money' ? 'Value' : 'Quantity' }}</th>
@@ -306,7 +310,8 @@
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      <tr v-for="interval in item.DonationItemIntervals" :key="interval.intervalId">
+                                      <tr v-for="interval in item.DonationItemIntervals" :key="interval.intervalId" :class="{ 'row-returned': interval.status === 'returned' }">
+                                        <td style="font-size: 11px; font-weight: 600; color: #64748b;">#{{ interval.intervalId }}</td>
                                         <td>
                                           <div style="font-weight: 600; text-transform: capitalize;">{{ interval.intervalType }} #{{ interval.intervalCount }}</div>
                                         </td>
@@ -334,7 +339,7 @@
                                           </span>
                                         </td>
                                         <td class="actions-cell">
-                                          <button v-if="donation?.status === 'approved' && interval.status !== 'distributed'"
+                                          <button v-if="donation?.status === 'approved' && interval.status === 'pending'"
                                                   @click="openAdjustmentModal(item, interval)"
                                                   class="action-btn adjustment"
                                                   title="Request Adjustment"
@@ -346,7 +351,7 @@
                                             </svg>
                                           </button>
 
-                                          <button v-if="donation?.status === 'approved' && interval.status !== 'distributed'"
+                                          <button v-if="donation?.status === 'approved' && interval.status === 'pending'"
                                                   @click="markIntervalAsDistributed(interval, item)"
                                                   class="action-btn distribute-item"
                                                   :disabled="hasPendingAdjustment(interval)"
@@ -356,7 +361,7 @@
                                             </svg>
                                           </button>
 
-                                          <button v-if="donation?.status === 'approved'"
+                                          <button v-if="donation?.status === 'approved' && interval.status !== 'returned'"
                                                   @click="openIntervalEvidenceModal(interval, item)"
                                                   class="action-btn evidence"
                                                   title="Upload Evidence">
@@ -366,6 +371,7 @@
                                               <line x1="12" y1="15" x2="12" y2="3" />
                                             </svg>
                                           </button>
+                                          <span v-if="interval.status === 'returned'" class="returned-badge" style="color: #9d174d; font-size: 18px; margin-left: 4px;" title="Returned">↩</span>
                                         </td>
                                       </tr>
                                     </tbody>
@@ -396,8 +402,8 @@
     <!-- (Keep all existing modal markup here – it remains unchanged) -->
     <!-- Status Transition Modals -->
     <!-- Cancel Modal -->
-    <div v-if="showCancelModal" class="modal-overlay" @click.self="closeCancelModal">
-      <div class="modal">
+    <div v-if="showCancelModal" class="modal-overlay">
+      <div class="modal-box">
         <h3>Cancel Donation</h3>
         <p>Are you sure you want to cancel this donation?</p>
         <div class="modal-actions">
@@ -408,7 +414,7 @@
     </div>
 
     <!-- Request Changes Modal -->
-    <div v-if="showRequestChangesModal" class="modal-overlay" @click.self="showRequestChangesModal = false">
+    <div v-if="showRequestChangesModal" class="modal-overlay">
       <div class="modal">
         <h3>Request Changes</h3>
         <p>Add a comment explaining what needs to be changed.</p>
@@ -460,7 +466,7 @@
     />
 
     <!-- Return Distribution Modal -->
-    <div v-if="showReturnModal" class="modal-overlay" @click.self="showReturnModal = false">
+    <div v-if="showReturnModal" class="modal-overlay">
       <div class="modal">
         <h3>Return Distribution</h3>
         <div class="warning-box" style="margin-bottom: 12px; background: #fff7ed; border-left: 4px solid #f97316; padding: 8px;">
@@ -1382,4 +1388,8 @@ onMounted(async () => {
 .btn-sm { padding: 4px 10px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer; }
 .btn-sm.distribute { color: #10b981; border-color: #10b981; }
 .btn-sm.evidence { color: #8b5cf6; border-color: #8b5cf6; }
+
+.row-returned {
+  background-color: #fff1f2 !important;
+}
 </style>
