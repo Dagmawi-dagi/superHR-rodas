@@ -58,6 +58,7 @@ export interface CharityDonation {
   // Associations
   team?: CharityTeam
   items?: CharityDonationItem[]
+  creator?: { userId: number; fullName: string }
 }
 
 /** CharityDonationItem Model (Line Item) */
@@ -170,20 +171,22 @@ class CharityService {
   }
 
   // ── Beneficiaries ──────────────────────────────────────────────────────────
-  async getBeneficiaries(params?: { search?: string; type?: string; teamId?: number; page?: number; limit?: number }) {
+  async getBeneficiaries(params?: { search?: string; type?: string; isActive?: boolean; teamId?: number; page?: number; size?: number }) {
     try {
       const q = new URLSearchParams()
-      if (params?.search) q.set('search', params.search)
-      if (params?.type)   q.set('type', params.type)
-      if (params?.teamId) q.set('teamId', String(params.teamId))
-      if (params?.page)   q.set('page', String(params.page))
-      if (params?.limit)  q.set('limit', String(params.limit))
+      if (params?.search)             q.set('search', params.search)
+      if (params?.type)               q.set('type', params.type)
+      if (params?.teamId)             q.set('teamId', String(params.teamId))
+      if (params?.isActive !== undefined) q.set('isActive', String(params.isActive))
+      if (params?.page)               q.set('page', String(params.page))
+      if (params?.size)               q.set('size', String(params.size))
       const r = await api.get(`/charity/beneficiaries${q.toString() ? `?${q}` : ''}`)
       return r.data
     } catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
   async getBeneficiariesByTeam(teamId: number) {
-    return this.getBeneficiaries({ teamId })
+    // Fetch all active beneficiaries for a team (large size to avoid pagination cut-off)
+    return this.getBeneficiaries({ teamId, isActive: true, size: 200 })
   }
   async getBeneficiaryById(id: number | string) {
     try { const r = await api.get(`/charity/beneficiaries/${id}`); return r.data }
@@ -199,13 +202,15 @@ class CharityService {
   }
 
   // ── Donations ──────────────────────────────────────────────────────────────
-  async getDonations(params?: { status?: string; teamId?: number; page?: number; limit?: number }) {
+  async getDonations(params?: { status?: string; teamId?: number; page?: number; size?: number; fromDate?: string; toDate?: string }) {
     try {
       const q = new URLSearchParams()
-      if (params?.status) q.set('status', params.status)
-      if (params?.teamId) q.set('teamId', String(params.teamId))
-      if (params?.page)   q.set('page', String(params.page))
-      if (params?.limit)  q.set('limit', String(params.limit))
+      if (params?.status)   q.set('status', params.status)
+      if (params?.teamId)   q.set('teamId', String(params.teamId))
+      if (params?.page)     q.set('page', String(params.page))
+      if (params?.size)     q.set('size', String(params.size))
+      if (params?.fromDate) q.set('fromDate', params.fromDate)
+      if (params?.toDate)   q.set('toDate', params.toDate)
       const r = await api.get(`/charity/donations${q.toString() ? `?${q}` : ''}`)
       return r.data
     } catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
@@ -214,12 +219,24 @@ class CharityService {
     try { const r = await api.get(`/charity/donations/${id}`); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
-  async createDonation(data: Partial<CharityDonation>) {
+  async createDonation(data: any) {
     try { const r = await api.post('/charity/donations', data); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
-  async updateDonation(id: number, data: Partial<CharityDonation>) {
+  async updateDonation(id: number, data: any) {
     try { const r = await api.put(`/charity/donations/${id}`, data); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+  async submitDonation(id: number) {
+    try { const r = await api.post(`/charity/donations/${id}/submit`); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+  async approveDonation(id: number) {
+    try { const r = await api.post(`/charity/donations/${id}/approve`); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+  async cancelDonation(id: number) {
+    try { const r = await api.post(`/charity/donations/${id}/cancel`); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
   async addDonationItem(donationId: number, data: any) {
@@ -230,24 +247,71 @@ class CharityService {
     try { const r = await api.put(`/charity/donations/items/${itemId}`, data); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
-
-  // ── Approvals (Adjustments) ────────────────────────────────────────────────
-  async getAllApprovals() {
-    try { const r = await api.get('/charity/approvals'); return r.data }
+  async deleteDonationItem(itemId: number) {
+    try { const r = await api.delete(`/charity/donations/items/${itemId}`); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
-  async reviewApproval(id: number, status: 'approved' | 'rejected', comment?: string) {
-    try { const r = await api.post(`/charity/approvals/${id}/review`, { status, comment }); return r.data }
+  async markItemDelivered(itemId: number) {
+    try { const r = await api.post(`/charity/donations/items/${itemId}/deliver`); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+  async returnItem(itemId: number, reason: string) {
+    try { const r = await api.post(`/charity/donations/items/${itemId}/return`, { reason }); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+
+  // ── Approvals / Requests ──────────────────────────────────────────────────
+  async getRequests(params?: { status?: string; action?: string; page?: number; size?: number }) {
+    try {
+      const q = new URLSearchParams()
+      if (params?.status) q.set('status', params.status)
+      if (params?.action) q.set('action', params.action)
+      if (params?.page)   q.set('page', String(params.page))
+      if (params?.size)   q.set('size', String(params.size))
+      const r = await api.get(`/charity/requests${q.toString() ? `?${q}` : ''}`)
+      return r.data
+    } catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+  async getRequestById(id: number) {
+    try { const r = await api.get(`/charity/requests/${id}`); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+  async approveRequest(id: number) {
+    try { const r = await api.post(`/charity/requests/${id}/approve`); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+  async rejectRequest(id: number, reason?: string) {
+    try { const r = await api.post(`/charity/requests/${id}/reject`, { reason }); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+  async commentRequest(id: number, text: string) {
+    try { const r = await api.post(`/charity/requests/${id}/comment`, { text }); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+  async submitAdjustment(data: { action: string; donationItemId: number; recurringIntervalId?: number; reason?: string }) {
+    try { const r = await api.post('/charity/requests/adjustment', data); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
 
   // ── Settings ──────────────────────────────────────────────────────────────
   async getSettings() {
-    try { const r = await api.get('/charity/settings/main'); return r.data }
+    try { const r = await api.get('/charity/settings'); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
-  async updateSettings(data: any) {
-    try { const r = await api.put('/charity/settings/main', data); return r.data }
+  async updateSettings(data: Partial<Pick<CharitySetting, 'companies' | 'config'>>) {
+    try { const r = await api.put('/charity/settings', data); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+  async addCompany(data: { name: string; fullInfo?: Record<string, any> }) {
+    try { const r = await api.post('/charity/settings/companies', data); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+  async updateCompany(index: number, data: { name?: string; fullInfo?: Record<string, any> }) {
+    try { const r = await api.put(`/charity/settings/companies/${index}`, data); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+  async deleteCompany(index: number) {
+    try { const r = await api.delete(`/charity/settings/companies/${index}`); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
 

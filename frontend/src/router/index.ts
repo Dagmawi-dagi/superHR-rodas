@@ -104,7 +104,7 @@ const router = createRouter({
         {
           path: 'charity/donations/:id',
           name: 'charity-donation-detail',
-          component: () => import('@/views/charity/donation_detail.vue'),
+          component: () => import('@/views/charity/donation_create.vue'),
           meta: { title: 'Donation Detail', roles: ['admin', 'charity_admin', 'charity_teamleader'] },
         },
         {

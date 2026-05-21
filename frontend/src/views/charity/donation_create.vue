@@ -89,7 +89,53 @@
           <span class="count-badge">{{ teamBeneficiaries.length }} beneficiaries in team</span>
         </div>
         
-        <div class="card-body no-padding">
+        <div class="card-body ">
+          <!-- ── BULK SETTINGS BAR ── --> 
+          <div v-if="!isView" class="flex mw-100px gap-2 mb-3!  text-base font-bold text-slate-700 text-xs" >
+            <span style="width: 16px;">
+               <svg viewBox="0 0 24 24" fill="none"  stroke="#6a11cb" stroke-width="2" class="icon-sm"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </span>
+              Bulk Fill All:
+            </div>
+
+          <div v-if="!isView" class="bulk-settings-bar">
+            
+            
+            <div class="bulk-inputs">
+              <div class="bulk-field">
+                <input type="number" v-model.number="bulk.value" :placeholder="template.type === 'money' ? 'Amount (ETB)' : 'Quantity'" />
+              </div>
+              
+              <div class="bulk-field" v-if="template.type === 'money'">
+                <select v-model="bulk.paymentMethod">
+                  <option value="bank">Bank</option>
+                  <option value="cash">Cash</option>
+                </select>
+              </div>
+
+              <template v-if="template.isRecurring">
+                <div class="bulk-field">
+                  <select v-model="bulk.recurringType">
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+                <div class="bulk-field">
+                  <input type="number" v-model.number="bulk.recurringCount" placeholder="Count" min="0" />
+                </div>
+              </template>
+
+              <button type="button" class="btn-bulk-apply" @click="applyBulkSettings">
+                Apply to All
+              </button>
+            </div>
+
+            <div class="list-search">
+              <input type="text" v-model="allocationSearch" placeholder="Search in list..." />
+            </div>
+          </div>
+
           <div v-if="loadingBens" class="loading-bens">
             <div class="mini-spinner"></div>
             Loading team beneficiaries...
@@ -112,7 +158,7 @@
                 </template>
               </div>
 
-              <div v-for="row in rows" :key="row.beneficiaryId" class="ben-row-wrapper">
+              <div v-for="row in filteredRows" :key="row.beneficiaryId" class="ben-row-wrapper">
                 <div class="ben-row" :class="{ 'active': rowHasValue(row), 'recurring-grid': template.isRecurring }">
                   <div class="col-name">
                     <button 
@@ -272,6 +318,37 @@ const isSubmitting = ref(false)
 const errors = ref<any>({})
 const toasts = ref<any[]>([])
 
+// Bulk & Search State
+const allocationSearch = ref('')
+const bulk = reactive({
+  value: null,
+  recurringType: 'monthly',
+  recurringCount: 0,
+  paymentMethod: 'bank'
+})
+
+const filteredRows = computed(() => {
+  if (!allocationSearch.value) return rows.value
+  const q = allocationSearch.value.toLowerCase()
+  return rows.value.filter(r => r.name.toLowerCase().includes(q))
+})
+
+const applyBulkSettings = () => {
+  if (rows.value.length === 0) return
+  
+  rows.value.forEach(row => {
+    row.value = bulk.value
+    row.paymentMethod = bulk.paymentMethod
+    if (template.isRecurring) {
+      row.recurringType = bulk.recurringType
+      row.recurringCount = bulk.recurringCount
+      syncRecurrings(row)
+    }
+  })
+  
+  addToast(`Applied bulk values to ${rows.value.length} beneficiaries`)
+}
+
 const loadInitialData = async () => {
   const res = await CharityService.getTeams()
   if (res.success) teams.value = res.data
@@ -296,6 +373,7 @@ const loadInitialData = async () => {
         d.items.forEach((item: any) => {
           const row = rows.value.find(r => r.beneficiaryId === item.beneficiaryId)
           if (row) {
+            row.donationItemId = item.donationItemId
             row.paymentMethod = item.paymentMethod
             if (template.isRecurring && item.isRecurring) {
               row.recurringType = item.isRecurring.recurring_type
@@ -393,28 +471,33 @@ const handleSubmit = async () => {
     return
   }
   if (Object.keys(errors.value).length > 0) return
-  isSubmitting.value = true
-  const donationPayload = {
-    ...form,
-    totalValueInBirr: grandTotal.value,
-    status: 'draft'
+  if (filledRows.value.length === 0) {
+    addToast('Add at least one beneficiary with a value before saving', 'error')
+    return
   }
-  const donRes = isEdit.value 
+
+  isSubmitting.value = true
+
+  // 1. Create or update the donation (including items)
+  const donationPayload = {
+    teamId: form.teamId,
+    description: form.description,
+    donationDeliveryDate: form.donationDeliveryDate,
+    items: filledRows.value.map(row => buildItemPayload(row))
+  }
+
+  const donRes = isEdit.value
     ? await CharityService.updateDonation(Number(route.params.id), donationPayload)
     : await CharityService.createDonation(donationPayload)
-  if (donRes.success) {
-    const donationId = donRes.data.donationId
-    let successCount = 0
-    for (const row of filledRows.value) {
-      const itemPayload = buildItemPayload(row)
-      const itemRes = await CharityService.addDonationItem(donationId, itemPayload)
-      if (itemRes.success) successCount++
-    }
-    addToast(`✅ Saved donation batch with ${successCount} items`)
-    setTimeout(() => router.push('/charity/donations'), 1500)
-  } else {
-    addToast(donRes.error || 'Failed to save donation batch', 'error')
+
+  if (!donRes.success) {
+    addToast(donRes.error || 'Failed to save donation', 'error')
+    isSubmitting.value = false
+    return
   }
+
+  addToast(`✅ Donation batch saved successfully`)
+  setTimeout(() => router.push('/charity/donations'), 1500)
   isSubmitting.value = false
 }
 
@@ -435,6 +518,7 @@ const buildItemPayload = (row: any) => {
     }))
   } : null
   const base = {
+    donationItemId: row.donationItemId,
     beneficiaryId: row.beneficiaryId,
     type: template.type,
     description: template.description,
@@ -475,6 +559,29 @@ onMounted(loadInitialData)
 .header-hint { margin-left: 8px; color: #94a3b8; font-size: 12px; font-weight: 400; }
 .count-badge { margin-left: auto; font-size: 12px; padding: 4px 12px; background: #f5f3ff; color: #6a11cb; border-radius: 20px; font-weight: 600; }
 .card-body { padding: 24px; }
+
+/* Bulk Settings Bar */
+.bulk-settings-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; padding: 16px 20px; background: #f8fafc;
+  border-radius: 16px; border: 1px solid #e2e8f0; margin-bottom: 24px;
+}
+.bulk-label { display: flex; align-items: center; gap: 8px; font-weight: 700; color: #334155; font-size: 13px; }
+.bulk-inputs { display: flex; align-items: center; gap: 12px; flex: 1; }
+.bulk-field input, .bulk-field select { padding: 8px 12px; font-size: 13px; border-radius: 10px; width: 140px; }
+.btn-bulk-apply { 
+  padding: 8px 16px; background: #6a11cb; color: white; border: none; 
+  border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-bulk-apply:hover { background: #7c3aed; transform: translateY(-1px); }
+
+.list-search input { 
+  padding: 8px 16px; border: 1px solid #e2e8f0; border-radius: 10px; 
+  font-size: 13px; width: 200px; background: white;
+}
+.list-search input:focus { border-color: #6a11cb; outline: none; }
+
 .card-body.no-padding { padding: 0; }
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px; }

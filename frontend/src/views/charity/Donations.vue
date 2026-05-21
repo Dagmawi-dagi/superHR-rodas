@@ -32,7 +32,7 @@
       <template #filters>
         <select v-model="filters.teamId" class="fb-select">
           <option value="">All Teams</option>
-          <option v-for="t in dummyTeams" :key="t.teamId" :value="t.teamId">{{ t.name }}</option>
+          <option v-for="t in teams" :key="t.teamId" :value="t.teamId">{{ t.name }}</option>
         </select>
       </template>
     </FilterBar>
@@ -60,6 +60,9 @@
           <router-link :to="`/charity/donations/${row.donationId}`" class="action-btn" title="View Details">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           </router-link>
+          <button v-if="row.status === 'draft'" class="action-btn success" title="Submit for Approval" @click="submitDonation(row)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          </button>
           <button v-if="row.status === 'draft'" class="action-btn" title="Edit" @click="editDonation(row)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
@@ -71,10 +74,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import StatsCards from './components/common/StatsCards.vue'
 import FilterBar from './components/common/FilterBar.vue'
 import ListTable from './components/common/ListTable.vue'
 import CharityService, { type CharityDonation, type CharityTeam } from '@/stores/charity'
+
+const router = useRouter()
 
 const loading = ref(false)
 const donations = ref<CharityDonation[]>([])
@@ -129,7 +135,19 @@ const formatCurrency = (val: number) => {
   return new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(val)
 }
 
-const editDonation = (d: any) => { alert(`Editing donation ${d.donationId}`) }
+const editDonation = (d: any) => { router.push(`/charity/donations/${d.donationId}/edit`) }
+
+const submitDonation = async (d: CharityDonation) => {
+  if (!confirm(`Submit donation batch #${d.donationId} for approval?`)) return
+  loading.value = true
+  const res = await CharityService.submitDonation(d.donationId)
+  if (res.success) {
+    loadData()
+  } else {
+    alert(res.error || 'Failed to submit donation')
+  }
+  loading.value = false
+}
 </script>
 
 <style scoped>
@@ -166,4 +184,5 @@ const editDonation = (d: any) => { alert(`Editing donation ${d.donationId}`) }
 }
 .action-btn svg { width: 16px; height: 16px; }
 .action-btn:hover { border-color: #6a11cb; color: #6a11cb; background: #f5f3ff; }
+.action-btn.success:hover { border-color: #10b981; color: #10b981; background: #f0fdf4; }
 </style>

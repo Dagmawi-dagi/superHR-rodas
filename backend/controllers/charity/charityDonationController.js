@@ -33,7 +33,7 @@ const getCallerTeam = async (userId) => {
 
 const recalcTotal = async (donationId, t) => {
   const items = await CharityDonationItem.findAll({
-    where: { donationId, deletedAt: null }, attributes: ['totalValueInBirr'], transaction: t,
+    where: { donationId }, attributes: ['totalValueInBirr'], transaction: t,
   });
   const total = money(items.reduce((s, i) => s + money(i.totalValueInBirr), 0));
   await CharityDonation.update({ totalValueInBirr: total }, { where: { donationId }, transaction: t });
@@ -107,7 +107,7 @@ exports.getDonationById = async (req, res) => {
 exports.createDonation = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { description, donationDeliveryDate, teamId } = req.body;
+    const { description, donationDeliveryDate, teamId, items } = req.body;
 
     let resolvedTeamId = teamId || null;
 
@@ -125,6 +125,34 @@ exports.createDonation = async (req, res) => {
         status: 'draft', totalValueInBirr: 0, createdBy: req.user.userId },
       { transaction: t }
     );
+
+    // Initial items if provided
+    if (items && Array.isArray(items)) {
+      for (const itemData of items) {
+        const { beneficiaryId, type, description, quantity, unitValueInBirr, paymentMethod, isRecurring } = itemData;
+
+        const qty   = parseFloat(quantity || 0);
+        const unit  = parseFloat(unitValueInBirr || 0);
+        const total = isRecurring
+          ? money((isRecurring.recurrings || []).reduce((s, r) => s + money(r.total_value_in_birr), 0))
+          : money(qty * unit);
+
+        await CharityDonationItem.create({
+          donationId:       donation.donationId,
+          beneficiaryId,
+          type,
+          description:      description || null,
+          quantity:         isRecurring ? null : qty,
+          unitValueInBirr:  unit,
+          totalValueInBirr: total,
+          paymentMethod:    paymentMethod || 'bank',
+          isRecurring:      isRecurring   || null,
+          createdBy:        req.user.userId,
+        }, { transaction: t });
+      }
+      await recalcTotal(donation.donationId, t);
+    }
+
     await t.commit();
     res.status(201).json({ success: true, message: 'Donation created (draft)', data: donation });
   } catch (err) {
@@ -145,6 +173,61 @@ exports.updateDonation = async (req, res) => {
     ['description', 'donationDeliveryDate'].forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
 
     await donation.update(updates, { transaction: t });
+
+    // Bulk items update if provided
+    if (req.body.items && Array.isArray(req.body.items)) {
+      const incomingItems = req.body.items;
+      const incomingIds = incomingItems.filter(i => i.donationItemId).map(i => parseInt(i.donationItemId));
+
+      // 1. Delete items not in incoming list
+      await CharityDonationItem.destroy({
+        where: {
+          donationId: donation.donationId,
+          donationItemId: { [Op.notIn]: incomingIds }
+        },
+        transaction: t
+      });
+
+      // 2. Sync incoming items
+      for (const itemData of incomingItems) {
+        const {
+          donationItemId, beneficiaryId, type, description,
+          quantity, unitValueInBirr, paymentMethod, isRecurring
+        } = itemData;
+
+        const qty   = parseFloat(quantity || 0);
+        const unit  = parseFloat(unitValueInBirr || 0);
+        const total = isRecurring
+          ? money((isRecurring.recurrings || []).reduce((s, r) => s + money(r.total_value_in_birr), 0))
+          : money(qty * unit);
+
+        const payload = {
+          beneficiaryId,
+          type,
+          description: description || null,
+          quantity: isRecurring ? null : qty,
+          unitValueInBirr: unit,
+          totalValueInBirr: total,
+          paymentMethod: paymentMethod || 'bank',
+          isRecurring: isRecurring || null,
+        };
+
+        if (donationItemId) {
+          const existing = await CharityDonationItem.findByPk(donationItemId, { transaction: t });
+          if (existing && existing.donationId === donation.donationId) {
+            await existing.update(payload, { transaction: t });
+          }
+        } else {
+          await CharityDonationItem.create({
+            ...payload,
+            donationId: donation.donationId,
+            createdBy: req.user.userId,
+          }, { transaction: t });
+        }
+      }
+    }
+
+    await recalcTotal(donation.donationId, t);
     await t.commit();
     res.json({ success: true, message: 'Donation updated', data: donation });
   } catch (err) {
