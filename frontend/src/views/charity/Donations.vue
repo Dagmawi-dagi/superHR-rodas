@@ -1,351 +1,169 @@
 <template>
   <div class="donations-page">
-    <!-- Header -->
     <div class="page-header">
       <div>
-        <h1 class="page-title">Donation Management</h1>
-        <p class="page-subtitle">Manage donations, campaigns, and distributions</p>
+        <h1 class="page-title">Donations</h1>
+        <p class="page-subtitle">Manage and track all charity contributions and distributions</p>
       </div>
-      <div class="header-buttons">
-        <router-link to="/charity/analytics" class="btn-analytics">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4-3-9s1.34-9 3-9" />
-            <path d="M12 3v18" />
-          </svg>
-          Analytics
-        </router-link>
-        <router-link to="/charity/donations/create" class="btn-primary">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          New Donation
-        </router-link>
-      </div>
+      <router-link to="/charity/donations/create" class="btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        New Donation
+      </router-link>
     </div>
 
     <!-- Stats Cards -->
-    <DonationStatsCards :stats="kpiStats" />
+    <StatsCards :cards="donationStats" />
 
-    <!-- Loading -->
-    <div v-if="loading" class="loading-state">
-      <div class="spinner"></div>
-      <p>Loading donations...</p>
-    </div>
+    <!-- Filters -->
+    <FilterBar
+      v-model:search="filters.search"
+      v-model:status="filters.status"
+      search-placeholder="Search donations..."
+      :status-options="[
+        { value: 'draft', label: 'Draft' },
+        { value: 'pending', label: 'Pending Approval' },
+        { value: 'approved', label: 'Approved' },
+        { value: 'cancelled', label: 'Cancelled' }
+      ]"
+      @clear="resetFilters"
+    >
+      <template #filters>
+        <select v-model="filters.teamId" class="fb-select">
+          <option value="">All Teams</option>
+          <option v-for="t in dummyTeams" :key="t.teamId" :value="t.teamId">{{ t.name }}</option>
+        </select>
+      </template>
+    </FilterBar>
 
-    <div v-else>
-      <!-- Filters -->
-      <DonationFiltersBar
-        :filters="filters"
-        :companies="companies"
-        :campaigns="campaigns"
-        @update:filters="updateFilters"
-        @clear-filters="clearFilters"
-        @load-donations="loadDonations"
-      />
+    <!-- Table -->
+    <ListTable
+      :columns="columns"
+      :rows="filteredDonations"
+      row-key="donationId"
+      :loading="loading"
+    >
+      <template #cell-description="{ row }">
+        <div class="desc-cell">
+          <span class="main-desc">{{ row.description || 'No description' }}</span>
+          <span class="team-tag" v-if="row.team">{{ row.team.name }}</span>
+        </div>
+      </template>
 
-      <!-- Table -->
-      <DonationTable
-        :donations="donations"
-        :pagination="pagination"
-        :can-approve="canApprove"
-        @view-donation="viewDonation"
-        @edit-donation="editDonation"
-        @submit-donation="submitDonation"
-        @approve-donation="approveDonation"
-        @distribute-donation="distributeDonation"
-        @cancel-donation="confirmCancel"
-        @go-to-page="goToPage"
-        @clear-filters="clearFilters"
-      />
-    </div>
+      <template #cell-totalValueInBirr="{ value }">
+        <span class="amount-text">{{ formatCurrency(value) }}</span>
+      </template>
 
-    <!-- Modals -->
-    <DonationModals
-      :show-cancel-modal="showCancelModal"
-      :donation-to-cancel="donationToCancel"
-      :canceling="canceling"
-      :toasts="toasts"
-      @close-cancel-modal="closeCancelModal"
-      @confirm-cancel="cancelDonation"
-      @remove-toast="removeToast"
-    />
+      <template #actions="{ row }">
+        <div class="table-actions">
+          <router-link :to="`/charity/donations/${row.donationId}`" class="action-btn" title="View Details">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </router-link>
+          <button v-if="row.status === 'draft'" class="action-btn" title="Edit" @click="editDonation(row)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+        </div>
+      </template>
+    </ListTable>
   </div>
 </template>
 
-<script setup>
-import { ref, onMounted, watch, computed } from 'vue';
-import { useRouter } from 'vue-router';
-import CharityService from '@/stores/charity';
-import { useAuthStore } from '@/stores/auth';
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import StatsCards from './components/common/StatsCards.vue'
+import FilterBar from './components/common/FilterBar.vue'
+import ListTable from './components/common/ListTable.vue'
+import CharityService, { type CharityDonation, type CharityTeam } from '@/stores/charity'
 
-import DonationStatsCards from './components/Donation/DonationStatsCards.vue';
-import DonationFiltersBar from './components/Donation/DonationFiltersBar.vue';
-import DonationTable from './components/Donation/DonationTable.vue';
-import DonationModals from './components/Donation/DonationModals.vue';
+const loading = ref(false)
+const donations = ref<CharityDonation[]>([])
+const teams = ref<CharityTeam[]>([])
+const filters = ref({ search: '', status: '', teamId: '' })
 
-const router = useRouter();
-const authStore = useAuthStore();
+const loadData = async () => {
+  loading.value = true
+  const [donRes, teamRes] = await Promise.all([
+    CharityService.getDonations(),
+    CharityService.getTeams()
+  ])
+  if (donRes.success) donations.value = donRes.data
+  if (teamRes.success) teams.value = teamRes.data
+  loading.value = false
+}
 
-// State
-const donations = ref([]);
-const companies = ref([]);
-const campaigns = ref([]);
-const kpiStats = ref({
-  totalDonations: 0,
-  totalValue: 0,
-  statusBreakdown: {},
-  valueByType: {},
-  returnedValue:0
-});
-const loading = ref(false);
-const canceling = ref(false);
+onMounted(loadData)
 
-const pagination = ref({
-  totalItems: 0,
-  totalPages: 1,
-  currentPage: 1,
-  pageSize: 10
-});
+const columns = [
+  { key: 'donationId', label: 'ID', width: '70px' },
+  { key: 'donationDeliveryDate', label: 'Delivery Date', format: 'date', sortable: true },
+  { key: 'description', label: 'Description' },
+  { key: 'totalValueInBirr', label: 'Total Value', sortable: true },
+  { key: 'status', label: 'Status', format: 'badge' }
+]
 
-const filters = ref({
-  search: '',
-  status: '',
-  companyId: '',
-  campaignId: ''
-});
+const donationStats = computed(() => [
+  { key: 'total', label: 'Total Value', value: donations.value.reduce((s, d) => s + Number(d.totalValueInBirr), 0), format: 'currency', color: '#6a11cb' },
+  { key: 'pending', label: 'Pending Approval', value: donations.value.filter(d => d.status === 'pending').length, color: '#f59e0b' },
+  { key: 'approved', label: 'Total Approved', value: donations.value.filter(d => d.status === 'approved').length, color: '#10b981' }
+])
 
-// Modal
-const showCancelModal = ref(false);
-const donationToCancel = ref(null);
-
-// Toasts
-const toasts = ref([]);
-
-// Computed
-const canApprove = computed(() => {
-  const role = authStore.user?.role;
-  return role === 'admin' || role === 'finance';
-});
-
-// Debounce
-let searchTimeout = null;
-
-// ========== METHODS ==========
-const addToast = (message, type = 'success') => {
-  const id = Date.now();
-  toasts.value.push({ id, message, type });
-  setTimeout(() => removeToast(id), 3000);
-};
-
-const removeToast = (id) => {
-  toasts.value = toasts.value.filter(t => t.id !== id);
-};
-
-const loadCompanies = async () => {
-  const result = await CharityService.getCompanies();
-  if (result.success) companies.value = result.data;
-};
-
-const loadCampaigns = async () => {
-  const result = await CharityService.getCampaigns();
-  if (result.success) campaigns.value = result.data;
-};
-
-const loadKpiStats = async () => {
-  const result = await CharityService.getDonationStats();
-  if (result.success && result.data) kpiStats.value = result.data;
-};
-
-const loadDonations = async () => {
-  loading.value = true;
-  try {
-    const params = {
-      page: pagination.value.currentPage,
-      size: pagination.value.pageSize,
-      search: filters.value.search,
-      status: filters.value.status,
-      companyId: filters.value.companyId,
-      campaignId: filters.value.campaignId
-    };
-    const result = await CharityService.getDonations(params);
-    if (result.success) {
-      donations.value = result.data;
-      pagination.value = result.pagination;
-    } else {
-      addToast(result.error || 'Failed to load donations', 'error');
-    }
-  } catch (error) {
-    addToast('Failed to load donations', 'error');
-  } finally {
-    loading.value = false;
+const filteredDonations = computed(() => {
+  let result = donations.value
+  if (filters.value.search) {
+    const q = filters.value.search.toLowerCase()
+    result = result.filter(d => d.description?.toLowerCase().includes(q))
   }
-};
-
-const viewDonation = (donation) => router.push(`/charity/donations/${donation.donationId}`);
-const editDonation = (donation) => router.push(`/charity/donations/${donation.donationId}/edit`);
-
-const submitDonation = async (donation) => {
-  const result = await CharityService.submitDonation(donation.donationId);
-  result.success ? addToast('Submission successful', 'success') : addToast(result.error, 'error');
-  loadDonations();
-  loadKpiStats();
-};
-
-const approveDonation = async (donation) => {
-  const result = await CharityService.approveDonation(donation.donationId);
-  result.success ? addToast('Donation approved', 'success') : addToast(result.error, 'error');
-  loadDonations();
-  loadKpiStats();
-};
-
-const distributeDonation = async (donation) => {
-  const result = await CharityService.distributeDonation(donation.donationId);
-  result.success ? addToast('Marked as distributed', 'success') : addToast(result.error, 'error');
-  loadDonations();
-  loadKpiStats();
-};
-
-const confirmCancel = (donation) => {
-  donationToCancel.value = donation;
-  showCancelModal.value = true;
-};
-
-const cancelDonation = async () => {
-  canceling.value = true;
-  const result = await CharityService.cancelDonation(donationToCancel.value.donationId);
-  canceling.value = false;
-  if (result.success) {
-    addToast('Donation cancelled', 'success');
-    closeCancelModal();
-    loadDonations();
-    loadKpiStats();
-  } else {
-    addToast(result.error, 'error');
+  if (filters.value.status) {
+    result = result.filter(d => d.status === filters.value.status)
   }
-};
-
-const closeCancelModal = () => {
-  showCancelModal.value = false;
-  donationToCancel.value = null;
-};
-
-const clearFilters = () => {
-  filters.value = { search: '', status: '', companyId: '', campaignId: '' };
-  pagination.value.currentPage = 1;
-  loadDonations();
-};
-
-const updateFilters = (newFilters) => {
-  filters.value = { ...filters.value, ...newFilters };
-};
-
-const goToPage = (page) => {
-  pagination.value.currentPage = page;
-  loadDonations();
-};
-
-// Watchers
-watch(() => filters.value.search, () => {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
-    pagination.value.currentPage = 1;
-    loadDonations();
-  }, 500);
-});
-
-watch([() => filters.value.status, () => filters.value.companyId, () => filters.value.campaignId], () => {
-  pagination.value.currentPage = 1;
-  loadDonations();
-});
-
-// Init
-onMounted(async () => {
-  // Default to 'pending' status for admins so they see what needs attention
-  if (['admin', 'charity_admin'].includes(authStore.user?.role)) {
-    filters.value.status = 'pending';
+  if (filters.value.teamId) {
+    result = result.filter(d => d.teamId === Number(filters.value.teamId))
   }
-  await Promise.all([loadCompanies(), loadCampaigns(), loadKpiStats(), loadDonations()]);
-});
+  return result
+})
+
+const resetFilters = () => { filters.value = { search: '', status: '', teamId: '' } }
+
+const formatCurrency = (val: number) => {
+  return new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(val)
+}
+
+const editDonation = (d: any) => { alert(`Editing donation ${d.donationId}`) }
 </script>
 
 <style scoped>
-.donations-page {
-  padding: 16px;
-  min-height: 100vh;
-  background: #f5f7fb;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.page-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 4px;
-}
-
-.page-subtitle {
-  font-size: 13px;
-  color: #64748b;
-}
-
-.header-buttons {
-  display: flex;
-  gap: 12px;
-}
-
-.btn-primary, .btn-analytics {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  border-radius: 10px;
-  font-weight: 600;
-  text-decoration: none;
-  font-size: 14px;
-}
+.donations-page { padding: 24px; background: #f8fafc; min-height: 100vh; }
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.page-title { font-size: 24px; font-weight: 700; color: #1e293b; margin: 0; }
+.page-subtitle { font-size: 14px; color: #64748b; margin-top: 4px; }
 
 .btn-primary {
-  background: linear-gradient(135deg, #6a11cb, #7c3aed);
-  color: white;
-  border: none;
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 20px; background: linear-gradient(135deg, #6a11cb, #7c3aed); color: white;
+  border: none; border-radius: 10px; font-size: 14px; font-weight: 600;
+  cursor: pointer; text-decoration: none;
 }
-
-.btn-analytics {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: white;
-}
-
 .btn-icon { width: 18px; height: 18px; }
 
-.loading-state {
-  text-align: center;
-  padding: 60px;
-  background: white;
-  border-radius: 16px;
+.fb-select {
+  padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 10px;
+  font-size: 13px; color: #475569; background: white; outline: none;
 }
+.fb-select:focus { border-color: #6a11cb; }
 
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid #e2e8f0;
-  border-top-color: #6a11cb;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin: 0 auto 16px;
+.desc-cell { display: flex; flex-direction: column; gap: 2px; }
+.main-desc { font-weight: 600; color: #1e293b; }
+.team-tag { font-size: 11px; color: #64748b; font-style: italic; }
+
+.amount-text { font-weight: 700; color: #1e293b; }
+
+.table-actions { display: flex; gap: 8px; }
+.action-btn {
+  width: 32px; height: 32px; border-radius: 8px; border: 1px solid #e2e8f0;
+  background: white; color: #64748b; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; text-decoration: none;
 }
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-@media (max-width: 768px) {
-  .donations-page { padding: 12px; }
-  .page-title { font-size: 20px; }
-}
+.action-btn svg { width: 16px; height: 16px; }
+.action-btn:hover { border-color: #6a11cb; color: #6a11cb; background: #f5f3ff; }
 </style>

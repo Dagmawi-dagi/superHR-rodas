@@ -16,7 +16,7 @@ router.use(authMiddleware());
 // ============================================================================
 // EMPLOYEE CRUD
 // ============================================================================
-router.get('/', authMiddleware('admin'), employeeController.getEmployees);
+router.get('/',  authMiddleware(['admin', 'charity_teamleader','charity_admin']), employeeController.getEmployees);
 router.get('/:id', employeeController.getEmployeeById);
 
 // ✅ REMOVED uploadSingleProfile from POST - profile picture is separate

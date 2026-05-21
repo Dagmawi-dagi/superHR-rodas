@@ -1,14 +1,19 @@
-const express = require("express");
-const router = express.Router();
-const beneficiaryController = require("../../controllers/charity/beneficiaryController");
-const { authMiddleware } = require("../../middleware/authMiddleware");
+'use strict';
+const router = require('express').Router();
+const ctrl   = require('../../controllers/charity/charityBeneficiaryController');
+const { authMiddleware } = require('../../middleware/authMiddleware');
 
-router.get("/", authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), beneficiaryController.getAllBeneficiaries);
-router.get("/:id", authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), beneficiaryController.getBeneficiaryById);
-router.post("/", authMiddleware(['admin', 'charity_admin']), beneficiaryController.createBeneficiary);
-router.put( "/:id", authMiddleware(['admin', 'charity_admin']), beneficiaryController.updateBeneficiary);
-router.delete("/:id", authMiddleware(['admin', 'charity_admin']), beneficiaryController.deleteBeneficiary);
-router.post('/:id/transfer', authMiddleware(['admin', 'charity_admin']), beneficiaryController.transferBeneficiary);
-router.get('/:id/transfers', authMiddleware(['admin', 'charity_admin', 'charity_teamleader']), beneficiaryController.getTransferHistory);
+const ADMIN  = ['admin', 'charity_admin'];
+const ALL    = ['admin', 'charity_admin', 'charity_teamleader'];
+
+// Stats (before /:id)
+router.get('/stats/summary',  authMiddleware(ALL),   ctrl.getBeneficiaryStats);
+
+// CRUD
+router.get('/',               authMiddleware(ALL),   ctrl.getBeneficiaries);
+router.get('/:id',            authMiddleware(ALL),   ctrl.getBeneficiaryById);
+router.post('/',              authMiddleware(ALL),   ctrl.createBeneficiary);   // teamleader → creates approval request
+router.put('/:id',            authMiddleware(ADMIN), ctrl.updateBeneficiary);
+router.delete('/:id',         authMiddleware(ADMIN), ctrl.deactivateBeneficiary);  // is_active: false
 
 module.exports = router;

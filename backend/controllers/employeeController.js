@@ -903,10 +903,10 @@ exports.getEmployeeDocuments = async (req, res) => {
 // ============================================================================
 exports.getEmployees = async (req, res) => {
   try {
-    if (req.user.role !== 'admin') {
+    if (!['admin', 'hr', 'charity_admin', 'charity_teamleader'].includes(req.user.role)) {
       return res.status(403).json({ 
         success: false, 
-        error: 'Access denied. Admin privileges required.' 
+        error: 'Access denied.' 
       });
     }
 

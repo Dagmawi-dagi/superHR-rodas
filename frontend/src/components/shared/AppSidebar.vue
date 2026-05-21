@@ -129,9 +129,7 @@ const roleMenus = {
     { name: 'All Donations',      path: '/charity/donations',                 icon: 'ArchiveBoxIcon' },
     { name: 'Adjustment Requests',path: '/charity/donations/adjustments',      icon: 'AdjustmentsHorizontalIcon' },
     { name: 'Beneficiaries',      path: '/charity/beneficiaries',             icon: 'UsersIcon' },
-    { name: 'Beneficiary Groups', path: '/charity/groups',                  icon: 'RectangleStackIcon' },
-    { name: 'Campaigns',          path: '/charity/campaigns',    icon: 'SpeakerWaveIcon' },
-    { name: 'Donation Companies', path: '/charity/companies',    icon: 'BuildingOffice2Icon' },
+    { name: 'Charity Teams', path: '/charity/teams',                  icon: 'RectangleStackIcon' },
   ],
 
   // ── charity_teamleader ─────────────────────────────────────────────────────

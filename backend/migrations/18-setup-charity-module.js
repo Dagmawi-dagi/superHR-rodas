@@ -275,6 +275,13 @@ module.exports = {
           type: Sequelize.JSONB,
           defaultValue: [],
         },
+        // Tracks an in-flight adjustment request for this item.
+        // null  → no active adjustment request
+        // { adjustment_id: <requestId>, status: 'draft'|'approved'|'rejected'|'commented' }
+        on_adjustment: {
+          type: Sequelize.JSONB,
+          defaultValue: null,
+        },
         created_by: {
           type: Sequelize.INTEGER,
           references: { model: 'users', key: 'user_id' },

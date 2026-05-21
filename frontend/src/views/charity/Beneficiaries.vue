@@ -1,261 +1,180 @@
 <template>
   <div class="beneficiaries-page">
-    <!-- Header -->
     <div class="page-header">
       <div>
-        <h1 class="page-title">Beneficiary Management</h1>
-        <p class="page-subtitle">Manage beneficiaries, groups, and transfers</p>
+        <h1 class="page-title">Beneficiaries</h1>
+        <p class="page-subtitle">Track and manage individuals and organizations receiving support</p>
       </div>
-      <div class="header-buttons">
-        <router-link to="/charity/beneficiaries/create" class="btn-primary">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          Add Beneficiary
-        </router-link>
-      </div>
+      <router-link to="/charity/beneficiaries/create" class="btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        Add Beneficiary
+      </router-link>
     </div>
 
-    <!-- Stats -->
-    <BeneficiaryStatsCards :stats="stats" />
+    <!-- Stats Cards -->
+    <StatsCards :cards="beneficiaryStats" />
 
-    <!-- Loading -->
-    <div v-if="loading" class="loading-state">
-      <div class="spinner"></div>
-      <p>Loading beneficiaries...</p>
-    </div>
-
-    <div v-else>
-      <!-- Filters -->
-      <BeneficiaryFiltersBar
-        :filters="filters"
-        :groups="groups"
-        :locations="locations"
-        @update:filters="updateFilters"
-        @clear-filters="clearFilters"
-      />
-
-      <!-- Table -->
-      <BeneficiaryTable
-        :beneficiaries="beneficiaries"
-        :pagination="pagination"
-        @view="viewBeneficiary"
-        @edit="editBeneficiary"
-        @transfer="openTransferModal"
-        @delete="openDeleteModal"
-        @go-to-page="goToPage"
-        @clear-filters="clearFilters"
-      />
-    </div>
-
-    <!-- Modals -->
-    <BeneficiaryModals
-      :show-transfer-modal="showTransferModal"
-      :show-delete-modal="showDeleteModal"
-      :beneficiary-to-transfer="beneficiaryToTransfer"
-      :beneficiary-to-delete="beneficiaryToDelete"
-      :groups="groups"
-      :deleting="deleting"
-      :toasts="toasts"
-      @close-transfer-modal="closeTransferModal"
-      @confirm-transfer="confirmTransfer"
-      @close-delete-modal="closeDeleteModal"
-      @confirm-delete="deleteBeneficiary"
-      @remove-toast="removeToast"
+    <!-- Filters -->
+    <FilterBar
+      v-model:search="filters.search"
+      v-model:status="filters.type"
+      search-placeholder="Search beneficiaries..."
+      :status-options="[
+        { value: 'individual', label: 'Individuals' },
+        { value: 'organization', label: 'Organizations' }
+      ]"
+      @clear="resetFilters"
     />
+
+    <!-- Table -->
+    <ListTable
+      :columns="columns"
+      :rows="filteredBeneficiaries"
+      row-key="beneficiaryId"
+      :loading="loading"
+    >
+      <template #cell-name="{ row }">
+        <div class="name-cell">
+          <div class="type-icon" :class="row.type">
+            <svg v-if="row.type === 'individual'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          </div>
+          <div class="name-info">
+            <span class="full-name">{{ row.name }}</span>
+            <span class="sub-info">{{ row.fullInfo?.contact?.phone || 'No phone' }}</span>
+          </div>
+        </div>
+      </template>
+
+      <template #cell-location="{ row }">
+        <span class="location-text" v-if="row.fullInfo?.location">
+          {{ row.fullInfo.location.city }}, {{ row.fullInfo.location.region }}
+        </span>
+        <span v-else class="text-muted">—</span>
+      </template>
+
+      <template #actions="{ row }">
+        <div class="table-actions">
+          <button class="action-btn" title="View" @click="viewBeneficiary(row)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+          <button class="action-btn" title="Edit" @click="editBeneficiary(row)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="action-btn delete" :title="row.isActive ? 'Deactivate' : 'Activate'" @click="toggleStatus(row)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+          </button>
+        </div>
+      </template>
+    </ListTable>
   </div>
 </template>
 
-<script setup>
-import { ref, onMounted, watch, computed } from 'vue';
-import { useRouter } from 'vue-router';
-import CharityService from '@/stores/charity';
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import StatsCards from './components/common/StatsCards.vue'
+import FilterBar from './components/common/FilterBar.vue'
+import ListTable from './components/common/ListTable.vue'
+import CharityService, { type CharityBeneficiary } from '@/stores/charity'
+import { useRouter } from 'vue-router'
 
-// Components
-import BeneficiaryStatsCards from './components/Beneficiary/BeneficiaryStatsCards.vue';
-import BeneficiaryFiltersBar from './components/Beneficiary/BeneficiaryFiltersBar.vue';
-import BeneficiaryTable from './components/Beneficiary/BeneficiaryTable.vue';
-import BeneficiaryModals from './components/Beneficiary/BeneficiaryModals.vue';
-
-const router = useRouter();
-
-// State
-const beneficiaries = ref([]);
-const groups = ref([]);
-const locations = ref([]);
-const loading = ref(false);
-const deleting = ref(false);
-
-const stats = ref({ total: 0, organizations: 0, individuals: 0 });
-
-const pagination = ref({ currentPage: 1, totalPages: 1 });
-const filters = ref({ search: '', type: '', groupId: '', locationId: '' });
-
-// Modals
-const showTransferModal = ref(false);
-const beneficiaryToTransfer = ref(null);
-const showDeleteModal = ref(false);
-const beneficiaryToDelete = ref(null);
-
-const toasts = ref([]);
-let searchTimeout = null;
-
-// Toast helpers
-const addToast = (message, type = 'success') => {
-  const id = Date.now();
-  toasts.value.push({ id, message, type });
-  setTimeout(() => removeToast(id), 3000);
-};
-const removeToast = (id) => { toasts.value = toasts.value.filter(t => t.id !== id); };
-
-// Data loading
-const loadGroups = async () => {
-  const res = await CharityService.getBeneficiaryGroups();
-  if (res.success) groups.value = res.data;
-};
-
-const loadLocations = async () => {
-  const res = await CharityService.getLocations();
-  if (res.success) locations.value = res.data;
-};
-
-const loadStats = async () => {
-  // Compute stats from current beneficiaries data or fetch separately
-  const all = await CharityService.getBeneficiaries({ size: 1 }); // get total count quickly
-  // For accurate breakdown, we can rely on the list data but we'll compute from loaded data
-  // Simple: just fetch all first page with large size? Better: call a stats endpoint if exists, else compute from list
-  // As a simple solution, we call getBeneficiaries without pagination to count. Or we can create a separate stats call.
-  // Since we don't have a dedicated stats endpoint for beneficiaries, we'll calculate from the current full list after load.
-};
+const router = useRouter()
+const loading = ref(false)
+const beneficiaries = ref<CharityBeneficiary[]>([])
+const filters = ref({ search: '', type: '' })
 
 const loadBeneficiaries = async () => {
-  loading.value = true;
-  try {
-    const params = {
-      page: pagination.value.currentPage,
-      size: 10,
-      search: filters.value.search,
-      type: filters.value.type,
-      groupId: filters.value.groupId,
-      locationId: filters.value.locationId
-    };
-    const res = await CharityService.getBeneficiaries(params);
-    if (res.success) {
-      beneficiaries.value = res.data;
-      pagination.value = res.pagination || { currentPage: 1, totalPages: 1 };
-      // Compute stats from full list (not perfect, but close)
-      updateStats(res.data);
-    } else {
-      addToast(res.error || 'Failed to load beneficiaries', 'error');
-    }
-  } catch (e) {
-    addToast('Failed to load beneficiaries', 'error');
-  } finally {
-    loading.value = false;
-  }
-};
-
-// Simple stats from current page data (not full but indicative)
-const updateStats = (list) => {
-  stats.value.total = pagination.value.totalItems || 0;
-  // To get accurate counts, we might need separate aggregation. For simplicity, we count current page only.
-  // In a real app, you'd have a stats endpoint.
-  const orgs = list.filter(b => b.type === 'organization').length;
-  const inds = list.filter(b => b.type === 'individual').length;
-  // We'll store page-level counts. For total stats across all pages, you'd need backend support.
-  // We'll set to 0 as placeholder, but you can implement a backend /beneficiaries/stats route if needed.
-  // For now, just show placeholder based on pagination total (not accurate breakdown).
-  stats.value.organizations = orgs;
-  stats.value.individuals = inds;
-};
-
-// Actions
-const viewBeneficiary = (ben) => router.push(`/charity/beneficiaries/${ben.beneficiaryId}`);
-const editBeneficiary = (ben) => router.push(`/charity/beneficiaries/${ben.beneficiaryId}/edit`);
-
-const openTransferModal = (ben) => {
-  beneficiaryToTransfer.value = ben;
-  showTransferModal.value = true;
-};
-const closeTransferModal = () => {
-  showTransferModal.value = false;
-  beneficiaryToTransfer.value = null;
-};
-
-const confirmTransfer = async ({ beneficiaryId, toGroupId, reason }) => {
-  const res = await CharityService.transferBeneficiary(beneficiaryId, toGroupId, reason);
+  loading.value = true
+  const res = await CharityService.getBeneficiaries()
   if (res.success) {
-    addToast('Beneficiary transferred successfully');
-    closeTransferModal();
-    loadBeneficiaries();
-  } else {
-    addToast(res.error || 'Transfer failed', 'error');
+    beneficiaries.value = res.data
   }
-};
+  loading.value = false
+}
 
-const openDeleteModal = (ben) => {
-  beneficiaryToDelete.value = ben;
-  showDeleteModal.value = true;
-};
-const closeDeleteModal = () => {
-  showDeleteModal.value = false;
-  beneficiaryToDelete.value = null;
-};
+onMounted(loadBeneficiaries)
 
-const deleteBeneficiary = async () => {
-  deleting.value = true;
-  const res = await CharityService.deleteBeneficiary(beneficiaryToDelete.value.beneficiaryId);
-  deleting.value = false;
-  if (res.success) {
-    addToast('Beneficiary deleted');
-    closeDeleteModal();
-    loadBeneficiaries();
-  } else {
-    addToast(res.error || 'Delete failed', 'error');
+const columns = [
+  { key: 'name', label: 'Beneficiary Name', sortable: true },
+  { key: 'type', label: 'Category', format: 'badge' },
+  { key: 'team.name', label: 'Assigned Team' },
+  { key: 'location', label: 'Location' },
+  { key: 'isActive', label: 'Status', format: 'boolean', trueLabel: 'Active', falseLabel: 'Inactive' }
+]
+
+const beneficiaryStats = computed(() => [
+  { key: 'total', label: 'Total Beneficiaries', value: beneficiaries.value.length, color: '#6a11cb' },
+  { key: 'indiv', label: 'Individuals', value: beneficiaries.value.filter(b => b.type === 'individual').length, color: '#3b82f6' },
+  { key: 'orgs', label: 'Organizations', value: beneficiaries.value.filter(b => b.type === 'organization').length, color: '#8b5cf6' }
+])
+
+const filteredBeneficiaries = computed(() => {
+  let result = beneficiaries.value
+  if (filters.value.search) {
+    const q = filters.value.search.toLowerCase()
+    result = result.filter(b => b.name.toLowerCase().includes(q))
   }
-};
+  if (filters.value.type) {
+    result = result.filter(b => b.type === filters.value.type)
+  }
+  return result
+})
 
-const clearFilters = () => {
-  filters.value = { search: '', type: '', groupId: '', locationId: '' };
-  pagination.value.currentPage = 1;
-  loadBeneficiaries();
-};
+const resetFilters = () => { filters.value.search = ''; filters.value.type = '' }
 
-const updateFilters = (newFilters) => {
-  filters.value = { ...filters.value, ...newFilters };
-};
+const viewBeneficiary = (ben: CharityBeneficiary) => {
+  router.push(`/charity/beneficiaries/${ben.beneficiaryId}`)
+}
 
-const goToPage = (page) => {
-  pagination.value.currentPage = page;
-  loadBeneficiaries();
-};
+const editBeneficiary = (ben: CharityBeneficiary) => {
+  router.push(`/charity/beneficiaries/${ben.beneficiaryId}/edit`)
+}
 
-// Watchers
-watch(() => filters.value.search, () => {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => { pagination.value.currentPage = 1; loadBeneficiaries(); }, 500);
-});
-watch([() => filters.value.type, () => filters.value.groupId, () => filters.value.locationId], () => {
-  pagination.value.currentPage = 1;
-  loadBeneficiaries();
-});
-
-// Init
-onMounted(async () => {
-  await Promise.all([loadGroups(), loadLocations(), loadBeneficiaries()]);
-});
+const toggleStatus = (ben: CharityBeneficiary) => {
+  ben.isActive = !ben.isActive
+  alert(`Beneficiary ${ben.name} is now ${ben.isActive ? 'Active' : 'Inactive'}`)
+}
 </script>
 
 <style scoped>
-.beneficiaries-page { padding: 16px; min-height: 100vh; background: #f5f7fb; }
-.page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-.page-title { font-size: 24px; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
-.page-subtitle { font-size: 13px; color: #64748b; }
-.header-buttons { display: flex; gap: 12px; }
-.btn-primary { display: flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 10px; font-weight: 600; text-decoration: none; font-size: 14px; background: linear-gradient(135deg, #6a11cb, #7c3aed); color: white; border: none; }
+.beneficiaries-page { padding: 24px; background: #f8fafc; min-height: 100vh; }
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.page-title { font-size: 24px; font-weight: 700; color: #1e293b; margin: 0; }
+.page-subtitle { font-size: 14px; color: #64748b; margin-top: 4px; }
+
+.btn-primary {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 20px; background: linear-gradient(135deg, #6a11cb, #7c3aed); color: white;
+  border: none; border-radius: 10px; font-size: 14px; font-weight: 600;
+  cursor: pointer; text-decoration: none;
+}
 .btn-icon { width: 18px; height: 18px; }
-.loading-state { text-align: center; padding: 60px; background: white; border-radius: 16px; }
-.spinner { width: 40px; height: 40px; border: 3px solid #e2e8f0; border-top-color: #6a11cb; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (max-width: 768px) { .beneficiaries-page { padding: 12px; } .page-title { font-size: 20px; } }
+
+.name-cell { display: flex; align-items: center; gap: 12px; }
+.type-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.type-icon svg { width: 20px; height: 20px; }
+.type-icon.individual { background: #eff6ff; color: #3b82f6; }
+.type-icon.organization { background: #f5f3ff; color: #8b5cf6; }
+
+.name-info { display: flex; flex-direction: column; }
+.full-name { font-weight: 600; color: #1e293b; font-size: 14px; }
+.sub-info { font-size: 12px; color: #94a3b8; }
+
+.location-text { color: #475569; font-size: 14px; }
+
+.table-actions { display: flex; gap: 8px; }
+.action-btn {
+  width: 32px; height: 32px; border-radius: 8px; border: 1px solid #e2e8f0;
+  background: white; color: #64748b; display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.action-btn svg { width: 16px; height: 16px; }
+.action-btn:hover { border-color: #6a11cb; color: #6a11cb; background: #f5f3ff; }
+.text-muted { color: #94a3b8; font-style: italic; }
 </style>

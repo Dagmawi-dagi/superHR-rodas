@@ -48,13 +48,12 @@ uploadDirs.forEach((dir) => {
 const userRoutes = require("./routes/userRoutes");
 const employeeRoutes = require("./routes/employeeRoutes");
 const settingRoutes = require("./routes/settingRoutes");
-//charity
-const donationRoutes = require("./routes/charity/donationRoutes")
-const donationCompanyRoutes = require("./routes/charity/donationCompanyRoutes")
-const campaignRoutes = require("./routes/charity/campaignRoutes")
-const beneficiaryRoutes = require("./routes/charity/beneficiaryRoutes")
-const beneficiaryLocationRoutes = require("./routes/charity/beneficiaryLocationRoutes")
-const beneficiaryGroupRoutes = require("./routes/charity/beneficiaryGroupRoutes")
+// Charity module (v2)
+const charityTeamRoutes        = require("./routes/charity/teamRoutes");
+const charityBeneficiaryRoutes = require("./routes/charity/beneficiaryRoutes");
+const charityDonationRoutes    = require("./routes/charity/donationRoutes");
+const charityRequestRoutes     = require("./routes/charity/requestRoutes");
+const charitySettingRoutes     = require("./routes/charity/settingRoutes");
 // ============================================================================
 // GLOBAL MIDDLEWARE
 // ============================================================================
@@ -99,13 +98,12 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/api/users", userRoutes);
 app.use("/api/employees", employeeRoutes);
 app.use("/api/settings", settingRoutes);
-// Charity Module Routes
-app.use("/api/charity/donations", donationRoutes);
-app.use("/api/charity/companies",donationCompanyRoutes);
-app.use("/api/charity/campaigns", campaignRoutes);
-app.use("/api/charity/beneficiaries",beneficiaryRoutes);
-app.use("/api/charity/locations",beneficiaryLocationRoutes);
-app.use('/api/charity/beneficiary-groups', beneficiaryGroupRoutes);
+// Charity Module Routes (v2)
+app.use("/api/charity/teams",        charityTeamRoutes);
+app.use("/api/charity/beneficiaries",charityBeneficiaryRoutes);
+app.use("/api/charity/donations",    charityDonationRoutes);
+app.use("/api/charity/requests",     charityRequestRoutes);
+app.use("/api/charity/settings",     charitySettingRoutes);
 // ============================================================================
 // HEALTH CHECK ENDPOINT
 // ============================================================================
