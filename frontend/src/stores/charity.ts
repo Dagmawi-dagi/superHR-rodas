@@ -50,6 +50,7 @@ export interface CharityDonation {
   teamId?: number
   totalValueInBirr: number
   status: 'draft' | 'pending' | 'approved' | 'cancelled'
+  comments: { commentId: number; commentedBy: number; commentedAt: string; text: string }[]
   description?: string
   donationDeliveryDate?: string // DATEONLY
   createdBy?: number
@@ -233,6 +234,10 @@ class CharityService {
   }
   async approveDonation(id: number) {
     try { const r = await api.post(`/charity/donations/${id}/approve`); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+  async commentDonation(id: number, text: string) {
+    try { const r = await api.post(`/charity/donations/${id}/comment`, { text }); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
   async cancelDonation(id: number) {

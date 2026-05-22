@@ -48,6 +48,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM('draft', 'pending', 'approved', 'cancelled'),
         defaultValue: 'draft',
       },
+      comments: {
+        type: DataTypes.JSONB,
+        allowNull: false,
+        defaultValue: [],
+      },
       description: {
         type: DataTypes.TEXT,
         allowNull: true,

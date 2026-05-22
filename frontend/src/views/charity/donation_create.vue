@@ -2,22 +2,27 @@
   <div class="donation-create">
     <!-- Back header -->
     <div class="create-header">
-      <router-link to="/charity/donations" class="back-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6" /></svg>
-      </router-link>
-      <div class="header-title">
-        <h1>{{ isView ? 'View Donation' : isEdit ? 'Edit Donation Batch' : 'New Donation Batch' }}</h1>
-        <p>{{ isView ? 'Detailed breakdown' : 'Allocate donation items to beneficiaries within a team' }}</p>
+      <div class="header-main">
+        <router-link to="/charity/donations" class="back-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6" /></svg>
+        </router-link>
+        <div class="header-title">
+          <h1>{{ isView ? 'View Donation' : isEdit ? 'Edit Donation' : 'New Donation' }}</h1>
+          <p>{{ isView ? 'Detailed breakdown' : 'Allocate donation items to beneficiaries within a team' }}</p>
+        </div>
+      </div>
+      <div v-if="donationId" class="header-status">
+        <span :class="['status-pill', donationStatus]">{{ donationStatus.toUpperCase() }}</span>
       </div>
     </div>
 
     <form @submit.prevent="handleSubmit" class="donation-form">
       
-      <!-- ═══════════════ STEP 1: BATCH INFO (Stacked) ═══════════════ -->
+      <!-- ═══════════════ STEP 1: DONATION INFO (Stacked) ═══════════════ -->
       <div class="form-card">
         <div class="card-header">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7H4m16 5H4m16 5H4"/></svg>
-          <h3>Batch Information</h3>
+          <h3>Donation Information</h3>
         </div>
         <div class="card-body">
           <div class="form-row">
@@ -36,10 +41,54 @@
             </div>
           </div>
           <div class="form-field full">
-            <label>Batch Description</label>
+            <label>Donation Description</label>
             <textarea v-model="form.description" rows="2" placeholder="e.g. Winter Clothing Drive 2024" :disabled="isView"></textarea>
           </div>
         </div>
+      </div>
+
+      <!-- ═══════════════ STEP 1.5: HISTORY & COMMENTS (Stacked) ═══════════════ -->
+      <div class="form-card" v-if="donationComments.length > 0">
+        <div class="card-header collapsible-header" @click="isCommentsExpanded = !isCommentsExpanded">
+          <div class="header-left">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <h3>Comments</h3>
+            <span class="comment-count-badge">{{ donationComments.length }}</span>
+          </div>
+          <div class="header-right">
+            <svg 
+              class="collapse-chevron" 
+              :class="{ rotated: isCommentsExpanded }" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              stroke-width="2"
+            >
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
+          </div>
+        </div>
+
+        <transition name="collapse">
+          <div v-show="isCommentsExpanded" class="card-body">
+            <div class="comments-list">
+              <div v-for="c in donationComments" :key="c.commentId" class="comment-item">
+                <div class="comment-meta">
+                  <div class="comment-creator">
+                    <span v-if="c.creator" class="comment-author">
+                      {{ c.creator.firstName }} {{ c.creator.lastName }}
+                    </span>
+                    <span v-else class="comment-author">Admin #{{ c.commentedBy }}</span>
+                    <span class="comment-date">{{ CharityService.formatDate(c.commentedAt) }}</span>
+                  </div>
+                </div>
+                <p class="comment-text">{{ c.text }}</p>
+              </div>
+            </div>
+          </div>
+        </transition>
       </div>
 
       <!-- ═══════════════ STEP 2: ITEM TEMPLATE (Stacked) ═══════════════ -->
@@ -99,8 +148,6 @@
             </div>
 
           <div v-if="!isView" class="bulk-settings-bar">
-            
-            
             <div class="bulk-inputs">
               <div class="bulk-field">
                 <input type="number" v-model.number="bulk.value" :placeholder="template.type === 'money' ? 'Amount (ETB)' : 'Quantity'" />
@@ -220,7 +267,7 @@
                   </div>
                   <div v-for="(rec, idx) in row.recurrings" :key="idx" class="details-row" :class="{ 'goods-row': template.type !== 'money' }">
                     <div class="period-cell">
-                      <small class="period-label">{{ row.recurringType.charAt(0).toUpperCase() + row.recurringType.slice(1) }}#{{ idx + 1 }}</small>
+                      <small class="period-label">{{ row.recurringType.charAt(0).toUpperCase() + row.recurringType.slice(1) }}#{{ (idx as number) + 1 }}</small>
                     </div>
                     <div class="val-input-wrap">
                       <input 
@@ -260,7 +307,7 @@
 
         <div class="card-footer" v-if="filledRows.length > 0">
           <div class="grand-total">
-            <span>Batch Grand Total:</span>
+            <span>Grand Total:</span>
             <strong>{{ formatCurrency(grandTotal) }}</strong>
           </div>
         </div>
@@ -269,11 +316,62 @@
       <!-- Form Actions -->
       <div class="form-actions">
         <router-link to="/charity/donations" class="btn-outline">{{ isView ? 'Back to List' : 'Cancel' }}</router-link>
+        
+        <button 
+          v-if="isView && donationStatus === 'draft'" 
+          type="button" 
+          class="btn-primary" 
+          @click="submitForApproval"
+          :disabled="isSubmitting"
+        >
+          {{ isSubmitting ? 'Processing...' : 'Submit Donation' }}
+        </button>
+
+        <button 
+          v-if="isView && donationStatus === 'pending' && isCharityAdmin" 
+          type="button" 
+          class="btn-primary success" 
+          @click="approveDonation"
+          :disabled="isSubmitting"
+        >
+          {{ isSubmitting ? 'Processing...' : 'Approve Donation' }}
+        </button>
+
+        <button 
+          v-if="isView && donationStatus === 'pending' && isCharityAdmin" 
+          type="button" 
+          class="btn-outline danger" 
+          @click="showCommentForm = true"
+          :disabled="isSubmitting"
+        >
+          Return for Correction
+        </button>
+
         <button v-if="!isView" type="submit" class="btn-primary" :disabled="isSubmitting || filledRows.length === 0">
-          {{ isSubmitting ? 'Processing...' : isEdit ? 'Update Batch' : 'Create Batch' }}
+          {{ isSubmitting ? 'Processing...' : isEdit ? 'Update Donation' : 'Create Donation' }}
         </button>
       </div>
     </form>
+
+    <!-- Comment & Return Form Overlay -->
+    <div v-if="showCommentForm" class="comment-overlay">
+      <div class="comment-modal">
+        <div class="modal-header">
+          <h3>Return for Correction</h3>
+          <button class="close-btn" @click="showCommentForm = false">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p>Explain why this donation needs correction. It will be moved back to draft for the team leader to edit.</p>
+          <textarea v-model="formComment" placeholder="Enter your comments here..." rows="4"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-text" @click="showCommentForm = false">Cancel</button>
+          <button class="btn-danger" @click="commentAndReturn" :disabled="isSubmitting || !formComment.trim()">
+            {{ isSubmitting ? 'Submitting...' : 'Confirm Return' }}
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Toasts -->
     <div class="toast-container">
@@ -288,14 +386,24 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import CharityService from '@/stores/charity'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const route = useRoute()
+const authStore = useAuthStore()
 
 const isEdit = computed(() => !!route.params.id && route.path.includes('edit'))
 const isView = computed(() => !!route.params.id && !route.path.includes('edit'))
+const isCharityAdmin = computed(() => ['admin', 'charity_admin'].includes(authStore.userRole || ''))
 
-// Main Batch Info
+const donationId = computed(() => route.params.id ? Number(route.params.id) : null)
+const donationStatus = ref('draft')
+const donationComments = ref<any[]>([])
+const isCommentsExpanded = ref(false)
+const formComment = ref('')
+const showCommentForm = ref(false)
+
+// Main Donation Info
 const form = reactive({
   teamId: '',
   donationDeliveryDate: '',
@@ -357,6 +465,8 @@ const loadInitialData = async () => {
     const dRes = await CharityService.getDonationById(String(route.params.id))
     if (dRes.success) {
       const d = dRes.data
+      donationStatus.value = d.status
+      donationComments.value = d.comments || []
       form.teamId = d.teamId
       form.donationDeliveryDate = d.donationDeliveryDate
       form.description = d.description || ''
@@ -496,8 +606,53 @@ const handleSubmit = async () => {
     return
   }
 
-  addToast(`✅ Donation batch saved successfully`)
+  addToast(`✅ Donation saved successfully`)
   setTimeout(() => router.push('/charity/donations'), 1500)
+  isSubmitting.value = false
+}
+
+const submitForApproval = async () => {
+  if (!donationId.value || !confirm('Submit this donation for review?')) return
+  isSubmitting.value = true
+  const res = await CharityService.submitDonation(donationId.value)
+  if (res.success) {
+    addToast('✅ Donation submitted for approval')
+    loadInitialData()
+  } else {
+    addToast(res.error || 'Failed to submit', 'error')
+  }
+  isSubmitting.value = false
+}
+
+const approveDonation = async () => {
+  if (!donationId.value || !confirm('Approve this donation?')) return
+  isSubmitting.value = true
+  const res = await CharityService.approveDonation(donationId.value)
+  if (res.success) {
+    addToast('✅ Donation approved')
+    loadInitialData()
+  } else {
+    addToast(res.error || 'Failed to approve', 'error')
+  }
+  isSubmitting.value = false
+}
+
+const commentAndReturn = async () => {
+  if (!donationId.value) return
+  if (!formComment.value.trim()) {
+    addToast('Please provide a reason for correction', 'error')
+    return
+  }
+  isSubmitting.value = true
+  const res = await CharityService.commentDonation(donationId.value, formComment.value)
+  if (res.success) {
+    addToast('✅ Donation returned to draft for correction')
+    formComment.value = ''
+    showCommentForm.value = false
+    loadInitialData()
+  } else {
+    addToast(res.error || 'Failed to submit comment', 'error')
+  }
   isSubmitting.value = false
 }
 
@@ -546,7 +701,15 @@ onMounted(loadInitialData)
 
 <style scoped>
 .donation-create { max-width: 1100px; margin: 0 auto; padding: 32px 24px; background: #f8fafc; min-height: 100vh; }
-.create-header { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; }
+.create-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 32px; }
+.header-main { display: flex; align-items: center; gap: 16px; }
+.header-status { margin-left: auto; }
+.status-pill { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; }
+.status-pill.draft { background: #f1f5f9; color: #475569; }
+.status-pill.pending { background: #fef3c7; color: #b45309; }
+.status-pill.approved { background: #dcfce7; color: #166534; }
+.status-pill.cancelled { background: #fee2e2; color: #991b1b; }
+
 .back-btn { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; background: white; border: 1px solid #e2e8f0; border-radius: 12px; color: #64748b; text-decoration: none; }
 .header-title h1 { font-size: 24px; font-weight: 700; color: #1e293b; margin: 0; }
 .header-title p { font-size: 14px; color: #64748b; margin-top: 4px; }
@@ -566,7 +729,6 @@ onMounted(loadInitialData)
   gap: 20px; padding: 16px 20px; background: #f8fafc;
   border-radius: 16px; border: 1px solid #e2e8f0; margin-bottom: 24px;
 }
-.bulk-label { display: flex; align-items: center; gap: 8px; font-weight: 700; color: #334155; font-size: 13px; }
 .bulk-inputs { display: flex; align-items: center; gap: 12px; flex: 1; }
 .bulk-field input, .bulk-field select { padding: 8px 12px; font-size: 13px; border-radius: 10px; width: 140px; }
 .btn-bulk-apply { 
@@ -581,8 +743,6 @@ onMounted(loadInitialData)
   font-size: 13px; width: 200px; background: white;
 }
 .list-search input:focus { border-color: #6a11cb; outline: none; }
-
-.card-body.no-padding { padding: 0; }
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 16px; }
 .form-field { display: flex; flex-direction: column; gap: 6px; }
@@ -599,6 +759,26 @@ input:disabled, select:disabled, textarea:disabled { background: #f8fafc; color:
 .toggle-container { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .toggle-label { font-weight: 600; color: #6d28d9; font-size: 14px; }
 
+/* Comments */
+.comments-list { display: flex; flex-direction: column; gap: 16px; }
+.comment-item { padding: 16px; background: #f8fafc; border-radius: 12px; border-left: 4px solid #6a11cb; }
+.comment-meta { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; }
+.comment-author { font-weight: 700; color: #1e293b; }
+.comment-date { color: #94a3b8; }
+.comment-text { margin: 0; color: #475569; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+
+/* Comment Modal Overlay */
+.comment-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+.comment-modal { background: white; border-radius: 24px; width: 100%; max-width: 500px; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
+.comment-modal .modal-header { padding: 24px 32px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; }
+.comment-modal h3 { margin: 0; font-size: 20px; color: #1e293b; font-weight: 700; }
+.comment-modal .close-btn { background: none; border: none; font-size: 24px; color: #94a3b8; cursor: pointer; }
+.comment-modal .modal-body { padding: 32px; }
+.comment-modal p { color: #64748b; font-size: 14px; margin-bottom: 20px; line-height: 1.6; }
+.comment-modal textarea { width: 100%; border-radius: 16px; padding: 16px; border: 1px solid #e2e8f0; font-size: 15px; resize: none; outline: none; transition: border-color 0.2s; }
+.comment-modal textarea:focus { border-color: #6a11cb; }
+.comment-modal .modal-footer { padding: 20px 32px; background: #fafcfd; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 12px; }
+
 /* Ben Table */
 .ben-table { background: #fcfcfd; }
 .ben-header { display: grid; grid-template-columns: 2fr 180px 150px; gap: 12px; padding: 12px 24px; background: #f8fafc; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #f1f5f9; }
@@ -609,76 +789,30 @@ input:disabled, select:disabled, textarea:disabled { background: #f8fafc; color:
 .ben-row.recurring-grid { grid-template-columns: 2fr 180px 150px; }
 .ben-row.active { background: #fdfaff; }
 
-/* Collapse Button */
-.collapse-btn {
-  background: none; border: none; padding: 4px; color: #94a3b8; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; transition: all 0.2s;
-}
+.collapse-btn { background: none; border: none; padding: 4px; color: #94a3b8; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
 .collapse-btn svg { width: 18px; height: 18px; transition: transform 0.3s ease; }
 .collapse-btn.is-open svg { transform: rotate(180deg); color: #6a11cb; }
 
-/* Recurring Details (Mini Table) */
-.recurring-details { 
-  margin: 0 24px 20px 62px; 
-  background: white; 
-  border: 1px solid #ddd6fe; 
-  border-radius: 12px; 
-  padding: 12px; 
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
-}
-.details-header { 
-  display: grid; 
-  grid-template-columns: 1fr 120px 100px; 
-  gap: 12px; 
-  font-size: 11px; 
-  font-weight: 700; 
-  color: #7c3aed; 
-  text-transform: uppercase; 
-  border-bottom: 1px solid #f1f5f9; 
-  padding: 0 8px 8px;
-  margin-bottom: 8px; 
-}
+.recurring-details { margin: 0 24px 20px 62px; background: white; border: 1px solid #ddd6fe; border-radius: 12px; padding: 12px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.02); }
+.details-header { display: grid; grid-template-columns: 1fr 120px 100px; gap: 12px; font-size: 11px; font-weight: 700; color: #7c3aed; text-transform: uppercase; border-bottom: 1px solid #f1f5f9; padding: 0 8px 8px; margin-bottom: 8px; }
 .details-header.goods-header { grid-template-columns: 1fr 120px 120px; }
-
-.details-row { 
-  display: grid; 
-  grid-template-columns: 1fr 120px 100px; 
-  gap: 12px; 
-  align-items: center; 
-  padding: 6px 8px;
-  border-radius: 6px;
-}
+.details-row { display: grid; grid-template-columns: 1fr 120px 100px; gap: 12px; align-items: center; padding: 6px 8px; border-radius: 6px; }
 .details-row.goods-row { grid-template-columns: 1fr 120px 120px; }
 .details-row:hover { background: #f8fafc; }
 
 .period-cell { font-size: 13px; color: #334155; font-weight: 500; display: flex; align-items: baseline; gap: 8px; }
 .period-label { color: #94a3b8; font-weight: 600; font-size: 11px; }
 
-.mini-input { 
-  width: 100%; padding: 4px 8px; border: 1px solid #e2e8f0; border-radius: 6px; 
-  font-size: 12px; font-weight: 600; text-align: right; color: #10b981;
-}
+.mini-input { width: 100%; padding: 4px 8px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px; font-weight: 600; text-align: right; color: #10b981; }
 .mini-input:focus { border-color: #6a11cb; outline: none; }
 .mini-select { width: 100%; padding: 3px 6px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11px; }
-
 .computed-mini-cell { font-size: 12px; font-weight: 700; color: #10b981; text-align: right; }
-
-.details-footer { 
-  margin-top: 12px; 
-  padding: 10px 8px 0; 
-  border-top: 1px solid #f1f5f9; 
-  display: flex; 
-  justify-content: flex-end; 
-  gap: 12px; 
-  font-size: 13px; 
-  color: #475569;
-}
+.details-footer { margin-top: 12px; padding: 10px 8px 0; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; gap: 12px; font-size: 13px; color: #475569; }
 .details-footer strong { color: #7c3aed; font-size: 15px; }
 
 .col-name { display: flex; align-items: center; gap: 10px; }
 .ben-avatar { width: 28px; height: 28px; border-radius: 50%; background: #e0e7ff; color: #4338ca; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
 .ben-name { font-size: 14px; font-weight: 500; color: #334155; }
-
 .ben-row input, .ben-row select { padding: 6px 10px; font-size: 13px; width: 100%; }
 .computed-val { font-weight: 700; color: #10b981; font-size: 13px; text-align: right; display: block; }
 
@@ -689,6 +823,13 @@ input:disabled, select:disabled, textarea:disabled { background: #f8fafc; color:
 .form-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px; }
 .btn-outline { padding: 12px 28px; border-radius: 12px; background: white; border: 1px solid #e2e8f0; color: #64748b; font-weight: 600; text-decoration: none; }
 .btn-primary { padding: 12px 32px; border-radius: 12px; background: linear-gradient(135deg, #6a11cb, #7c3aed); color: white; border: none; font-weight: 700; cursor: pointer; }
+.btn-primary.success { background: #10b981; }
+.btn-danger { background: #ef4444; color: white; border: none; border-radius: 12px; padding: 12px 24px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
+.btn-danger:hover { background: #dc2626; }
+.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-text { background: none; border: none; color: #64748b; font-weight: 600; cursor: pointer; padding: 12px 20px; }
+.btn-outline.danger { border-color: #ef4444; color: #ef4444; }
+.btn-outline.danger:hover { background: #fef2f2; }
 
 .loading-bens, .empty-bens { padding: 60px; text-align: center; color: #94a3b8; }
 .mini-spinner { width: 24px; height: 24px; border: 3px solid #e2e8f0; border-top-color: #6a11cb; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
@@ -703,5 +844,67 @@ input:disabled, select:disabled, textarea:disabled { background: #f8fafc; color:
 
 @media (max-width: 768px) { 
   .form-row { grid-template-columns: 1fr; }
+}
+
+.card-header.collapsible-header {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.comment-count-badge {
+  font-size: 12px;
+  font-weight: 600;
+  background: #ede9fe;
+  color: #6a11cb;
+  padding: 2px 10px;
+  border-radius: 20px;
+  margin-left: 4px;
+}
+
+.header-right .collapse-chevron {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.3s ease;
+  color: #94a3b8;
+}
+
+.collapse-chevron.rotated {
+  transform: rotate(180deg);
+}
+
+.comment-creator {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.comment-author {
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.comment-date {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Collapse transition */
+.collapse-enter-active, .collapse-leave-active {
+  transition: all 0.3s ease;
+  max-height: 2000px; /* large enough for comments */
+  overflow: hidden;
+}
+.collapse-enter-from, .collapse-leave-to {
+  max-height: 0;
+  opacity: 0;
 }
 </style>

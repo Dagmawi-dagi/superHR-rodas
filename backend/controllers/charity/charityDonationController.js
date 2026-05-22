@@ -276,6 +276,38 @@ exports.approveDonation = async (req, res) => {
   }
 };
 
+// POST /:id/comment  pending → draft (with comments for correction)
+exports.commentDonation = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const donation = await CharityDonation.findByPk(req.params.id, { transaction: t });
+    if (!donation) { await t.rollback(); return res.status(404).json({ success: false, error: 'Donation not found' }); }
+    if (donation.status !== 'pending') { await t.rollback(); return res.status(400).json({ success: false, error: 'Only pending donations can be commented/returned' }); }
+
+    const { text } = req.body;
+    if (!text) { await t.rollback(); return res.status(400).json({ success: false, error: 'Comment text is required' }); }
+
+    const existingComments = Array.isArray(donation.comments) ? donation.comments : [];
+    const newComment = {
+      commentId:   existingComments.length + 1,
+      commentedBy: req.user.userId,
+      commentedAt: new Date().toISOString(),
+      text,
+    };
+
+    await donation.update({
+      status: 'draft',
+      comments: [...existingComments, newComment]
+    }, { transaction: t });
+
+    await t.commit();
+    res.json({ success: true, message: 'Donation returned to draft with comments' });
+  } catch (err) {
+    await t.rollback();
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 // POST /:id/cancel  any → cancelled
 exports.cancelDonation = async (req, res) => {
   const t = await sequelize.transaction();

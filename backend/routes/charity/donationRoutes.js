@@ -17,6 +17,7 @@ router.get('/:id',                      authMiddleware(ALL),   ctrl.getDonationB
 router.put('/:id',                      authMiddleware(ALL),   ctrl.updateDonation);      // draft only
 router.post('/:id/submit',              authMiddleware(ALL),   ctrl.submitDonation);      // draft → pending
 router.post('/:id/approve',             authMiddleware(ADMIN), ctrl.approveDonation);     // pending → approved
+router.post('/:id/comment',             authMiddleware(ADMIN), ctrl.commentDonation);     // pending → draft (correction feedback)
 router.post('/:id/cancel',              authMiddleware(ADMIN), ctrl.cancelDonation);
 
 // ── Donation Items ────────────────────────────────────────────────────────────
