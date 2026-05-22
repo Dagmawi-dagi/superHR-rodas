@@ -119,7 +119,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         field: 'reviewed_at',
       },
-      // [ { user_id, text, created_at }, … ]
+      // [ { createdby, commentID, comment, created_at,.... }]
       comments: {
         type: DataTypes.JSONB,
         defaultValue: [],

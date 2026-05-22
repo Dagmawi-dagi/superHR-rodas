@@ -66,6 +66,11 @@
           <button v-if="row.status === 'draft'" class="action-btn" title="Edit" @click="editDonation(row)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
+           <router-link :to="`/charity/donations/${row.donationId}`" class="action-btn adjust" title="Adjust">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </router-link>
         </div>
       </template>
     </ListTable>
@@ -185,4 +190,11 @@ const submitDonation = async (d: CharityDonation) => {
 .action-btn svg { width: 16px; height: 16px; }
 .action-btn:hover { border-color: #6a11cb; color: #6a11cb; background: #f5f3ff; }
 .action-btn.success:hover { border-color: #10b981; color: #10b981; background: #f0fdf4; }
+.action-btn.adjust {
+  color: #f59e0b;
+}
+.action-btn.adjust:hover {
+  background: #fff7ed;
+  border-color: #f59e0b;
+}
 </style>

@@ -464,7 +464,7 @@ function formatDate(val) {
 .lt-actions {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 6px;
 }
 

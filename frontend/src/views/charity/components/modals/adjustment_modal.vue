@@ -6,64 +6,79 @@
         <button class="close-btn" @click="$emit('close')">×</button>
       </div>
 
+      <!-- Target info summary -->
       <div class="target-info">
         <div class="info-row">
           <span class="label">Beneficiary:</span>
           <span class="value">{{ beneficiaryName }}</span>
         </div>
         <div class="info-row" v-if="interval">
-          <span class="label">Period:</span>
-          <span class="value">{{ interval.intervalType }} #{{ interval.intervalCount }} ({{ formatDate(interval.startDate) }})</span>
+          <span class="label">Interval:</span>
+          <span class="value">
+            {{ item?.isRecurring?.recurring_type }} #{{ interval.recurring_id }}
+          </span>
+        </div>
+        <div class="info-row">
+          <span class="label">Type:</span>
+          <span class="value" style="text-transform: capitalize">{{ itemType }}</span>
         </div>
         <div class="info-row">
           <span class="label">Current {{ itemType === 'money' ? 'Value' : 'Quantity' }}:</span>
           <span class="value highlight">
             {{ itemType === 'money' ? formatCurrency(currentValue) : currentValue }}
-            <span v-if="itemType !== 'money'" style="font-size: 11px; font-weight: normal; color: #94a3b8; margin-left: 4px;">units</span>
+            <span v-if="itemType !== 'money'" style="font-size:11px;font-weight:normal;color:#94a3b8;margin-left:4px">units</span>
           </span>
+        </div>
+        <!-- Blocked: already has pending adjustment -->
+        <div v-if="hasPendingAdjustment" class="pending-warning">
+          ⚠️ A pending adjustment request already exists for this item (ID #{{ item?.onAdjustment?.adjustment_id }}).
+          Wait for admin review before submitting another.
         </div>
       </div>
 
       <form @submit.prevent="handlePrimaryAction" class="modal-form">
         <template v-if="!isConfirming">
+
+          <!-- Action type selector -->
           <div class="form-group">
             <label>Adjustment Type <span class="req">*</span></label>
             <div class="type-grid">
-              <button 
+              <button
                 v-for="t in types" :key="t.id"
                 type="button"
                 class="type-btn"
-                :class="[{ active: form.type === t.id }, t.id]"
-                @click="form.type = t.id"
+                :class="[{ active: form.action === t.id }, t.cls]"
+                @click="form.action = t.id"
+                :disabled="hasPendingAdjustment"
               >
                 {{ t.label }}
               </button>
             </div>
           </div>
 
+          <!-- Amount / Quantity -->
           <div class="form-row">
             <div class="form-group">
               <label>{{ itemType === 'money' ? 'Value (ETB)' : 'Quantity' }} <span class="req">*</span></label>
-              <input 
-                v-model.number="form.amount" 
-                type="number" 
-                step="0.01" 
-                min="0.01" 
-                :max="['deduct', 'return', 'reassign'].includes(form.type) ? currentValue : undefined"
-                :disabled="form.type === 'return'"
-                required 
+              <input
+                v-model.number="form.amount"
+                type="number" step="0.01" min="0.01"
+                :max="['Deduct', 'Return', 'Transfer'].includes(form.action) ? currentValue : undefined"
+                :disabled="form.action === 'Return' || hasPendingAdjustment"
+                required
                 :placeholder="itemType === 'money' ? '0.00' : '0'"
               />
-              <small class="hint" v-if="itemType !== 'money'">The number of units to {{ form.type }}</small>
+              <small class="hint" v-if="itemType !== 'money'">Number of units to {{ form.action?.toLowerCase() }}</small>
             </div>
 
-            <div class="form-group" v-if="form.type === 'reassign'">
+            <!-- Transfer → pick target beneficiary -->
+            <div class="form-group" v-if="form.action === 'Transfer'">
               <label>Transfer To <span class="req">*</span></label>
-              <select v-model="form.toBeneficiaryId" required>
+              <select v-model="form.toBeneficiaryId" required :disabled="hasPendingAdjustment">
                 <option value="">Select recipient</option>
-                <option 
-                  v-for="ben in otherBeneficiaries" 
-                  :key="ben.beneficiaryId" 
+                <option
+                  v-for="ben in otherBeneficiaries"
+                  :key="ben.beneficiaryId"
                   :value="ben.beneficiaryId"
                 >
                   {{ ben.name }}
@@ -72,36 +87,44 @@
             </div>
           </div>
 
+          <!-- Reason -->
           <div class="form-group">
             <label>Reason for Request <span class="req">*</span></label>
-            <textarea 
-              v-model="form.reason" 
-              rows="3" 
-              required 
+            <textarea
+              v-model="form.reason"
+              rows="3" required
+              :disabled="hasPendingAdjustment"
               placeholder="Explain why this adjustment is needed..."
             ></textarea>
           </div>
+
         </template>
 
-        <!-- Confirmation View -->
+        <!-- Confirmation view -->
         <div v-else class="confirm-view">
           <div class="confirm-banner">
-             <!-- <span class="confirm-icon">❓</span> -->
-             <h4 class="confirm-title">Are you sure you want to submit this request?</h4>
+            <h4 class="confirm-title">Submit this adjustment request?</h4>
           </div>
           <div class="confirm-summary">
-            <p><strong>Type:</strong> {{ types.find(t => t.id === form.type)?.label }}</p>
-            <p><strong>{{ itemType === 'money' ? 'Value' : 'Quantity' }}:</strong> {{ itemType === 'money' ? formatCurrency(form.amount) : form.amount + ' units' }}</p>
-            <p v-if="form.type === 'reassign'"><strong>Transfer To:</strong> {{ otherBeneficiaries.find(b => b.beneficiaryId === form.toBeneficiaryId)?.name }}</p>
+            <p><strong>Action:</strong> {{ form.action }}</p>
+            <p><strong>{{ itemType === 'money' ? 'Value' : 'Quantity' }}:</strong>
+              {{ itemType === 'money' ? formatCurrency(form.amount) : form.amount + ' units' }}</p>
+            <p v-if="form.action === 'Transfer'">
+              <strong>Transfer To:</strong>
+              {{ otherBeneficiaries.find(b => b.beneficiaryId === form.toBeneficiaryId)?.name }}
+            </p>
             <p><strong>Reason:</strong> {{ form.reason }}</p>
+            <p v-if="interval"><strong>Interval:</strong> {{ item?.isRecurring?.recurring_type }} #{{ interval.recurring_id }}</p>
           </div>
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn-secondary" @click="isConfirming ? (isConfirming = false) : $emit('close')">
+          <button type="button" class="btn-secondary"
+            @click="isConfirming ? (isConfirming = false) : $emit('close')">
             {{ isConfirming ? 'Back' : 'Cancel' }}
           </button>
-          <button type="submit" class="btn-primary" :disabled="submitting || !isValid">
+          <button type="submit" class="btn-primary"
+            :disabled="submitting || !isValid || hasPendingAdjustment">
             {{ submitting ? 'Submitting...' : isConfirming ? 'Yes, Submit Request' : 'Next' }}
           </button>
         </div>
@@ -115,34 +138,91 @@ import { ref, reactive, computed, watch } from 'vue'
 import charityService from '@/stores/charity'
 
 const props = defineProps({
-  isOpen: { type: Boolean, default: false },
-  item: { type: Object, default: null },
-  interval: { type: Object, default: null },
-  beneficiaries: { type: Array, default: () => [] }
+  isOpen:        { type: Boolean, default: false },
+  item:          { type: Object,  default: null },   // CharityDonationItem
+  interval:      { type: Object,  default: null },   // one entry from isRecurring.recurrings[]
+  beneficiaries: { type: Array,   default: () => [] } // all beneficiaries in the team (for Transfer)
 })
 
 const emit = defineEmits(['close', 'success'])
 
-const submitting = ref(false)
+const submitting   = ref(false)
 const isConfirming = ref(false)
 
 const form = reactive({
-  type: 'deduct',
-  amount: null,
-  reason: '',
+  action:          'Deduct',
+  amount:          null,
+  reason:          '',
   toBeneficiaryId: ''
 })
 
-// Reset on open
+// Reset whenever the modal opens
 watch(() => props.isOpen, (val) => {
   if (val) {
-    isConfirming.value = false
-    form.type = 'deduct'
-    form.amount = null
-    form.reason = ''
+    isConfirming.value   = false
+    form.action          = 'Deduct'
+    form.amount          = null
+    form.reason          = ''
     form.toBeneficiaryId = ''
   }
 })
+
+// Auto-fill amount when switching to Return
+watch(() => form.action, (a) => {
+  if (a === 'Return') form.amount = currentValue.value
+})
+
+// ── Action types (match backend ENUM exactly) ─────────────────────────────────
+const types = [
+  { id: 'Deduct',   label: 'Deduct',   cls: 'deduct'   },
+  { id: 'Increase', label: 'Increase', cls: 'increase' },
+  { id: 'Transfer', label: 'Transfer', cls: 'transfer' },
+  { id: 'Return',   label: 'Return',   cls: 'return'   },
+]
+
+// ── Computed helpers ──────────────────────────────────────────────────────────
+
+const hasPendingAdjustment = computed(() => {
+  if (!props.item?.onAdjustment) return false
+  return ['pending', 'commented'].includes(props.item.onAdjustment.status)
+})
+
+const beneficiaryName = computed(() => {
+  if (!props.item) return 'Beneficiary'
+  return props.item.beneficiary?.name || props.item.Beneficiary?.name || 'Beneficiary'
+})
+
+const itemType = computed(() => props.item?.type || 'money')
+
+// Value to display + use as max for Deduct/Return/Transfer
+const currentValue = computed(() => {
+  if (!props.item) return 0
+  if (props.interval) {
+    // Recurring interval — use the interval's own values (snake_case from JSONB)
+    return itemType.value === 'money'
+      ? parseFloat(props.interval.total_value_in_birr || 0)
+      : parseFloat(props.interval.quantity || 0)
+  }
+  // One-time item — use top-level fields
+  return itemType.value === 'money'
+    ? parseFloat(props.item.totalValueInBirr || 0)
+    : parseFloat(props.item.quantity || 0)
+})
+
+const otherBeneficiaries = computed(() => {
+  if (!props.item) return props.beneficiaries
+  return props.beneficiaries.filter(b => b.beneficiaryId !== props.item.beneficiaryId)
+})
+
+const isValid = computed(() => {
+  if (!props.item || !form.action || !form.reason?.trim()) return false
+  if (form.amount === null || form.amount <= 0)             return false
+  if (form.action === 'Transfer' && !form.toBeneficiaryId)  return false
+  if (['Deduct', 'Return', 'Transfer'].includes(form.action) && form.amount > currentValue.value) return false
+  return true
+})
+
+// ── Submit ────────────────────────────────────────────────────────────────────
 
 const handlePrimaryAction = () => {
   if (!isValid.value) return
@@ -153,96 +233,40 @@ const handlePrimaryAction = () => {
   }
 }
 
-const types = [
-  { id: 'deduct',   label: 'Deduct' },
-  { id: 'increase', label: 'Increase' },
-  { id: 'reassign', label: 'Reassign' },
-  { id: 'return',   label: 'Return' },
-]
-
-const beneficiaryName = computed(() => {
-  if (!props.item) return 'Beneficiary'
-  return props.item.beneficiary?.name || props.item.Beneficiary?.name || 'Beneficiary'
-})
-
-const itemType = computed(() => {
-  if (!props.item) return 'money'
-  return props.item.type || 'money'
-})
-
-const currentValue = computed(() => {
-  if (!props.item) return 0
-  if (props.item.type === 'money') {
-    if (props.interval) return parseFloat(props.interval.value || 0)
-    return parseFloat(props.item.totalValue || 0)
-  } else {
-    if (props.interval) return parseFloat(props.interval.quantity || 0)
-    return parseFloat(props.item.quantity || 0)
-  }
-})
-
-const otherBeneficiaries = computed(() => {
-  if (!props.item) return props.beneficiaries
-  return props.beneficiaries.filter(b => b.beneficiaryId !== props.item.beneficiaryId)
-})
-
-const isValid = computed(() => {
-  if (!props.item) return false
-  if (!form.type || !form.amount || !form.reason) return false
-  if (form.type === 'reassign' && !form.toBeneficiaryId) return false
-  if (['deduct', 'return', 'reassign'].includes(form.type) && form.amount > currentValue.value) return false
-  if (form.type === 'return' && form.amount !== currentValue.value) return false
-  return true
-})
-
-watch(() => form.type, (newType) => {
-  if (newType === 'return') {
-    form.amount = currentValue.value
-  }
-})
-
 const handleSubmit = async () => {
   if (!isValid.value || !props.item) return
   submitting.value = true
-  
+
   const payload = {
-    type: form.type,
-    reason: form.reason,
-    toBeneficiaryId: form.type === 'reassign' ? form.toBeneficiaryId : undefined,
-    intervalId: props.interval?.intervalId
+    action:               form.action,
+    donationItemId:       props.item.donationItemId,
+    recurringIntervalId:  props.interval?.recurring_id ?? null,
+    reason:               form.reason,
+    metadata: {
+      amount:           form.amount,
+      ...(form.action === 'Transfer' && { toBeneficiaryId: form.toBeneficiaryId }),
+    },
   }
 
-  if (itemType.value === 'money') {
-    payload.value = form.amount
-  } else {
-    payload.quantity = form.amount
-  }
-
-  const res = await charityService.requestAdjustment(props.item.donationItemId, payload)
+  const res = await charityService.submitAdjustment(payload)
   submitting.value = false
-  
+
   if (res.success) {
-    emit('success', res.message)
+    emit('success', res.message || 'Adjustment request submitted')
     emit('close')
-    form.amount = null
-    form.reason = ''
+    form.amount          = null
+    form.reason          = ''
     form.toBeneficiaryId = ''
-    isConfirming.value = false
+    isConfirming.value   = false
   } else {
-    alert(res.error || 'Failed to submit request')
+    alert(res.error || 'Failed to submit adjustment request')
   }
 }
 
-const formatDate = (d) => {
-  if (!d) return ''
-  const date = new Date(d)
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-  return `${months[date.getMonth()]}-${date.getDate()}`
-}
+// ── Formatters ────────────────────────────────────────────────────────────────
 
-const formatCurrency = (v) => {
-  return new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(v || 0)
-}
+const formatCurrency = (v) =>
+  new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(v || 0)
 </script>
 
 <style scoped>
@@ -268,17 +292,25 @@ const formatCurrency = (v) => {
 .value { color: #1e293b; font-weight: 600; }
 .highlight { color: #7c3aed; font-size: 15px; }
 
+.pending-warning {
+  margin-top: 10px; padding: 8px 12px; background: #fef3c7;
+  border: 1px solid #f59e0b; border-radius: 8px;
+  font-size: 12px; color: #92400e; line-height: 1.5;
+}
+
 .type-grid {
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px;
 }
 .type-btn {
-  padding: 8px 4px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 11px; font-weight: 600;
-  background: white; color: #64748b; cursor: pointer; transition: all 0.2s;
+  padding: 8px 4px; border: 1px solid #e2e8f0; border-radius: 8px;
+  font-size: 11px; font-weight: 600; background: white; color: #64748b;
+  cursor: pointer; transition: all 0.2s;
 }
-.type-btn.active.deduct { background: #fee2e2; border-color: #ef4444; color: #b91c1c; }
+.type-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.type-btn.active.deduct   { background: #fee2e2; border-color: #ef4444; color: #b91c1c; }
 .type-btn.active.increase { background: #dcfce7; border-color: #22c55e; color: #15803d; }
-.type-btn.active.reassign { background: #fef3c7; border-color: #f59e0b; color: #b45309; }
-.type-btn.active.return { background: #e0f2fe; border-color: #0ea5e9; color: #0369a1; }
+.type-btn.active.transfer { background: #fef3c7; border-color: #f59e0b; color: #b45309; }
+.type-btn.active.return   { background: #e0f2fe; border-color: #0ea5e9; color: #0369a1; }
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
 .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
@@ -286,12 +318,17 @@ label { font-size: 13px; font-weight: 600; color: #475569; }
 .req { color: #ef4444; }
 input, select, textarea {
   padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; width: 100%;
+  box-sizing: border-box;
 }
+input:disabled, select:disabled, textarea:disabled { background: #f8fafc; color: #94a3b8; }
 .hint { font-size: 11px; color: #94a3b8; }
 
-.modal-footer {
-  display: flex; justify-content: flex-end; gap: 12px; margin-top: 10px;
-}
+.confirm-view { margin-bottom: 16px; }
+.confirm-banner { margin-bottom: 12px; }
+.confirm-title { font-size: 15px; font-weight: 600; color: #1e293b; margin: 0; }
+.confirm-summary p { font-size: 13px; color: #475569; margin: 4px 0; }
+
+.modal-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 10px; }
 .btn-primary {
   background: linear-gradient(135deg, #6a11cb, #7c3aed); color: white;
   border: none; padding: 10px 24px; border-radius: 10px; font-weight: 600; cursor: pointer;
