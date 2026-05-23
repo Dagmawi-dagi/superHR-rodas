@@ -193,8 +193,22 @@
               </div>
 
               <div v-for="row in filteredRows" :key="row.beneficiaryId" class="ben-row-wrapper">
-                <div class="ben-row" :class="{ 'active': rowHasValue(row), 'recurring-grid': template.isRecurring, 'under-adj': isUnderAdjustment(row) }">
-                  <div class="col-name">
+                <div
+                  class="ben-row"
+                  :class="{
+                    'active': rowHasValue(row),
+                    'recurring-grid': template.isRecurring,
+                    'under-adj': isUnderAdjustment(row),
+                    'adj-clickable': isView && donationStatus === 'approved' && !template.isRecurring && isUnderAdjustment(row)
+                  }"
+                  :title="isView && donationStatus === 'approved' && !template.isRecurring && isUnderAdjustment(row) ? 'Click to view adjustment request' : undefined"
+                  @click.self="isView && donationStatus === 'approved' && !template.isRecurring && isUnderAdjustment(row) ? openAdjustmentDetail(row) : undefined"
+                >
+                  <div
+                    class="col-name"
+                    :class="{ 'adj-name-click': isView && donationStatus === 'approved' && !template.isRecurring }"
+                    @click="isView && donationStatus === 'approved' && !template.isRecurring && isUnderAdjustment(row) ? openAdjustmentDetail(row) : undefined"
+                  >
                     <button 
                       v-if="template.isRecurring && row.recurringCount > 0"
                       type="button"
@@ -242,7 +256,7 @@
                       <span class="computed-val">{{ formatCurrency(rowValue(row)) }}</span>
                     </div>
                     <div class="col-adj" v-if="isView && donationStatus === 'approved'">
-                      <button type="button" class="btn-adj" title="Adjust" @click="openAdjustment(row)">
+                      <button type="button" class="btn-adj" title="Adjust" @click="openAdjustmentForm(row)">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20v-6M9 17l3 3 3-3M12 4v6M9 7l3-3 3 3"/></svg>
                       #####
                       </button>
@@ -262,7 +276,19 @@
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon"><path d="M12 20v-6M9 17l3 3 3-3M12 4v6M9 7l3-3 3 3"/></svg>
                     </span>
                   </div>
-                  <div v-for="(rec, idx) in row.recurrings" :key="idx" class="details-row" :class="{ 'goods-row': template.type !== 'money', 'has-adj': isView && donationStatus === 'approved', 'under-adj': isUnderAdjustment(row, rec.recurring_id) }">
+                  <div
+                    v-for="(rec, idx) in row.recurrings"
+                    :key="idx"
+                    class="details-row"
+                    :class="{
+                      'goods-row': template.type !== 'money',
+                      'has-adj': isView && donationStatus === 'approved',
+                      'under-adj': isUnderAdjustment(row, rec.recurring_id),
+                      'adj-clickable': isView && donationStatus === 'approved' && isUnderAdjustment(row, rec.recurring_id)
+                    }"
+                    :title="isView && donationStatus === 'approved' && isUnderAdjustment(row, rec.recurring_id) ? 'Click to view adjustment request' : undefined"
+                    @click="isView && donationStatus === 'approved' && isUnderAdjustment(row, rec.recurring_id) ? openAdjustmentDetail(row, rec) : undefined"
+                  >
                     <div class="period-cell">
                       <small class="period-label">{{ row.recurringType.charAt(0).toUpperCase() + row.recurringType.slice(1) }}#{{ idx + 1 }}</small>
                     </div>
@@ -292,7 +318,7 @@
                       {{ formatCurrency(rec.quantity * template.unitValueInBirr) }}
                     </div>
                     <div class="adj-cell" v-if="isView && donationStatus === 'approved'">
-                      <button type="button" class="btn-adj mini" title="Adjust" @click="openAdjustment(row, rec)">
+                      <button type="button" class="btn-adj mini" title="Adjust" @click="openAdjustmentForm(row, rec)">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20v-6M9 17l3 3 3-3M12 4v6M9 7l3-3 3 3"/></svg>
                       </button>
                     </div>
@@ -375,7 +401,7 @@
       </div>
     </div>
 
-    <!-- Adjustment Modal -->
+    <!-- Adjustment Modal (new request) -->
     <AdjustmentModal
       v-if="isAdjModalOpen"
       :is-open="isAdjModalOpen"
@@ -384,6 +410,15 @@
       :beneficiaries="teamBeneficiaries"
       @close="isAdjModalOpen = false"
       @success="handleAdjustmentSuccess"
+    />
+
+    <!-- Adjustment Detail Modal (view existing request + comment + approve/reject) -->
+    <AdjustmentDetailModal
+      :is-open="isAdjDetailOpen"
+      :request="adjDetailRequest"
+      :template_type="template.type"
+      @close="isAdjDetailOpen = false; adjDetailRequest = null"
+      @updated="handleDetailUpdated"
     />
 
     <!-- Toasts -->
@@ -401,6 +436,7 @@ import { useRouter, useRoute } from 'vue-router'
 import CharityService from '@/stores/charity'
 import { useAuthStore } from '@/stores/auth'
 import AdjustmentModal from './components/modals/adjustment_modal.vue'
+import AdjustmentDetailModal from './components/modals/adjustment_detail_modal.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -421,10 +457,38 @@ const isAdjModalOpen = ref(false)
 const adjTargetRow = ref<any>(null)
 const adjTargetRecurring = ref<any>(null)
 
-const openAdjustment = (row: any, recurring: any = null) => {
-  adjTargetRow.value = row
+// Adjustment Detail Modal State
+const isAdjDetailOpen    = ref(false)
+const adjDetailRequest   = ref<any>(null)
+const adjDetailLoading   = ref(false)
+
+// ── Opens the NEW adjustment request form ────────────────────────────────────
+const openAdjustmentForm = (row: any, recurring: any = null) => {
+  adjTargetRow.value       = row
   adjTargetRecurring.value = recurring
-  isAdjModalOpen.value = true
+  isAdjModalOpen.value     = true
+}
+
+// ── Opens the DETAIL view of an existing adjustment request ──────────────────
+const openAdjustmentDetail = async (row: any, recurring: any = null) => {
+  const adj = row.onAdjustment
+  if (!adj?.adjustment_id) return
+  adjDetailRequest.value = null
+  isAdjDetailOpen.value  = true
+  const res = await CharityService.getRequestById(adj.adjustment_id)
+  if (res.success) {
+    adjDetailRequest.value = res.data
+  } else {
+    addToast(res.error || 'Could not load request details', 'error')
+    isAdjDetailOpen.value = false
+  }
+}
+
+const handleDetailUpdated = (msg: string) => {
+  addToast(msg)
+  isAdjDetailOpen.value  = false
+  adjDetailRequest.value = null
+  loadInitialData() // Refresh so onAdjustment state is current
 }
 
 const pendingAdjustmentCount = computed(() => {
@@ -866,6 +930,10 @@ input:disabled, select:disabled, textarea:disabled { background: #f8fafc; color:
 .ben-row:has(.col-adj) { grid-template-columns: 2fr 150px 130px 100px; }
 .ben-row.active { background: #fdfaff; }
 .ben-row.under-adj, .details-row.under-adj { border-left: 5px solid #c2410ca3 !important; }
+.adj-clickable { cursor: pointer; }
+.adj-clickable:hover { background: #fff7ed !important; }
+.adj-name-click { cursor: pointer; }
+.adj-name-click:hover .ben-name { color: #c2410c; text-decoration: underline; }
 
 .collapse-btn { background: none; border: none; padding: 4px; color: #94a3b8; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
 .collapse-btn svg { width: 18px; height: 18px; transition: transform 0.3s ease; }
