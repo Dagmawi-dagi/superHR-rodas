@@ -120,6 +120,7 @@ const roleMenus = {
     { name: 'Leave Requests', path: '/leaves', icon: 'CalendarIcon' },
     { name: 'Salary',    path: '/salary',    icon: 'CurrencyDollarIcon' },
     { name: 'Reports',   path: '/reports',   icon: 'ChartBarIcon' },
+    { name: 'Adjustment Requests',path: '/charity/donations/adjustments',      icon: 'AdjustmentsHorizontalIcon' },
     { name: 'Settings', path: '/settings', icon: 'CogIcon' },
   ],
 

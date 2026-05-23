@@ -119,7 +119,7 @@ export interface CharityRequestApprove {
     beneficiary_id?: number
     charity_team_id?: number
     donation_item_id?: number
-    recurring_interval_id?: number
+    recurring_id?: number
     [key: string]: any
   }
   created_at?: string
@@ -293,7 +293,7 @@ class CharityService {
     try { const r = await api.post(`/charity/requests/${id}/comment`, { text }); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
-  async submitAdjustment(data: { action: string; donationItemId: number; recurringIntervalId?: number; reason?: string }) {
+  async submitAdjustment(data: { action: string; donationItemId: number; recurringId?: number; reason?: string }) {
     try { const r = await api.post('/charity/requests/adjustment', data); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }

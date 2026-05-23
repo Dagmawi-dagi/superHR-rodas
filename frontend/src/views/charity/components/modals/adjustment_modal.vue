@@ -12,10 +12,10 @@
           <span class="label">Beneficiary:</span>
           <span class="value">{{ beneficiaryName }}</span>
         </div>
-        <div class="info-row" v-if="interval">
-          <span class="label">Interval:</span>
+        <div class="info-row" v-if="recurring">
+          <span class="label">Period:</span>
           <span class="value">
-            {{ item?.isRecurring?.recurring_type }} #{{ interval.recurring_id }}
+            {{ item?.isRecurring?.recurring_type }} #{{ recurring.recurring_id }}
           </span>
         </div>
         <div class="info-row">
@@ -114,7 +114,7 @@
               {{ otherBeneficiaries.find(b => b.beneficiaryId === form.toBeneficiaryId)?.name }}
             </p>
             <p><strong>Reason:</strong> {{ form.reason }}</p>
-            <p v-if="interval"><strong>Interval:</strong> {{ item?.isRecurring?.recurring_type }} #{{ interval.recurring_id }}</p>
+            <p v-if="recurring"><strong>Period:</strong> {{ item?.isRecurring?.recurring_type }} #{{ recurring.recurring_id }}</p>
           </div>
         </div>
 
@@ -140,7 +140,7 @@ import charityService from '@/stores/charity'
 const props = defineProps({
   isOpen:        { type: Boolean, default: false },
   item:          { type: Object,  default: null },   // CharityDonationItem
-  interval:      { type: Object,  default: null },   // one entry from isRecurring.recurrings[]
+  recurring:     { type: Object,  default: null },   // one entry from isRecurring.recurrings[]
   beneficiaries: { type: Array,   default: () => [] } // all beneficiaries in the team (for Transfer)
 })
 
@@ -184,7 +184,11 @@ const types = [
 
 const hasPendingAdjustment = computed(() => {
   if (!props.item?.onAdjustment) return false
-  return ['pending', 'commented'].includes(props.item.onAdjustment.status)
+  const adjs = Array.isArray(props.item.onAdjustment) ? props.item.onAdjustment : [props.item.onAdjustment]
+  return adjs.some(a => 
+    ['pending', 'commented'].includes(a.status) && 
+    (props.recurring ? a.recurring_id === props.recurring.recurring_id : a.recurring_id === null)
+  )
 })
 
 const beneficiaryName = computed(() => {
@@ -197,11 +201,11 @@ const itemType = computed(() => props.item?.type || 'money')
 // Value to display + use as max for Deduct/Return/Transfer
 const currentValue = computed(() => {
   if (!props.item) return 0
-  if (props.interval) {
-    // Recurring interval — use the interval's own values (snake_case from JSONB)
+  if (props.recurring) {
+    // Recurring period — use the recurring's own values (snake_case from JSONB)
     return itemType.value === 'money'
-      ? parseFloat(props.interval.total_value_in_birr || 0)
-      : parseFloat(props.interval.quantity || 0)
+      ? parseFloat(props.recurring.total_value_in_birr || 0)
+      : parseFloat(props.recurring.quantity || 0)
   }
   // One-time item — use top-level fields
   return itemType.value === 'money'
@@ -238,10 +242,10 @@ const handleSubmit = async () => {
   submitting.value = true
 
   const payload = {
-    action:               form.action,
-    donationItemId:       props.item.donationItemId,
-    recurringIntervalId:  props.interval?.recurring_id ?? null,
-    reason:               form.reason,
+    action:          form.action,
+    donationItemId:  props.item.donationItemId,
+    recurringId:     props.recurring?.recurring_id ?? null,
+    reason:          form.reason,
     metadata: {
       amount:           form.amount,
       ...(form.action === 'Transfer' && { toBeneficiaryId: form.toBeneficiaryId }),
