@@ -18,320 +18,367 @@
 
     <form @submit.prevent="handleSubmit" class="donation-form">
       
-      <!-- ═══════════════ STEP 1: DONATION INFO (Stacked) ═══════════════ -->
+      <!-- ═══════════════ STEP 1: DONATION INFO (Collapsible) ═══════════════ -->
       <div class="form-card">
-        <div class="card-header">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7H4m16 5H4m16 5H4"/></svg>
-          <h3>Donation Information</h3>
-        </div>
-        <div class="card-body">
-          <div class="form-row">
-            <div class="form-field">
-              <label>Charity Team <span class="req">*</span></label>
-              <select v-model="form.teamId" @change="handleTeamChange" :disabled="isEdit || isView">
-                <option value="">Select team</option>
-                <option v-for="t in teams" :key="t.teamId" :value="t.teamId">{{ t.name }}</option>
-              </select>
-              <span class="error" v-if="errors.teamId">{{ errors.teamId }}</span>
-            </div>
-            <div class="form-field">
-              <label>Delivery Date <span class="req">*</span></label>
-              <input type="date" v-model="form.donationDeliveryDate" :disabled="isView" />
-              <span class="error" v-if="errors.donationDeliveryDate">{{ errors.donationDeliveryDate }}</span>
-            </div>
+        <div class="card-header collapsible-header" @click="isInfoExpanded = !isInfoExpanded">
+          <div class="header-left">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7H4m16 5H4m16 5H4"/></svg>
+            <h3>Donation Information</h3>
           </div>
-          <div class="form-field full">
-            <label>Donation Description</label>
-            <textarea v-model="form.description" rows="2" placeholder="e.g. Winter Clothing Drive 2024" :disabled="isView"></textarea>
+          <div class="header-right">
+            <svg 
+              class="collapse-chevron" 
+              :class="{ rotated: isInfoExpanded }" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              stroke-width="2"
+            >
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
           </div>
         </div>
-      </div>
 
-      <!-- ═══════════════ STEP 1.5: HISTORY & COMMENTS (Stacked) ═══════════════ -->
-      <div class="form-card" v-if="donationComments.length > 0">
-        <div class="card-header">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <h3>History & Comments</h3>
-        </div>
-        <div class="card-body">
-          <div class="comments-list">
-            <div v-for="c in donationComments" :key="c.commentId" class="comment-item">
-              <div class="comment-meta">
-                <span class="comment-author">Admin #{{ c.commentedBy }}</span>
-                <span class="comment-date">{{ CharityService.formatDate(c.commentedAt) }}</span>
+        <transition name="collapse">
+          <div v-show="isInfoExpanded" class="card-body">
+            <div class="form-row">
+              <div class="form-field">
+                <label>Charity Team <span class="req">*</span></label>
+                <select v-model="form.teamId" @change="handleTeamChange" :disabled="isEdit || isView">
+                  <option value="">Select team</option>
+                  <option v-for="t in teams" :key="t.teamId" :value="t.teamId">{{ t.name }}</option>
+                </select>
+                <span class="error" v-if="errors.teamId">{{ errors.teamId }}</span>
               </div>
-              <p class="comment-text">{{ c.text }}</p>
+              <div class="form-field">
+                <label>Delivery Date <span class="req">*</span></label>
+                <input type="date" v-model="form.donationDeliveryDate" :disabled="isView" />
+                <span class="error" v-if="errors.donationDeliveryDate">{{ errors.donationDeliveryDate }}</span>
+              </div>
+            </div>
+            <div class="form-field full">
+              <label>Donation Description</label>
+              <textarea v-model="form.description" rows="2" placeholder="e.g. Winter Clothing Drive 2024" :disabled="isView"></textarea>
             </div>
           </div>
-        </div>
+        </transition>
       </div>
 
-      <!-- ═══════════════ STEP 2: ITEM TEMPLATE (Stacked) ═══════════════ -->
+      <!-- ═══════════════ STEP 2: ITEM TEMPLATE (Collapsible) ═══════════════ -->
       <div class="form-card" v-if="form.teamId">
-        <div class="card-header">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-          <h3>Item Template</h3>
-          <small class="header-hint">Define what is being distributed to all selected beneficiaries</small>
-        </div>
-        <div class="card-body">
-          <div class="form-row">
-            <div class="form-field">
-              <label>Item Type <span class="req">*</span></label>
-              <select v-model="template.type" :disabled="isView">
-                <option value="money">Money</option>
-                <option value="goods">Goods</option>
-                <option value="service">Service</option>
-              </select>
-            </div>
-            <div class="form-field">
-              <label>Item Description <span class="req">*</span></label>
-              <input type="text" v-model="template.description" placeholder="e.g. Monthly Allowance, 50kg Rice" :disabled="isView" />
-            </div>
+        <div class="card-header collapsible-header" @click="isTemplateExpanded = !isTemplateExpanded">
+          <div class="header-left">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            <h3>Item Template</h3>
+            <small class="header-hint">Define what is being distributed to all selected beneficiaries</small>
           </div>
-          <div class="form-row" v-if="template.type !== 'money'">
-            <div class="form-field">
-              <label>Unit Value (ETB) <span class="req">*</span></label>
-              <input type="number" step="0.01" v-model.number="template.unitValueInBirr" placeholder="0.00" :disabled="isView" />
-            </div>
-            <div class="form-field"></div>
-          </div>
-          
-          <div class="recurring-toggle">
-            <label class="toggle-container">
-              <input type="checkbox" v-model="template.isRecurring" :disabled="isView" />
-              <span class="toggle-label">Is this a recurring distribution?</span>
-            </label>
+          <div class="header-right">
+            <svg 
+              class="collapse-chevron" 
+              :class="{ rotated: isTemplateExpanded }" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              stroke-width="2"
+            >
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
           </div>
         </div>
+
+        <transition name="collapse">
+          <div v-show="isTemplateExpanded" class="card-body">
+            <div class="form-row">
+              <div class="form-field">
+                <label>Item Type <span class="req">*</span></label>
+                <select v-model="template.type" :disabled="isView">
+                  <option value="money">Money</option>
+                  <option value="goods">Goods</option>
+                  <option value="service">Service</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label>Item Description <span class="req">*</span></label>
+                <input type="text" v-model="template.description" placeholder="e.g. Monthly Allowance, 50kg Rice" :disabled="isView" />
+              </div>
+            </div>
+            <div class="form-row" v-if="template.type !== 'money'">
+              <div class="form-field">
+                <label>Unit Value (ETB) <span class="req">*</span></label>
+                <input type="number" step="0.01" v-model.number="template.unitValueInBirr" placeholder="0.00" :disabled="isView" />
+              </div>
+              <div class="form-field"></div>
+            </div>
+            
+            <div class="recurring-toggle">
+              <label class="toggle-container">
+                <input type="checkbox" v-model="template.isRecurring" :disabled="isView" />
+                <span class="toggle-label">Is this a recurring distribution?</span>
+              </label>
+            </div>
+          </div>
+        </transition>
       </div>
 
-      <!-- ═══════════════ STEP 3: BENEFICIARY ALLOCATION (TABLE STYLE) ═══════════════ -->
+      <!-- ═══════════════ Donation Comments (already collapsible) ═══════════════ -->
+      <div class="form-card" v-if="donationComments.length > 0">
+        <div class="card-header collapsible-header" @click="isCommentsExpanded = !isCommentsExpanded">
+          <div class="header-left">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <h3>Donation Comments</h3>
+            <span class="comment-count-badge">{{ donationComments.length }}</span>
+          </div>
+          <div class="header-right">
+            <svg 
+              class="collapse-chevron" 
+              :class="{ rotated: isCommentsExpanded }" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              stroke-width="2"
+            >
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
+          </div>
+        </div>
+
+        <transition name="collapse">
+          <div v-show="isCommentsExpanded" class="card-body">
+            <div class="comments-list">
+              <div v-for="c in donationComments" :key="c.commentId" class="comment-item">
+                <div class="comment-meta">
+                  <div class="comment-creator">
+                    <span v-if="c.creator" class="comment-author">
+                      {{ c.creator.firstName }} {{ c.creator.lastName }}
+                    </span>
+                    <span v-else class="comment-author">Admin #{{ c.commentedBy }}</span>
+                    <span class="comment-date">{{ CharityService.formatDate(c.commentedAt) }}</span>
+                  </div>
+                </div>
+                <p class="comment-text">{{ c.text }}</p>
+              </div>
+            </div>
+          </div>
+        </transition>
+      </div>
+
+      <!-- ═══════════════ STEP 3: BENEFICIARY ALLOCATION (Collapsible) ═══════════════ -->
       <div class="form-card" v-if="form.teamId">
-        <div class="card-header">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          <h3>Beneficiary Allocation</h3>
-          <div class="header-badges">
+        <div class="card-header collapsible-header" @click="isAllocationExpanded = !isAllocationExpanded">
+          <div class="header-left">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <h3>Beneficiary Allocation</h3>
             <span class="count-badge">{{ teamBeneficiaries.length }} beneficiaries in team</span>
             <span v-if="pendingAdjustmentCount > 0" class="adj-badge">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               {{ pendingAdjustmentCount }} items under adjustment
             </span>
           </div>
+          <div class="header-right">
+            <svg 
+              class="collapse-chevron" 
+              :class="{ rotated: isAllocationExpanded }" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              stroke-width="2"
+            >
+              <path d="m6 9 6 6 6-6"/>
+            </svg>
+          </div>
         </div>
-        
-        <div class="card-body ">
-          <!-- ── BULK SETTINGS BAR ── --> 
-          <div v-if="!isView" class="flex mw-100px gap-2 mb-3!  text-base font-bold text-slate-700 text-xs" >
-            <span style="width: 16px;">
-               <svg viewBox="0 0 24 24" fill="none"  stroke="#6a11cb" stroke-width="2" class="icon-sm"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </span>
-              Bulk Fill All:
-            </div>
 
-          <div v-if="!isView" class="bulk-settings-bar">
-            
-            
-            <div class="bulk-inputs">
-              <div class="bulk-field">
-                <input type="number" v-model.number="bulk.value" :placeholder="template.type === 'money' ? 'Amount (ETB)' : 'Quantity'" />
-              </div>
-              
-              <div class="bulk-field" v-if="template.type === 'money'">
-                <select v-model="bulk.paymentMethod">
-                  <option value="bank">Bank</option>
-                  <option value="cash">Cash</option>
-                </select>
+        <transition name="collapse">
+          <div v-show="isAllocationExpanded" class="card-body">
+            <!-- ── BULK SETTINGS BAR ── -->
+            <div v-if="!isView" class="flex mw-100px gap-2 mb-3!  text-base font-bold text-slate-700 text-xs" >
+              <span style="width: 16px;">
+                 <svg viewBox="0 0 24 24" fill="none"  stroke="#6a11cb" stroke-width="2" class="icon-sm"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </span>
+                Bulk Fill All:
               </div>
 
-              <template v-if="template.isRecurring">
+            <div v-if="!isView" class="bulk-settings-bar">
+              <div class="bulk-inputs">
                 <div class="bulk-field">
-                  <select v-model="bulk.recurringType">
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
-                </div>
-                <div class="bulk-field">
-                  <input type="number" v-model.number="bulk.recurringCount" placeholder="Count" min="0" />
-                </div>
-              </template>
-
-              <button type="button" class="btn-bulk-apply" @click="applyBulkSettings">
-                Apply to All
-              </button>
-            </div>
-
-            <div class="list-search">
-              <input type="text" v-model="allocationSearch" placeholder="Search in list..." />
-            </div>
-          </div>
-
-          <div v-if="loadingBens" class="loading-bens">
-            <div class="mini-spinner"></div>
-            Loading team beneficiaries...
-          </div>
-          <div v-else-if="teamBeneficiaries.length === 0" class="empty-bens">
-            No beneficiaries found for this team.
-          </div>
-          <template v-else>
-            <div class="ben-table">
-              <div class="ben-header" :class="{ 'recurring-grid': template.isRecurring }">
-                <span class="col-name">Beneficiary</span>
-                <template v-if="template.isRecurring">
-                  <span class="col-int">Recurring Type</span>
-                  <span class="col-count">Count</span>
-                </template>
-                <template v-else>
-                  <span class="col-input">{{ template.type === 'money' ? 'Amount (ETB)' : 'Quantity' }}</span>
-                  <span class="col-method" v-if="template.type === 'money'">Method</span>
-                  <span class="col-total" v-if="template.type !== 'money'">Total Value</span>
-                  <span class="col-adj" v-if="isView && donationStatus === 'approved'">
-                    Action
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon"><path d="M12 20v-6M9 17l3 3 3-3M12 4v6M9 7l3-3 3 3"/></svg>
-                  </span>
-                </template>
-              </div>
-
-              <div v-for="row in filteredRows" :key="row.beneficiaryId" class="ben-row-wrapper">
-                <div
-                  class="ben-row"
-                  :class="{
-                    'active': rowHasValue(row),
-                    'recurring-grid': template.isRecurring,
-                    'under-adj': isUnderAdjustment(row),
-                    'adj-clickable': isView && donationStatus === 'approved' && !template.isRecurring && isUnderAdjustment(row)
-                  }"
-                  :title="isView && donationStatus === 'approved' && !template.isRecurring && isUnderAdjustment(row) ? 'Click to view adjustment request' : undefined"
-                  @click.self="isView && donationStatus === 'approved' && !template.isRecurring && isUnderAdjustment(row) ? openAdjustmentDetail(row) : undefined"
-                >
-                  <div
-                    class="col-name"
-                    :class="{ 'adj-name-click': isView && donationStatus === 'approved' && !template.isRecurring }"
-                    @click="isView && donationStatus === 'approved' && !template.isRecurring && isUnderAdjustment(row) ? openAdjustmentDetail(row) : undefined"
-                  >
-                    <button 
-                      v-if="template.isRecurring && row.recurringCount > 0"
-                      type="button"
-                      class="collapse-btn"
-                      :class="{ 'is-open': row.isExpanded }"
-                      @click="row.isExpanded = !row.isExpanded"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M9 18l6-6-6-6"/></svg>
-                    </button>
-                    <div class="ben-avatar">{{ row.name[0] }}</div>
-                    <span class="ben-name text-truncate">{{ row.name }}</span>
-                  </div>
-
-                  <template v-if="template.isRecurring">
-                    <div class="col-int">
-                      <select v-model="row.recurringType" @change="syncRecurrings(row)" :disabled="isView">
-                        <option value="daily">Daily</option>
-                        <option value="weekly">Weekly</option>
-                        <option value="monthly">Monthly</option>
-                      </select>
-                    </div>
-                    <div class="col-count">
-                      <input type="number" v-model.number="row.recurringCount" min="0" placeholder="0" @input="syncRecurrings(row)" :disabled="isView" />
-                    </div>
-                  </template>
-
-                  <template v-else>
-                    <div class="col-input">
-                      <input 
-                        type="number" 
-                        v-model.number="row.value" 
-                        step="0.01" 
-                        min="0" 
-                        :placeholder="template.type === 'money' ? '0.00' : '0'"
-                        :disabled="isView"
-                      />
-                    </div>
-                    <div class="col-method" v-if="template.type === 'money'">
-                      <select v-model="row.paymentMethod" :disabled="isView">
-                        <option value="bank">Bank</option>
-                        <option value="cash">Cash</option>
-                      </select>
-                    </div>
-                    <div class="col-total" v-if="template.type !== 'money'">
-                      <span class="computed-val">{{ formatCurrency(rowValue(row)) }}</span>
-                    </div>
-                    <div class="col-adj" v-if="isView && donationStatus === 'approved'">
-                      <button type="button" class="btn-adj" title="Adjust" @click="openAdjustmentForm(row)">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20v-6M9 17l3 3 3-3M12 4v6M9 7l3-3 3 3"/></svg>
-                      #####
-                      </button>
-                    </div>
-                  </template>
+                  <input type="number" v-model.number="bulk.value" :placeholder="template.type === 'money' ? 'Amount (ETB)' : 'Quantity'" />
                 </div>
                 
-                <!-- ── RECURRING DETAILS (TABLE STYLE) ── -->
-                <div class="recurring-details" v-if="template.isRecurring && row.recurringCount > 0 && row.isExpanded">
-                  <div class="details-header" :class="{ 'goods-header': template.type !== 'money', 'has-adj': isView && donationStatus === 'approved' }">
-                    <span>Period ID</span>
-                    <span>{{ template.type === 'money' ? 'Value (ETB)' : 'Quantity' }}</span>
-                    <span v-if="template.type === 'money'">Method</span>
-                    <span v-if="template.type !== 'money'">Subtotal</span>
-                    <span v-if="isView && donationStatus === 'approved'">
+                <div class="bulk-field" v-if="template.type === 'money'">
+                  <select v-model="bulk.paymentMethod">
+                    <option value="bank">Bank</option>
+                    <option value="cash">Cash</option>
+                  </select>
+                </div>
+
+                <template v-if="template.isRecurring">
+                  <div class="bulk-field">
+                    <select v-model="bulk.recurringType">
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+                  <div class="bulk-field">
+                    <input type="number" v-model.number="bulk.recurringCount" placeholder="Count" min="0" />
+                  </div>
+                </template>
+
+                <button type="button" class="btn-bulk-apply" @click="applyBulkSettings">
+                  Apply to All
+                </button>
+              </div>
+
+              <div class="list-search">
+                <input type="text" v-model="allocationSearch" placeholder="Search in list..." />
+              </div>
+            </div>
+
+            <div v-if="loadingBens" class="loading-bens">
+              <div class="mini-spinner"></div>
+              Loading team beneficiaries...
+            </div>
+            <div v-else-if="teamBeneficiaries.length === 0" class="empty-bens">
+              No beneficiaries found for this team.
+            </div>
+            <template v-else>
+              <div class="ben-table">
+                <div class="ben-header" :class="{ 'recurring-grid': template.isRecurring }">
+                  <span class="col-name">Beneficiary</span>
+                  <template v-if="template.isRecurring">
+                    <span class="col-int">Recurring Type</span>
+                    <span class="col-count">Count</span>
+                  </template>
+                  <template v-else>
+                    <span class="col-input">{{ template.type === 'money' ? 'Amount (ETB)' : 'Quantity' }}</span>
+                    <span class="col-method" v-if="template.type === 'money'">Method</span>
+                    <span class="col-total" v-if="template.type !== 'money'">Total Value</span>
+                    <span class="col-adj" v-if="isView && donationStatus === 'approved'">
                       Action
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon"><path d="M12 20v-6M9 17l3 3 3-3M12 4v6M9 7l3-3 3 3"/></svg>
                     </span>
-                  </div>
-                  <div
-                    v-for="(rec, idx) in row.recurrings"
-                    :key="idx"
-                    class="details-row"
-                    :class="{
-                      'goods-row': template.type !== 'money',
-                      'has-adj': isView && donationStatus === 'approved',
-                      'under-adj': isUnderAdjustment(row, rec.recurring_id),
-                      'adj-clickable': isView && donationStatus === 'approved' && isUnderAdjustment(row, rec.recurring_id)
-                    }"
-                    :title="isView && donationStatus === 'approved' && isUnderAdjustment(row, rec.recurring_id) ? 'Click to view adjustment request' : undefined"
-                    @click="isView && donationStatus === 'approved' && isUnderAdjustment(row, rec.recurring_id) ? openAdjustmentDetail(row, rec) : undefined"
-                  >
-                    <div class="period-cell">
-                      <small class="period-label">{{ row.recurringType.charAt(0).toUpperCase() + row.recurringType.slice(1) }}#{{ idx + 1 }}</small>
-                    </div>
-                    <div class="val-input-wrap">
-                      <input 
-                        v-if="template.type === 'money'"
-                        type="number" step="0.01" 
-                        v-model.number="rec.total_value_in_birr" 
-                        class="mini-input"
-                        :disabled="isView"
-                      />
-                      <input 
-                        v-else
-                        type="number" 
-                        v-model.number="rec.quantity" 
-                        class="mini-input"
-                        :disabled="isView"
-                      />
-                    </div>
-                    <div v-if="template.type === 'money'" class="method-box">
-                      <select v-model="rec.paymentMethod" class="mini-select" :disabled="isView">
-                        <option value="bank">Bank</option>
-                        <option value="cash">Cash</option>
-                      </select>
-                    </div>
-                    <div v-else class="computed-mini-cell">
-                      {{ formatCurrency(rec.quantity * template.unitValueInBirr) }}
-                    </div>
-                    <div class="adj-cell" v-if="isView && donationStatus === 'approved'">
-                      <button type="button" class="btn-adj mini" title="Adjust" @click="openAdjustmentForm(row, rec)">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20v-6M9 17l3 3 3-3M12 4v6M9 7l3-3 3 3"/></svg>
+                  </template>
+                </div>
+
+                <div v-for="row in filteredRows" :key="row.beneficiaryId" class="ben-row-wrapper">
+                  <div class="ben-row" :class="{ 'active': rowHasValue(row), 'recurring-grid': template.isRecurring, 'under-adj': isUnderAdjustment(row) }" @click="(!template.isRecurring && isUnderAdjustment(row)) ? viewAdjustmentDetail(row) : null">
+                    <div class="col-name">
+                      <button 
+                        v-if="template.isRecurring && row.recurringCount > 0"
+                        type="button"
+                        class="collapse-btn"
+                        :class="{ 'is-open': row.isExpanded }"
+                        @click.stop="row.isExpanded = !row.isExpanded"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M9 18l6-6-6-6"/></svg>
                       </button>
+                      <div class="ben-avatar">{{ row.name[0] }}</div>
+                      <span class="ben-name text-truncate">{{ row.name }}</span>
                     </div>
+
+                    <template v-if="template.isRecurring">
+                      <div class="col-int">
+                        <select v-model="row.recurringType" @change="syncRecurrings(row)" :disabled="isView" @click.stop>
+                          <option value="daily">Daily</option>
+                          <option value="weekly">Weekly</option>
+                          <option value="monthly">Monthly</option>
+                        </select>
+                      </div>
+                      <div class="col-count">
+                        <input type="number" v-model.number="row.recurringCount" min="0" placeholder="0" @input="syncRecurrings(row)" :disabled="isView" @click.stop />
+                      </div>
+                    </template>
+
+                    <template v-else>
+                      <div class="col-input">
+                        <input 
+                          type="number" 
+                          v-model.number="row.value" 
+                          step="0.01" 
+                          min="0" 
+                          :placeholder="template.type === 'money' ? '0.00' : '0'"
+                          :disabled="isView"
+                          @click.stop
+                        />
+                      </div>
+                      <div class="col-method" v-if="template.type === 'money'">
+                        <select v-model="row.paymentMethod" :disabled="isView" @click.stop>
+                          <option value="bank">Bank</option>
+                          <option value="cash">Cash</option>
+                        </select>
+                      </div>
+                      <div class="col-total" v-if="template.type !== 'money'">
+                        <span class="computed-val">{{ formatCurrency(rowValue(row)) }}</span>
+                      </div>
+                      <div class="col-adj" v-if="isView && donationStatus === 'approved'">
+                        <button type="button" class="btn-adj" title="Adjust" @click.stop="openAdjustment(row)">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20v-6M9 17l3 3 3-3M12 4v6M9 7l3-3 3 3"/></svg>
+                        </button>
+                      </div>
+                    </template>
                   </div>
-                  <div class="details-footer">
-                    <span>Beneficiary Subtotal:</span>
-                    <strong>{{ formatCurrency(rowValue(row)) }}</strong>
+                  
+                  <!-- ── RECURRING DETAILS (TABLE STYLE) ── -->
+                  <div class="recurring-details" v-if="template.isRecurring && row.recurringCount > 0 && row.isExpanded">
+                    <div class="details-header" :class="{ 'goods-header': template.type !== 'money', 'has-adj': isView && donationStatus === 'approved' }">
+                      <span>Period ID</span>
+                      <span>{{ template.type === 'money' ? 'Value (ETB)' : 'Quantity' }}</span>
+                      <span v-if="template.type === 'money'">Method</span>
+                      <span v-if="template.type !== 'money'">Subtotal</span>
+                      <span v-if="isView && donationStatus === 'approved'">
+                        Action
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon"><path d="M12 20v-6M9 17l3 3 3-3M12 4v6M9 7l3-3 3 3"/></svg>
+                      </span>
+                    </div>
+                    <div v-for="(rec, idx) in row.recurrings" :key="idx" class="details-row" :class="{ 'goods-row': template.type !== 'money', 'has-adj': isView && donationStatus === 'approved', 'under-adj': isUnderAdjustment(row, rec.recurring_id) }" @click="isUnderAdjustment(row, rec.recurring_id) ? viewAdjustmentDetail(row, rec.recurring_id) : null">
+                      <div class="period-cell">
+                        <small class="period-label">{{ row.recurringType.charAt(0).toUpperCase() + row.recurringType.slice(1) }}#{{ (idx as number) + 1 }}</small>
+                      </div>
+                      <div class="val-input-wrap">
+                        <input 
+                          v-if="template.type === 'money'"
+                          type="number" step="0.01" 
+                          v-model.number="rec.total_value_in_birr" 
+                          class="mini-input"
+                          :disabled="isView"
+                          @click.stop
+                        />
+                        <input 
+                          v-else
+                          type="number" 
+                          v-model.number="rec.quantity" 
+                          class="mini-input"
+                          :disabled="isView"
+                          @click.stop
+                        />
+                      </div>
+                      <div v-if="template.type === 'money'" class="method-box">
+                        <select v-model="rec.paymentMethod" class="mini-select" :disabled="isView" @click.stop>
+                          <option value="bank">Bank</option>
+                          <option value="cash">Cash</option>
+                        </select>
+                      </div>
+                      <div v-else class="computed-mini-cell">
+                        {{ formatCurrency(rec.quantity * template.unitValueInBirr) }}
+                      </div>
+                      <div class="adj-cell" v-if="isView && donationStatus === 'approved'">
+                        <button type="button" class="btn-adj mini" title="Adjust" @click.stop="openAdjustment(row, rec)">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20v-6M9 17l3 3 3-3M12 4v6M9 7l3-3 3 3"/></svg>
+                        </button>
+                      </div>
+                    </div>
+                    <div class="details-footer">
+                      <span>Beneficiary Subtotal:</span>
+                      <strong>{{ formatCurrency(rowValue(row)) }}</strong>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </template>
-        </div>
+            </template>
+          </div>
+        </transition>
 
         <div class="card-footer" v-if="filledRows.length > 0">
           <div class="grand-total">
@@ -381,7 +428,7 @@
       </div>
     </form>
 
-    <!-- Comment & Return Form Overlay -->
+    <!-- Comment & Return Form Overlay (Main Donation) -->
     <div v-if="showCommentForm" class="comment-overlay">
       <div class="comment-modal">
         <div class="modal-header">
@@ -401,7 +448,7 @@
       </div>
     </div>
 
-    <!-- Adjustment Modal (new request) -->
+    <!-- Adjustment Modal (Team Leader submissions) -->
     <AdjustmentModal
       v-if="isAdjModalOpen"
       :is-open="isAdjModalOpen"
@@ -412,13 +459,17 @@
       @success="handleAdjustmentSuccess"
     />
 
-    <!-- Adjustment Detail Modal (view existing request + comment + approve/reject) -->
+    <!-- Adjustment Detail Modal (Viewing/Acting on pending requests) -->
     <AdjustmentDetailModal
-      :is-open="isAdjDetailOpen"
-      :request="adjDetailRequest"
-      :template_type="template.type"
-      @close="isAdjDetailOpen = false; adjDetailRequest = null"
-      @updated="handleDetailUpdated"
+      v-if="selectedAdjRequest"
+      :is-open="!!selectedAdjRequest"
+      :request="selectedAdjRequest"
+      :processing="isSubmitting"
+      @close="selectedAdjRequest = null"
+      @approve="handleApproveRequest"
+      @reject="(req: any, text: string) => handleActionSubmitAdjRequest(req, 'reject', text)"
+      @comment="(req: any, text: string) => handleActionSubmitAdjRequest(req, 'comment', text)"
+      @resubmit="handleResubmitRequest"
     />
 
     <!-- Toasts -->
@@ -431,9 +482,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import CharityService from '@/stores/charity'
+import CharityService, { type CharityRequestApprove } from '@/stores/charity'
 import { useAuthStore } from '@/stores/auth'
 import AdjustmentModal from './components/modals/adjustment_modal.vue'
 import AdjustmentDetailModal from './components/modals/adjustment_detail_modal.vue'
@@ -451,44 +502,70 @@ const donationStatus = ref('draft')
 const donationComments = ref<any[]>([])
 const formComment = ref('')
 const showCommentForm = ref(false)
+const isCommentsExpanded = ref(false)
+
+// ── Collapsible state ──
+const isInfoExpanded = ref(true)
+const isTemplateExpanded = ref(true)
+const isAllocationExpanded = ref(true)
 
 // Adjustment Modal State
 const isAdjModalOpen = ref(false)
 const adjTargetRow = ref<any>(null)
 const adjTargetRecurring = ref<any>(null)
+const adjRequestToEdit = ref<any>(null)
 
-// Adjustment Detail Modal State
-const isAdjDetailOpen    = ref(false)
-const adjDetailRequest   = ref<any>(null)
-const adjDetailLoading   = ref(false)
+// Adjustment Detail State
+const selectedAdjRequest = ref<CharityRequestApprove | null>(null)
 
-// ── Opens the NEW adjustment request form ────────────────────────────────────
-const openAdjustmentForm = (row: any, recurring: any = null) => {
-  adjTargetRow.value       = row
+const openAdjustment = (row: any, recurring: any = null) => {
+  adjTargetRow.value = row
   adjTargetRecurring.value = recurring
-  isAdjModalOpen.value     = true
+  adjRequestToEdit.value = null
+  isAdjModalOpen.value = true
 }
 
-// ── Opens the DETAIL view of an existing adjustment request ──────────────────
-const openAdjustmentDetail = async (row: any, recurring: any = null) => {
-  const adj = row.onAdjustment
-  if (!adj?.adjustment_id) return
-  adjDetailRequest.value = null
-  isAdjDetailOpen.value  = true
-  const res = await CharityService.getRequestById(adj.adjustment_id)
-  if (res.success) {
-    adjDetailRequest.value = res.data
-  } else {
-    addToast(res.error || 'Could not load request details', 'error')
-    isAdjDetailOpen.value = false
+const closeAdjustmentModal = () => {
+  isAdjModalOpen.value = false
+  adjTargetRow.value = null
+  adjTargetRecurring.value = null
+  adjRequestToEdit.value = null
+}
+
+const viewAdjustmentDetail = async (row: any, recurringId: number | null = null) => {
+  if (!row.onAdjustment) return
+  const adjs = Array.isArray(row.onAdjustment) ? row.onAdjustment : [row.onAdjustment]
+  const targetAdj = adjs.find(a => (recurringId === null ? true : a.recurring_id === recurringId) && ['pending', 'commented'].includes(a.status))
+  
+  if (targetAdj) {
+    const res = await CharityService.getRequestById(targetAdj.adjustment_id)
+    if (res.success) {
+      selectedAdjRequest.value = res.data
+    } else {
+      addToast(res.error || 'Failed to fetch request details', 'error')
+    }
   }
 }
 
-const handleDetailUpdated = (msg: string) => {
-  addToast(msg)
-  isAdjDetailOpen.value  = false
-  adjDetailRequest.value = null
-  loadInitialData() // Refresh so onAdjustment state is current
+const handleEditAdjustmentRequest = async (req: CharityRequestApprove) => {
+  // We need the original row and potentially recurring item
+  const row = rows.value.find(r => r.donationItemId === req.metadata.donation_item_id)
+  if (!row) {
+    addToast('Could not find related donation item for this request', 'error')
+    return
+  }
+
+  let recurring = null
+  if (req.metadata.recurring_id && row.recurrings) {
+    recurring = row.recurrings.find(rec => rec.recurring_id === req.metadata.recurring_id)
+  }
+
+  // Close detail, open form
+  selectedAdjRequest.value = null
+  adjTargetRow.value = row
+  adjTargetRecurring.value = recurring
+  adjRequestToEdit.value = req
+  isAdjModalOpen.value = true
 }
 
 const pendingAdjustmentCount = computed(() => {
@@ -529,6 +606,53 @@ const adjMockItem = computed(() => {
 const handleAdjustmentSuccess = (msg: string) => {
   addToast(msg)
   loadInitialData()
+}
+
+const handleApproveRequest = async (req: CharityRequestApprove) => {
+  if (!confirm('Approve this adjustment request?')) return
+  isSubmitting.value = true
+  const res = await CharityService.approveRequest(req.requestId)
+  if (res.success) {
+    addToast('✅ Adjustment approved successfully')
+    selectedAdjRequest.value = null
+    loadInitialData()
+  } else {
+    addToast(res.error || 'Failed to approve', 'error')
+  }
+  isSubmitting.value = false
+}
+
+const handleResubmitRequest = async (req: CharityRequestApprove, updatedData?: any) => {
+  if (!confirm('Resubmit this adjustment request for approval?')) return
+  isSubmitting.value = true
+  const res = await CharityService.resubmitRequest(req.requestId, updatedData)
+  if (res.success) {
+    addToast('✅ Adjustment resubmitted successfully')
+    selectedAdjRequest.value = null
+    loadInitialData()
+  } else {
+    addToast(res.error || 'Failed to resubmit', 'error')
+  }
+  isSubmitting.value = false
+}
+
+const handleActionSubmitAdjRequest = async (req: CharityRequestApprove, type: 'reject' | 'comment', text: string) => {
+  isSubmitting.value = true
+  let res
+  if (type === 'reject') {
+    res = await CharityService.rejectRequest(req.requestId, text)
+  } else {
+    res = await CharityService.commentRequest(req.requestId, text)
+  }
+
+  if (res.success) {
+    addToast(`✅ Request ${type === 'reject' ? 'rejected' : 'commented'}`)
+    selectedAdjRequest.value = null
+    loadInitialData()
+  } else {
+    addToast(res.error || 'Operation failed', 'error')
+  }
+  isSubmitting.value = false
 }
 
 // Main Donation Info
@@ -925,15 +1049,11 @@ input:disabled, select:disabled, textarea:disabled { background: #f8fafc; color:
 .ben-header:has(.col-adj) { grid-template-columns: 2fr 150px 130px 100px; }
 
 .ben-row-wrapper { border-bottom: 1px solid #f1f5f9; }
-.ben-row { display: grid; grid-template-columns: 2fr 180px 150px; gap: 12px; align-items: center; padding: 12px 24px; background: white; transition: all 0.2s; }
+.ben-row { display: grid; grid-template-columns: 2fr 180px 150px; gap: 12px; align-items: center; padding: 12px 24px; background: white; transition: all 0.2s; cursor: pointer; }
 .ben-row.recurring-grid { grid-template-columns: 2fr 180px 150px; }
 .ben-row:has(.col-adj) { grid-template-columns: 2fr 150px 130px 100px; }
 .ben-row.active { background: #fdfaff; }
 .ben-row.under-adj, .details-row.under-adj { border-left: 5px solid #c2410ca3 !important; }
-.adj-clickable { cursor: pointer; }
-.adj-clickable:hover { background: #fff7ed !important; }
-.adj-name-click { cursor: pointer; }
-.adj-name-click:hover .ben-name { color: #c2410c; text-decoration: underline; }
 
 .collapse-btn { background: none; border: none; padding: 4px; color: #94a3b8; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
 .collapse-btn svg { width: 18px; height: 18px; transition: transform 0.3s ease; }
@@ -944,7 +1064,7 @@ input:disabled, select:disabled, textarea:disabled { background: #f8fafc; color:
 .details-header.goods-header { grid-template-columns: 1fr 120px 120px; }
 .details-header.has-adj { grid-template-columns: 1fr 100px 90px 60px; }
 
-.details-row { display: grid; grid-template-columns: 1fr 120px 100px; gap: 12px; align-items: center; padding: 6px 8px; border-radius: 6px; }
+.details-row { display: grid; grid-template-columns: 1fr 120px 100px; gap: 12px; align-items: center; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
 .details-row.goods-row { grid-template-columns: 1fr 120px 120px; }
 .details-row.has-adj { grid-template-columns: 1fr 100px 90px 60px; }
 .details-row:hover { background: #f8fafc; }
@@ -1001,6 +1121,68 @@ input:disabled, select:disabled, textarea:disabled { background: #f8fafc; color:
 .toast-error { background: #ef4444; }
 
 .text-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.card-header.collapsible-header {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.comment-count-badge {
+  font-size: 12px;
+  font-weight: 600;
+  background: #ede9fe;
+  color: #6a11cb;
+  padding: 2px 10px;
+  border-radius: 20px;
+  margin-left: 4px;
+}
+
+.header-right .collapse-chevron {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.3s ease;
+  color: #94a3b8;
+}
+
+.collapse-chevron.rotated {
+  transform: rotate(180deg);
+}
+
+.comment-creator {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.comment-author {
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.comment-date {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* Collapse transition */
+.collapse-enter-active, .collapse-leave-active {
+  transition: all 0.3s ease;
+  max-height: 3000px; /* large enough for tables */
+  overflow: hidden;
+}
+.collapse-enter-from, .collapse-leave-to {
+  max-height: 0;
+  opacity: 0;
+}
 
 @media (max-width: 768px) { 
   .form-row { grid-template-columns: 1fr; }

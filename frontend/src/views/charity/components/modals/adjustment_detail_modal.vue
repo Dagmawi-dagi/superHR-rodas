@@ -2,335 +2,298 @@
   <div v-if="isOpen" class="modal-overlay">
     <div class="modal-box detail-modal">
       <div class="modal-header">
-        <h3>Adjustment Request <span class="req-id">#{{ request?.requestId }}</span></h3>
-        <button class="close-btn" @click="$emit('close')">&times;</button>
+        <div class="header-left">
+          <h3>Request Details #{{ request.requestId }}</h3>
+        </div>
+        <div class="header-right">
+          <span :class="['status-badge', request.status]">{{ request.status.toUpperCase() }}</span>
+          <button class="close-btn" @click="$emit('close')">×</button>
+        </div>
       </div>
-
-      <div v-if="!request" class="loading-state">
-        <div class="spinner"></div>
-        Loading request details...
-      </div>
-
-      <template v-else>
-        <div class="modal-body">
-          <!-- Summary grid -->
-          <div class="detail-grid">
-            <div class="detail-item">
-              <label>Action</label>
-              <span class="action-pill" :class="request.action?.toLowerCase()">{{ request.action }}</span>
-            </div>
-            <div class="detail-item">
-              <label>Status</label>
-              <span :class="['status-badge', request.status]">{{ request.status?.toUpperCase() }}</span>
-            </div>
-            <div class="detail-item">
-              <label>Requested By</label>
-              <span>{{ request.requester?.fullName || `User #${request.requestedBy}` }}</span>
-            </div>
-            <div class="detail-item">
-              <label>Submitted</label>
-              <span>{{ formatDate(request.createdAt || request.created_at) }}</span>
-            </div>
-            <div class="detail-item" v-if="request.reviewedAt">
-              <label>Reviewed</label>
-              <span>{{ formatDate(request.reviewedAt) }}</span>
-            </div>
-            <div class="detail-item" v-if="request.approver || request.rejecter">
-              <label>{{ request.status === 'approved' ? 'Approved By' : 'Rejected By' }}</label>
-              <span>{{ (request.approver || request.rejecter)?.fullName }}</span>
-            </div>
-          </div>
-
-          <!-- Metadata (what the adjustment is requesting) -->
-          <div class="metadata-section" v-if="request.metadata && Object.keys(cleanMeta).length">
-            <h4>Request Details</h4>
-            <div class="metadata-box">
-              <div v-for="(val, key) in cleanMeta" :key="key" class="meta-row">
-                <span class="meta-key">{{ labelFor(key) }}:</span>
-                <span class="meta-val">
-                  <template v-if="key === 'amount'">
-                    {{ template_type === 'money' ? formatCurrency(val) : val + ' units' }}
-                  </template>
-                  <template v-else>{{ val }}</template>
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Comment history -->
-          <div class="comments-section">
-            <h4>
-              Comments
-              <span v-if="request.comments?.length" class="comment-count">{{ request.comments.length }}</span>
-            </h4>
-            <div v-if="request.comments?.length" class="comments-list">
-              <div v-for="(c, idx) in request.comments" :key="idx" class="comment-item">
-                <div class="comment-meta">
-                  <span class="comment-author">
-                    {{ c.user_id === currentUserId ? 'You' : `User #${c.user_id}` }}
-                  </span>
-                  <span class="comment-date">{{ formatDate(c.created_at) }}</span>
-                </div>
-                <p>{{ c.text }}</p>
-              </div>
-            </div>
-            <p v-else class="no-comments">No comments yet.</p>
-
-            <!-- Add comment (admin only, request still open) -->
-            <div v-if="canComment" class="add-comment-area">
-              <textarea
-                v-model="newComment"
-                rows="3"
-                placeholder="Add a comment or request clarification..."
-                :disabled="submittingComment"
-              ></textarea>
-              <div class="comment-actions">
-                <span class="comment-hint">Admin comment — stays visible to the requester</span>
+      
+      <div class="modal-body">
+        <!-- ── EDIT MODE ── -->
+        <template v-if="isEditing">
+          <div class="edit-form">
+            <div class="form-group">
+              <label>Adjustment Type <span class="req">*</span></label>
+              <div class="type-grid">
                 <button
-                  class="btn-comment"
-                  :disabled="!newComment.trim() || submittingComment"
-                  @click="submitComment"
+                  v-for="t in types" :key="t.id"
+                  type="button"
+                  class="type-btn"
+                  :class="[{ active: editableData.action === t.id }, t.cls]"
+                  @click="editableData.action = t.id"
                 >
-                  {{ submittingComment ? 'Posting...' : 'Post Comment' }}
+                  {{ t.label }}
                 </button>
               </div>
             </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>{{ itemType === 'money' ? 'Value (ETB)' : 'Quantity' }} <span class="req">*</span></label>
+                <input
+                  v-model.number="editableData.amount"
+                  type="number" step="0.01" min="0.01"
+                  required
+                  :placeholder="itemType === 'money' ? '0.00' : '0'"
+                />
+              </div>
+
+              <div class="form-group" v-if="editableData.action === 'Transfer'">
+                <label>Transfer To (ID) <span class="req">*</span></label>
+                <input v-model.number="editableData.toBeneficiaryId" type="number" placeholder="Beneficiary ID" required />
+                <small class="hint">Enter target beneficiary ID</small>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Reason for Request <span class="req">*</span></label>
+              <textarea
+                v-model="editableData.reason"
+                rows="3" required
+                placeholder="Explain why this adjustment is needed..."
+              ></textarea>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── VIEW MODE ── -->
+        <template v-else>
+          <div class="detail-grid">
+            <div class="detail-item">
+              <label>Action</label>
+              <span class="action-pill" :class="request.action.toLowerCase()">{{ request.action }}</span>
+            </div>
+            <div class="detail-item">
+              <label>Requested By</label>
+              <span>{{ request.requester?.fullName }}</span>
+            </div>
+            <div class="detail-item full">
+              <label>Date</label>
+              <span>{{ formatDate(request.created_at) }}</span>
+            </div>
+          </div>
+
+          <div class="metadata-section" v-if="request.metadata">
+            <h4>Request Information</h4>
+            <div class="metadata-box">
+              <div v-for="(val, key) in request.metadata" :key="key" class="meta-row">
+                <span class="meta-key">{{ 
+                  key.replace(/_/g, ' ')
+                     .replace('recurring id', 'Period ID')
+                     .replace('donation item id', 'Item ID')
+                     .replace('toBeneficiaryId', 'To Beneficiary ID')
+                     .replace('amount', 'Adjustment Value')
+                }}:</span>
+                <span class="meta-val">{{ val }}</span>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div class="comments-section">
+          <h4>Comment History</h4>
+          <div class="comments-list" v-if="request.comments?.length">
+            <div v-for="(c, idx) in request.comments" :key="idx" class="comment-item">
+              <div class="comment-meta">
+                 <span>Admin #{{ c.user_id }}</span>
+                 <span>{{ formatDate(c.created_at) }}</span>
+              </div>
+              <p>{{ c.text }}</p>
+            </div>
+          </div>
+          <div v-else class="empty-comments">No comments yet.</div>
+
+          <div class="add-comment-area" v-if="isCharityAdmin && (request.status === 'pending' || request.status === 'commented')">
+            <label>Add Feedback / Reason</label>
+            <textarea 
+              v-model="newComment" 
+              placeholder="Enter your comment or rejection reason here..." 
+              rows="3"
+            ></textarea>
           </div>
         </div>
-
-        <div class="modal-footer">
-          <button class="btn-secondary" @click="$emit('close')">Close</button>
-          <!-- Admin: approve / reject while viewing -->
-          <template v-if="isAdmin && ['pending', 'commented'].includes(request.status)">
-            <button class="btn-danger" :disabled="submitting" @click="handleReject">
-              {{ submitting === 'reject' ? 'Rejecting...' : 'Reject' }}
-            </button>
-            <button class="btn-approve" :disabled="submitting" @click="handleApprove">
-              {{ submitting === 'approve' ? 'Approving...' : 'Approve' }}
-            </button>
-          </template>
+      </div>
+      
+      <div class="modal-footer">
+        <!-- Admin Actions -->
+        <div class="admin-actions" v-if="isCharityAdmin && (request.status === 'pending' || request.status === 'commented')">
+          <button class="btn-outline" @click="handleAction('comment')" :disabled="!newComment.trim() || processing">Comment</button>
+          <button class="btn-primary success" @click="handleAction('approve')" :disabled="processing">Approve</button>
+          <button class="btn-outline danger" @click="handleAction('reject')" :disabled="!newComment.trim() || processing">Reject</button>
         </div>
-      </template>
+        
+        <!-- Team Leader Actions -->
+        <div class="user-actions" v-else-if="request.status === 'commented' && isOwner">
+          <button v-if="!isEditing" class="btn-outline" @click="startEditing">Edit Adjustment</button>
+          <button v-if="isEditing" class="btn-secondary" @click="isEditing = false">Back</button>
+          <button class="btn-primary" @click="handleResubmit" :disabled="processing || (isEditing && !isValid)">
+            {{ isEditing ? 'Save & Resubmit' : 'Resubmit for Approval' }}
+          </button>
+        </div>
+        
+        <button v-else class="btn-secondary" @click="$emit('close')">Close</button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import CharityService from '@/stores/charity'
+import { ref, reactive, computed, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps({
-  isOpen:        { type: Boolean, default: false },
-  request:       { type: Object,  default: null  },
-  template_type: { type: String,  default: 'money' } // 'money' | 'goods' | 'service'
+  isOpen: { type: Boolean, default: false },
+  request: { type: Object, default: null },
+  processing: { type: Boolean, default: false }
 })
 
-const emit = defineEmits(['close', 'updated'])
+const emit = defineEmits(['close', 'approve', 'reject', 'comment', 'resubmit'])
+const authStore = useAuthStore()
+const newComment = ref('')
 
-const authStore       = useAuthStore()
-const currentUserId   = computed(() => authStore.user?.userId)
-const isAdmin         = computed(() => ['admin', 'charity_admin'].includes(authStore.userRole || ''))
-const canComment      = computed(() =>
-  isAdmin.value && props.request && ['pending', 'commented'].includes(props.request.status)
-)
-
-const newComment        = ref('')
-const submittingComment = ref(false)
-const submitting        = ref('')  // 'approve' | 'reject' | ''
-
-// ── Clean metadata for display (skip internal ids that are already shown) ──────
-const cleanMeta = computed(() => {
-  if (!props.request?.metadata) return {}
-  const skip = ['donation_item_id']  // already shown in header
-  return Object.fromEntries(
-    Object.entries(props.request.metadata).filter(([k]) => !skip.includes(k))
-  )
+const isEditing = ref(false)
+const editableData = reactive({
+  action: '',
+  amount: null,
+  reason: '',
+  toBeneficiaryId: null
 })
 
-const labelFor = (key) => {
-  const map = {
-    amount:               'Adjustment Value',
-    reason:               'Reason',
-    recurring_interval_id:'Period / Interval',
-    toBeneficiaryId:      'Transfer To (ID)',
-    from_team_id:         'From Team',
-    charity_team_id:      'To Team',
-    beneficiary_id:       'Beneficiary',
-  }
-  return map[key] || key.replace(/_/g, ' ')
+const isCharityAdmin = computed(() => ['admin', 'charity_admin'].includes(authStore.userRole || ''))
+const isOwner = computed(() => authStore.user?.userId === props.request?.requestedBy)
+const itemType = computed(() => props.request?.metadata?.type || 'money')
+
+const types = [
+  { id: 'Deduct',   label: 'Deduct',   cls: 'deduct'   },
+  { id: 'Increase', label: 'Increase', cls: 'increase' },
+  { id: 'Transfer', label: 'Transfer', cls: 'transfer' },
+  { id: 'Return',   label: 'Return',   cls: 'return'   },
+]
+
+const isValid = computed(() => {
+  if (!editableData.action || !editableData.reason?.trim()) return false
+  if (editableData.amount === null || editableData.amount <= 0) return false
+  if (editableData.action === 'Transfer' && !editableData.toBeneficiaryId) return false
+  return true
+})
+
+const startEditing = () => {
+  editableData.action = props.request.action
+  editableData.amount = parseFloat(props.request.metadata?.amount || 0)
+  editableData.reason = props.request.metadata?.reason || ''
+  editableData.toBeneficiaryId = props.request.metadata?.toBeneficiaryId || null
+  isEditing.value = true
 }
 
-// ── Actions ───────────────────────────────────────────────────────────────────
-
-const submitComment = async () => {
-  if (!newComment.value.trim() || !props.request) return
-  submittingComment.value = true
-  const res = await CharityService.commentRequest(props.request.requestId, newComment.value.trim())
-  submittingComment.value = false
-  if (res.success) {
+const handleAction = (type) => {
+  if (type === 'approve') {
+    emit('approve', props.request)
+  } else if (type === 'reject') {
+    emit('reject', props.request, newComment.value)
     newComment.value = ''
-    emit('updated', 'Comment posted')
-  } else {
-    alert(res.error || 'Failed to post comment')
+  } else if (type === 'comment') {
+    emit('comment', props.request, newComment.value)
+    newComment.value = ''
   }
 }
 
-const handleApprove = async () => {
-  if (!props.request) return
-  submitting.value = 'approve'
-  const res = await CharityService.approveRequest(props.request.requestId)
-  submitting.value = ''
-  if (res.success) emit('updated', 'Request approved')
-  else alert(res.error || 'Failed to approve')
+const handleResubmit = () => {
+  if (isEditing.value) {
+    if (!isValid.value) return
+    emit('resubmit', props.request, {
+      action: editableData.action,
+      reason: editableData.reason,
+      metadata: {
+        amount: editableData.amount,
+        toBeneficiaryId: editableData.toBeneficiaryId
+      }
+    })
+  } else {
+    emit('resubmit', props.request)
+  }
 }
-
-const handleReject = async () => {
-  const reason = prompt('Reason for rejection (required):')
-  if (!reason?.trim()) return
-  submitting.value = 'reject'
-  const res = await CharityService.rejectRequest(props.request.requestId, reason.trim())
-  submitting.value = ''
-  if (res.success) emit('updated', 'Request rejected')
-  else alert(res.error || 'Failed to reject')
-}
-
-// ── Formatters ────────────────────────────────────────────────────────────────
 
 const formatDate = (d) => {
-  if (!d) return '—'
-  return new Date(d).toLocaleDateString('en-ET', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  if (!d) return 'N/A'
+  return new Date(d).toLocaleDateString('en-ET', { 
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  })
 }
 
-const formatCurrency = (v) =>
-  new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(v || 0)
+// Reset editing state when modal closes
+watch(() => props.isOpen, (val) => {
+  if (!val) isEditing.value = false
+})
 </script>
 
 <style scoped>
-.modal-overlay {
-  position: fixed; inset: 0; background: rgba(15,23,42,0.6);
-  backdrop-filter: blur(4px); display: flex; align-items: center;
-  justify-content: center; z-index: 1200; padding: 20px;
-}
-.modal-box {
-  background: white; border-radius: 20px; width: 100%; max-width: 600px;
-  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
-  display: flex; flex-direction: column; max-height: 92vh;
-}
-.modal-header {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 24px 28px 0; flex-shrink: 0;
-}
-.modal-header h3 { font-size: 18px; font-weight: 700; color: #1e293b; margin: 0; }
-.req-id { color: #6a11cb; font-size: 16px; }
-.close-btn { background: none; border: none; font-size: 24px; color: #94a3b8; cursor: pointer; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1200; padding: 20px; }
+.modal-box { background: white; border-radius: 20px; width: 100%; max-width: 650px; padding: 32px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.header-left h3 { font-size: 20px; font-weight: 700; color: #1e293b; margin: 0; }
+.header-right { display: flex; align-items: center; gap: 16px; }
+.close-btn { background: none; border: none; font-size: 24px; color: #94a3b8; cursor: pointer; line-height: 1; padding: 0; }
+.modal-body { display: flex; flex-direction: column; gap: 24px; max-height: 65vh; overflow-y: auto; padding-right: 8px; }
 
-.loading-state {
-  padding: 60px; text-align: center; color: #94a3b8;
-  display: flex; flex-direction: column; align-items: center; gap: 14px;
-}
-.spinner {
-  width: 32px; height: 32px; border: 3px solid #e2e8f0;
-  border-top-color: #6a11cb; border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.modal-body {
-  padding: 24px 28px; overflow-y: auto; flex: 1;
-  display: flex; flex-direction: column; gap: 24px;
-}
-
-/* Summary grid */
-.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .detail-item { display: flex; flex-direction: column; gap: 4px; }
-.detail-item label { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
-.detail-item span  { font-size: 14px; color: #1e293b; font-weight: 500; }
+.detail-item label { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
 
-.action-pill {
-  font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 12px;
-  display: inline-block; width: fit-content; text-transform: capitalize;
-}
-.action-pill.deduct   { background: #fee2e2; color: #991b1b; }
+.action-pill { font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 12px; display: inline-block; width: fit-content; text-transform: capitalize; }
+.action-pill.deduct { background: #fee2e2; color: #991b1b; }
 .action-pill.increase { background: #dcfce7; color: #166534; }
 .action-pill.transfer { background: #fef3c7; color: #b45309; }
-.action-pill.return   { background: #e0f2fe; color: #0369a1; }
+.action-pill.return { background: #e0f2fe; color: #0369a1; }
 
-.status-badge {
-  font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px;
-  display: inline-block; text-transform: uppercase; letter-spacing: 0.5px;
-}
-.status-badge.pending   { background: #fffbeb; color: #d97706; }
-.status-badge.approved  { background: #ecfdf5; color: #059669; }
-.status-badge.rejected  { background: #fef2f2; color: #dc2626; }
+.status-badge { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 12px; display: inline-block; }
+.status-badge.pending { background: #fffbeb; color: #d97706; }
+.status-badge.approved { background: #ecfdf5; color: #059669; }
+.status-badge.rejected { background: #fef2f2; color: #dc2626; }
 .status-badge.commented { background: #f1f5f9; color: #475569; }
 
-/* Metadata */
-.metadata-section h4, .comments-section h4 {
-  font-size: 13px; font-weight: 700; color: #334155;
-  margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.5px;
-}
-.metadata-box { background: #f8fafc; padding: 14px 18px; border-radius: 12px; }
-.meta-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
-.meta-key { color: #64748b; text-transform: capitalize; }
+/* Edit Form */
+.edit-form { display: flex; flex-direction: column; gap: 20px; padding: 16px; background: #fdfaff; border: 1px solid #ede9fe; border-radius: 16px; }
+.type-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
+.type-btn { padding: 8px 4px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 11px; font-weight: 600; background: white; color: #64748b; cursor: pointer; transition: all 0.2s; }
+.type-btn.active.deduct   { background: #fee2e2; border-color: #ef4444; color: #b91c1c; }
+.type-btn.active.increase { background: #dcfce7; border-color: #22c55e; color: #15803d; }
+.type-btn.active.transfer { background: #fef3c7; border-color: #f59e0b; color: #b45309; }
+.type-btn.active.return   { background: #e0f2fe; border-color: #0ea5e9; color: #0369a1; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-group label { font-size: 13px; font-weight: 600; color: #475569; }
+.req { color: #ef4444; }
+.hint { font-size: 11px; color: #94a3b8; }
+input, textarea { padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; width: 100%; box-sizing: border-box; outline: none; }
+input:focus, textarea:focus { border-color: #6a11cb; }
+
+.metadata-section h4, .comments-section h4 { font-size: 14px; font-weight: 700; color: #334155; margin-bottom: 12px; margin-top: 24px; }
+.metadata-box { background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #f1f5f9; }
+.meta-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+.meta-key { color: #64748b; }
 .meta-val { font-weight: 600; color: #1e293b; }
 
-/* Comments */
-.comments-section { display: flex; flex-direction: column; gap: 8px; }
-.comment-count {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 20px; height: 20px; background: #ede9fe; color: #6a11cb;
-  border-radius: 50%; font-size: 11px; font-weight: 700; margin-left: 6px;
-}
-.comments-list { display: flex; flex-direction: column; gap: 10px; }
-.comment-item {
-  padding: 12px 14px; background: #f8fafc; border-radius: 10px;
-  border-left: 3px solid #6a11cb;
-}
-.comment-meta { display: flex; justify-content: space-between; margin-bottom: 4px; }
-.comment-author { font-size: 12px; font-weight: 700; color: #1e293b; }
-.comment-date   { font-size: 11px; color: #94a3b8; }
-.comment-item p { margin: 0; font-size: 13px; color: #475569; line-height: 1.5; }
-.no-comments { font-size: 13px; color: #94a3b8; font-style: italic; margin: 0; }
+.comments-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.comment-item { padding: 12px; background: #f8fafc; border-radius: 8px; font-size: 13px; border-left: 3px solid #6a11cb; }
+.comment-meta { display: flex; justify-content: space-between; color: #94a3b8; font-size: 11px; margin-bottom: 4px; }
+.empty-comments { font-size: 13px; color: #94a3b8; font-style: italic; margin-bottom: 20px; }
 
-/* Add comment */
-.add-comment-area {
-  margin-top: 12px; display: flex; flex-direction: column; gap: 8px;
-  padding: 14px; background: #fdf8ff; border: 1px solid #ede9fe; border-radius: 12px;
-}
-.add-comment-area textarea {
-  width: 100%; border: 1px solid #e2e8f0; border-radius: 8px;
-  padding: 10px 12px; font-size: 13px; resize: none; outline: none;
-  box-sizing: border-box; transition: border-color 0.2s;
-}
+.add-comment-area { display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 1px dashed #e2e8f0; }
+.add-comment-area label { font-size: 12px; font-weight: 700; color: #475569; }
+.add-comment-area textarea { width: 100%; border-radius: 12px; border: 1px solid #e2e8f0; padding: 12px; font-size: 14px; outline: none; resize: none; }
 .add-comment-area textarea:focus { border-color: #6a11cb; }
-.add-comment-area textarea:disabled { background: #f8fafc; color: #94a3b8; }
-.comment-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.comment-hint { font-size: 11px; color: #94a3b8; }
-.btn-comment {
-  padding: 8px 20px; background: #6a11cb; color: white; border: none;
-  border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
-  white-space: nowrap;
-}
-.btn-comment:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Footer */
-.modal-footer {
-  padding: 16px 28px; border-top: 1px solid #f1f5f9; flex-shrink: 0;
-  display: flex; justify-content: flex-end; gap: 10px;
-}
-.btn-secondary {
-  background: #f1f5f9; color: #475569; border: none;
-  padding: 10px 20px; border-radius: 10px; font-weight: 600; cursor: pointer;
-}
-.btn-danger {
-  background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2;
-  padding: 10px 20px; border-radius: 10px; font-weight: 600; cursor: pointer;
-}
-.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-approve {
-  background: linear-gradient(135deg, #6a11cb, #7c3aed); color: white; border: none;
-  padding: 10px 20px; border-radius: 10px; font-weight: 600; cursor: pointer;
-}
-.btn-approve:disabled { opacity: 0.5; cursor: not-allowed; }
+.modal-footer { margin-top: 32px; padding-top: 24px; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end; }
+.admin-actions, .user-actions { display: flex; gap: 12px; }
+.btn-outline { padding: 10px 20px; border-radius: 10px; background: white; border: 1px solid #e2e8f0; color: #475569; font-weight: 600; cursor: pointer; }
+.btn-outline.danger { border-color: #ef4444; color: #ef4444; }
+.btn-outline.danger:hover { background: #fef2f2; }
+.btn-primary { padding: 10px 24px; border-radius: 10px; background: #6a11cb; color: white; border: none; font-weight: 600; cursor: pointer; }
+.btn-primary.success { background: #10b981; }
+.btn-primary:disabled, .btn-outline:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary { background: #f1f5f9; color: #475569; border: none; padding: 10px 20px; border-radius: 10px; font-weight: 600; cursor: pointer; }
 </style>

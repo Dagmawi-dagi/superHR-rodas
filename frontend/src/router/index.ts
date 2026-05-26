@@ -96,6 +96,11 @@ const router = createRouter({
           meta: { title: 'Donations', roles: ['admin', 'charity_admin', 'charity_teamleader'] },
         },
         {
+          path: 'charity/my-donations',
+          name: 'charity-my-donations',
+          component: () => import('@/views/charity/donations.vue'),
+        },
+        {
           path: 'charity/donations/create',
           name: 'charity-donations-create',
           component: () => import('@/views/charity/donation_create.vue'),
@@ -153,7 +158,11 @@ const router = createRouter({
           path: 'charity/beneficiaries',
           name: 'charity-beneficiaries',
           component: () => import('@/views/charity/beneficiaries.vue'),
-          meta: { title: 'All Beneficiaries', roles: ['admin', 'charity_admin'] },
+          meta: { title: 'All Beneficiaries', roles: ['admin', 'charity_admin', 'charity_teamleader'] },
+        },
+        {
+          path: 'charity/my-beneficiaries',
+          redirect: { name: 'charity-beneficiaries' }
         },
         {
           path: 'charity/beneficiaries/create',

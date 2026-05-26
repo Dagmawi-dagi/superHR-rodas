@@ -59,36 +59,36 @@
 
       <template #actions="{ row }">
         <div class="table-actions">
-          <button v-if="isCharityAdmin && (row.status === 'pending' || row.status === 'commented')" class="action-btn approve" title="Approve" @click="handleApprove(row)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-          </button>
-          <button v-if="isCharityAdmin && (row.status === 'pending' || row.status === 'commented')" class="action-btn comment" title="Add Comment / Clarify" @click="openCommentModal(row, 'comment')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          </button>
-          <button v-if="isCharityAdmin && (row.status === 'pending' || row.status === 'commented')" class="action-btn reject" title="Reject" @click="openCommentModal(row, 'reject')">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="12"/></svg>
-          </button>
           <button class="action-btn" title="View Detail" @click="viewDetail(row)">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           </button>
         </div>
-      </template>
-    </ListTable>
+      </template>    </ListTable>
 
+    <!-- Unified Detail Modal -->
     <AdjustmentDetailModal
       v-if="selectedRequest"
       :is-open="!!selectedRequest"
       :request="selectedRequest"
+      :processing="processing"
       @close="selectedRequest = null"
+      @approve="handleApprove"
+      @reject="(req, text) => handleActionSubmit(req, 'reject', text)"
+      @comment="(req, text) => handleActionSubmit(req, 'comment', text)"
+      @resubmit="handleResubmit"
+      @edit="handleEditRequest"
     />
 
-    <CommentModal
-      v-if="actionModal.show"
-      :is-open="actionModal.show"
-      :type="actionModal.type"
-      :processing="processing"
-      @close="actionModal.show = false"
-      @submit="handleActionSubmit"
+    <!-- Adjustment Form Modal (for Resubmission) -->
+    <AdjustmentModal
+      v-if="isAdjFormOpen"
+      :is-open="isAdjFormOpen"
+      :item="adjFormItem"
+      :beneficiaries="adjFormBeneficiaries"
+      :recurring="adjFormRecurring"
+      :request-to-edit="adjFormRequest"
+      @close="closeAdjForm"
+      @success="handleResubmitSuccess"
     />
 
     <!-- Toasts -->
@@ -108,7 +108,7 @@ import ListTable from './components/common/ListTable.vue'
 import CharityService, { type CharityRequestApprove } from '@/stores/charity'
 import { useAuthStore } from '@/stores/auth'
 import AdjustmentDetailModal from './components/modals/adjustment_detail_modal.vue'
-import CommentModal from './components/modals/CommentModal.vue'
+import AdjustmentModal from './components/modals/adjustment_modal.vue'
 
 const loading = ref(false)
 const processing = ref(false)
@@ -118,12 +118,12 @@ const selectedRequest = ref<CharityRequestApprove | null>(null)
 const toasts = ref<any[]>([])
 const authStore = useAuthStore()
 
-const actionModal = reactive({
-  show: false,
-  type: 'comment',
-  reqId: null as number | null,
-  text: ''
-})
+// Adjustment Form State (for resubmitting)
+const isAdjFormOpen = ref(false)
+const adjFormItem = ref<any>(null)
+const adjFormBeneficiaries = ref<any[]>([])
+const adjFormRecurring = ref<any>(null)
+const adjFormRequest = ref<any>(null)
 
 const isCharityAdmin = computed(() => ['admin', 'charity_admin'].includes(authStore.userRole || ''))
 
@@ -188,6 +188,7 @@ const handleApprove = async (req: CharityRequestApprove) => {
   const res = await CharityService.approveRequest(req.requestId)
   if (res.success) {
     addToast('✅ Request approved successfully')
+    selectedRequest.value = null
     loadApprovals()
   } else {
     addToast(res.error || 'Failed to approve', 'error')
@@ -195,27 +196,80 @@ const handleApprove = async (req: CharityRequestApprove) => {
   processing.value = false
 }
 
-const openCommentModal = (req: CharityRequestApprove, type: 'comment' | 'reject') => {
-  actionModal.type = type
-  actionModal.reqId = req.requestId
-  actionModal.text = ''
-  actionModal.show = true
+const handleResubmit = async (req: CharityRequestApprove, updatedData?: any) => {
+  if (!confirm('Resubmit this request for approval?')) return
+  processing.value = true
+  const res = await CharityService.resubmitRequest(req.requestId, updatedData)
+  if (res.success) {
+    addToast('✅ Request resubmitted successfully')
+    selectedRequest.value = null
+    loadApprovals()
+  } else {
+    addToast(res.error || 'Failed to resubmit', 'error')
+  }
+  processing.value = false
 }
 
-const handleActionSubmit = async (text: string) => {
-  if (!actionModal.reqId || !text.trim()) return
+const handleEditRequest = async (req: CharityRequestApprove) => {
+  // We need to fetch enough info to show the adjustment modal
+  // 1. Get the item
+  if (!req.metadata.donation_item_id) return
+  
+  loading.value = true
+  const itemRes = await CharityService.getDonationItemById(req.metadata.donation_item_id)
+  if (!itemRes.success) {
+    addToast('Failed to load related item data', 'error')
+    loading.value = false
+    return
+  }
+  
+  const item = itemRes.data
+  // 2. Get beneficiaries for the team
+  const benRes = await CharityService.getBeneficiariesByTeam(item.donation.teamId)
+  
+  // 3. Find specific recurring period if needed
+  let recurring = null
+  if (req.metadata.recurring_id && item.isRecurring) {
+    recurring = item.isRecurring.recurrings.find((r: any) => r.recurring_id === req.metadata.recurring_id)
+  }
+
+  // Populate form
+  adjFormItem.value = item
+  adjFormBeneficiaries.value = benRes.success ? benRes.data : []
+  adjFormRecurring.value = recurring
+  adjFormRequest.value = req
+  
+  selectedRequest.value = null
+  isAdjFormOpen.value = true
+  loading.value = false
+}
+
+const closeAdjForm = () => {
+  isAdjFormOpen.value = false
+  adjFormItem.value = null
+  adjFormBeneficiaries.value = []
+  adjFormRecurring.value = null
+  adjFormRequest.value = null
+}
+
+const handleResubmitSuccess = (msg: string) => {
+  addToast(msg)
+  loadApprovals()
+}
+
+const handleActionSubmit = async (req: CharityRequestApprove, type: 'reject' | 'comment', text: string) => {
   processing.value = true
   
   let res
-  if (actionModal.type === 'reject') {
-    res = await CharityService.rejectRequest(actionModal.reqId, text)
+  if (type === 'reject') {
+    res = await CharityService.rejectRequest(req.requestId, text)
   } else {
-    res = await CharityService.commentRequest(actionModal.reqId, text)
+    res = await CharityService.commentRequest(req.requestId, text)
   }
 
   if (res.success) {
-    addToast(`✅ Request ${actionModal.type === 'reject' ? 'rejected' : 'commented'}`)
-    actionModal.show = false
+    addToast(`✅ Request ${type === 'reject' ? 'rejected' : 'commented'}`)
+    selectedRequest.value = null
     loadApprovals()
   } else {
     addToast(res.error || 'Operation failed', 'error')
@@ -266,9 +320,6 @@ const addToast = (message: string, type: 'success' | 'error' = 'success') => {
 }
 .action-btn svg { width: 16px; height: 16px; }
 .action-btn:hover { border-color: #6a11cb; color: #6a11cb; background: #f5f3ff; }
-.action-btn.approve:hover { border-color: #10b981; color: #10b981; background: #f0fdf4; }
-.action-btn.reject:hover { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
-.action-btn.comment:hover { border-color: #3b82f6; color: #3b82f6; background: #eff6ff; }
 
 /* Toasts */
 .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 1100; display: flex; flex-direction: column; gap: 12px; }

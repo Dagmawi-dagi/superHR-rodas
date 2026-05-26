@@ -95,7 +95,8 @@ export interface CharityDonationItem {
   onAdjustment: null | { 
     adjustment_id: number
     status: 'draft' | 'pending' | 'approved' | 'rejected' | 'commented' 
-  }
+    recurring_id?: number
+  }[]
   createdBy?: number
   created_at?: string
   updated_at?: string
@@ -252,6 +253,10 @@ class CharityService {
     try { const r = await api.put(`/charity/donations/items/${itemId}`, data); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
+  async getDonationItemById(itemId: number) {
+    try { const r = await api.get(`/charity/donations/items/${itemId}`); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
   async deleteDonationItem(itemId: number) {
     try { const r = await api.delete(`/charity/donations/items/${itemId}`); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
@@ -291,6 +296,10 @@ class CharityService {
   }
   async commentRequest(id: number, text: string) {
     try { const r = await api.post(`/charity/requests/${id}/comment`, { text }); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+  async resubmitRequest(id: number, data?: any) {
+    try { const r = await api.post(`/charity/requests/${id}/resubmit`, data); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
   async submitAdjustment(data: { action: string; donationItemId: number; recurringId?: number; reason?: string }) {

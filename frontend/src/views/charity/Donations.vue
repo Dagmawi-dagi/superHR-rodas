@@ -2,7 +2,7 @@
   <div class="donations-page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">Donations</h1>
+        <h1 class="page-title">{{ isTeamLeader ? 'My Team Donations' : 'Donations' }}</h1>
         <p class="page-subtitle">Manage and track all charity contributions and distributions</p>
       </div>
       <router-link to="/charity/donations/create" class="btn-primary">
@@ -30,7 +30,7 @@
       @clear="resetFilters"
     >
       <template #filters>
-        <select v-model="filters.teamId" class="fb-select">
+        <select v-if="!isTeamLeader" v-model="filters.teamId" class="fb-select">
           <option value="">All Teams</option>
           <option v-for="t in teams" :key="t.teamId" :value="t.teamId">{{ t.name }}</option>
         </select>
@@ -84,13 +84,17 @@ import StatsCards from './components/common/StatsCards.vue'
 import FilterBar from './components/common/FilterBar.vue'
 import ListTable from './components/common/ListTable.vue'
 import CharityService, { type CharityDonation, type CharityTeam } from '@/stores/charity'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 const loading = ref(false)
 const donations = ref<CharityDonation[]>([])
 const teams = ref<CharityTeam[]>([])
 const filters = ref({ search: '', status: '', teamId: '' })
+
+const isTeamLeader = computed(() => authStore.userRole === 'charity_teamleader')
 
 const loadData = async () => {
   loading.value = true

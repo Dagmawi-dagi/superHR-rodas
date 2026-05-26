@@ -2,8 +2,12 @@
   <div v-if="isOpen" class="modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 class="modal-title">Request Adjustment</h3>
-        <button class="close-btn" @click="$emit('close')">×</button>
+        <h3 class="modal-title">{{ isResubmitting ? 'Edit & Resubmit' : 'Request Adjustment' }}</h3>
+        <div class="header-right">
+          <span v-if="hasPendingAdjustment && !isResubmitting" class="status-badge pending">UNDER ADJUSTMENT</span>
+          <span v-if="isResubmitting" class="status-badge commented">CLARIFICATION</span>
+          <button class="close-btn" @click="$emit('close')">×</button>
+        </div>
       </div>
 
       <!-- Target info summary -->
@@ -30,8 +34,8 @@
           </span>
         </div>
         <!-- Blocked: already has pending adjustment -->
-        <div v-if="hasPendingAdjustment" class="pending-warning">
-          ⚠️ A pending adjustment request already exists for this item (ID #{{ item?.onAdjustment?.adjustment_id }}).
+        <div v-if="hasPendingAdjustment && !isResubmitting" class="pending-warning">
+          ⚠️ A pending adjustment request already exists for this specific target.
           Wait for admin review before submitting another.
         </div>
       </div>
@@ -49,7 +53,7 @@
                 class="type-btn"
                 :class="[{ active: form.action === t.id }, t.cls]"
                 @click="form.action = t.id"
-                :disabled="hasPendingAdjustment"
+                :disabled="hasPendingAdjustment && !isResubmitting"
               >
                 {{ t.label }}
               </button>
@@ -64,7 +68,7 @@
                 v-model.number="form.amount"
                 type="number" step="0.01" min="0.01"
                 :max="['Deduct', 'Return', 'Transfer'].includes(form.action) ? currentValue : undefined"
-                :disabled="form.action === 'Return' || hasPendingAdjustment"
+                :disabled="form.action === 'Return' || (hasPendingAdjustment && !isResubmitting)"
                 required
                 :placeholder="itemType === 'money' ? '0.00' : '0'"
               />
@@ -74,7 +78,7 @@
             <!-- Transfer → pick target beneficiary -->
             <div class="form-group" v-if="form.action === 'Transfer'">
               <label>Transfer To <span class="req">*</span></label>
-              <select v-model="form.toBeneficiaryId" required :disabled="hasPendingAdjustment">
+              <select v-model="form.toBeneficiaryId" required :disabled="hasPendingAdjustment && !isResubmitting">
                 <option value="">Select recipient</option>
                 <option
                   v-for="ben in otherBeneficiaries"
@@ -93,7 +97,7 @@
             <textarea
               v-model="form.reason"
               rows="3" required
-              :disabled="hasPendingAdjustment"
+              :disabled="hasPendingAdjustment && !isResubmitting"
               placeholder="Explain why this adjustment is needed..."
             ></textarea>
           </div>
@@ -103,7 +107,7 @@
         <!-- Confirmation view -->
         <div v-else class="confirm-view">
           <div class="confirm-banner">
-            <h4 class="confirm-title">Submit this adjustment request?</h4>
+            <h4 class="confirm-title">{{ isResubmitting ? 'Save changes and resubmit?' : 'Submit this adjustment request?' }}</h4>
           </div>
           <div class="confirm-summary">
             <p><strong>Action:</strong> {{ form.action }}</p>
@@ -124,8 +128,8 @@
             {{ isConfirming ? 'Back' : 'Cancel' }}
           </button>
           <button type="submit" class="btn-primary"
-            :disabled="submitting || !isValid || hasPendingAdjustment">
-            {{ submitting ? 'Submitting...' : isConfirming ? 'Yes, Submit Request' : 'Next' }}
+            :disabled="submitting || !isValid || (hasPendingAdjustment && !isResubmitting)">
+            {{ submitting ? 'Submitting...' : isConfirming ? (isResubmitting ? 'Yes, Resubmit' : 'Yes, Submit Request') : 'Next' }}
           </button>
         </div>
       </form>
@@ -135,19 +139,22 @@
 
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
-import charityService from '@/stores/charity'
+import CharityService from '@/stores/charity'
 
 const props = defineProps({
   isOpen:        { type: Boolean, default: false },
   item:          { type: Object,  default: null },   // CharityDonationItem
   recurring:     { type: Object,  default: null },   // one entry from isRecurring.recurrings[]
-  beneficiaries: { type: Array,   default: () => [] } // all beneficiaries in the team (for Transfer)
+  beneficiaries: { type: Array,   default: () => [] }, // all beneficiaries in the team (for Transfer)
+  requestToEdit: { type: Object,  default: null }    // Existing request if resubmitting
 })
 
 const emit = defineEmits(['close', 'success'])
 
 const submitting   = ref(false)
 const isConfirming = ref(false)
+
+const isResubmitting = computed(() => !!props.requestToEdit)
 
 const form = reactive({
   action:          'Deduct',
@@ -160,10 +167,17 @@ const form = reactive({
 watch(() => props.isOpen, (val) => {
   if (val) {
     isConfirming.value   = false
-    form.action          = 'Deduct'
-    form.amount          = null
-    form.reason          = ''
-    form.toBeneficiaryId = ''
+    if (props.requestToEdit) {
+      form.action = props.requestToEdit.action
+      form.amount = parseFloat(props.requestToEdit.metadata?.amount || 0)
+      form.reason = props.requestToEdit.metadata?.reason || ''
+      form.toBeneficiaryId = props.requestToEdit.metadata?.toBeneficiaryId || ''
+    } else {
+      form.action          = 'Deduct'
+      form.amount          = null
+      form.reason          = ''
+      form.toBeneficiaryId = ''
+    }
   }
 })
 
@@ -241,29 +255,36 @@ const handleSubmit = async () => {
   if (!isValid.value || !props.item) return
   submitting.value = true
 
-  const payload = {
-    action:          form.action,
-    donationItemId:  props.item.donationItemId,
-    recurringId:     props.recurring?.recurring_id ?? null,
-    reason:          form.reason,
-    metadata: {
-      amount:           form.amount,
-      ...(form.action === 'Transfer' && { toBeneficiaryId: form.toBeneficiaryId }),
-    },
+  const metadata = {
+    amount:           form.amount,
+    ...(form.action === 'Transfer' && { toBeneficiaryId: form.toBeneficiaryId }),
   }
 
-  const res = await charityService.submitAdjustment(payload)
+  let res
+  if (isResubmitting.value) {
+    res = await CharityService.resubmitRequest(props.requestToEdit.requestId, {
+      action: form.action,
+      reason: form.reason,
+      metadata
+    })
+  } else {
+    res = await CharityService.submitAdjustment({
+      action:          form.action,
+      donationItemId:  props.item.donationItemId,
+      recurringId:     props.recurring?.recurring_id ?? null,
+      reason:          form.reason,
+      metadata
+    })
+  }
+
   submitting.value = false
 
   if (res.success) {
-    emit('success', res.message || 'Adjustment request submitted')
+    emit('success', res.message || (isResubmitting.value ? 'Adjustment resubmitted' : 'Adjustment request submitted'))
     emit('close')
-    form.amount          = null
-    form.reason          = ''
-    form.toBeneficiaryId = ''
-    isConfirming.value   = false
+    isConfirming.value = false
   } else {
-    alert(res.error || 'Failed to submit adjustment request')
+    alert(res.error || 'Operation failed')
   }
 }
 
@@ -285,6 +306,10 @@ const formatCurrency = (v) =>
   display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
 }
 .modal-title { font-size: 18px; font-weight: 700; color: #1e293b; margin: 0; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.status-badge { font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 20px; letter-spacing: 0.5px; }
+.status-badge.pending { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+.status-badge.commented { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
 .close-btn { background: none; border: none; font-size: 24px; color: #94a3b8; cursor: pointer; }
 
 .target-info {

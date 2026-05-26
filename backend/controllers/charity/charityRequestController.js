@@ -307,6 +307,43 @@ exports.commentRequest = async (req, res) => {
   }
 };
 
+// ─── POST /:id/resubmit  (charity_teamleader) ─────────────────────────────────
+exports.resubmitRequest = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const request = await CharityRequestApprove.findByPk(req.params.id, { transaction: t });
+    if (!request) { await t.rollback(); return res.status(404).json({ success: false, error: 'Request not found' }); }
+    
+    // Only allow resubmitting if it's currently in 'commented' state
+    if (request.status !== 'commented') {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Only requests requiring clarification can be resubmitted' });
+    }
+
+    const { action, reason, metadata } = req.body;
+
+    // Optional updates
+    const updates = { status: 'pending' };
+    if (action) updates.action = action;
+    if (reason !== undefined) updates.metadata = { ...(request.metadata || {}), reason };
+    if (metadata) updates.metadata = { ...(updates.metadata || request.metadata || {}), ...metadata };
+
+    // Move back to 'pending' with updated data
+    await request.update(updates, { transaction: t });
+
+    // Sync onAdjustment status back to 'pending' on the donation item
+    if (request.metadata?.donation_item_id) {
+      await syncItemAdjustmentStatus(request.metadata.donation_item_id, request.requestId, 'pending', t);
+    }
+
+    await t.commit();
+    res.json({ success: true, message: 'Request resubmitted for approval' });
+  } catch (err) {
+    await t.rollback();
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 // ─── POST /adjustment  — teamleader submits Deduct/Increase/Transfer/Return request ──
 exports.submitAdjustment = async (req, res) => {
   const t = await sequelize.transaction();

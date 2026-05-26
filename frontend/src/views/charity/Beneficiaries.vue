@@ -2,7 +2,7 @@
   <div class="beneficiaries-page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">Beneficiaries</h1>
+        <h1 class="page-title">{{ isTeamLeader ? 'My Team Beneficiaries' : 'Beneficiaries' }}</h1>
         <p class="page-subtitle">Track and manage individuals and organizations receiving support</p>
       </div>
       <router-link to="/charity/beneficiaries/create" class="btn-primary">
@@ -79,11 +79,15 @@ import FilterBar from './components/common/FilterBar.vue'
 import ListTable from './components/common/ListTable.vue'
 import CharityService, { type CharityBeneficiary } from '@/stores/charity'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const loading = ref(false)
 const beneficiaries = ref<CharityBeneficiary[]>([])
 const filters = ref({ search: '', type: '' })
+
+const isTeamLeader = computed(() => authStore.userRole === 'charity_teamleader')
 
 const loadBeneficiaries = async () => {
   loading.value = true
