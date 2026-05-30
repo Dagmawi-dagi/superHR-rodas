@@ -68,26 +68,53 @@
                 v-model.number="form.amount"
                 type="number" step="0.01" min="0.01"
                 :max="['Deduct', 'Return', 'Transfer', 'Reassign'].includes(form.action) ? currentValue : undefined"
-                :disabled="['Return', 'Reassign'].includes(form.action) || (hasPendingAdjustment && !isResubmitting)"
+                :disabled="form.action === 'Return' || (hasPendingAdjustment && !isResubmitting)"
                 required
                 :placeholder="itemType === 'money' ? '0.00' : '0'"
               />
               <small class="hint" v-if="itemType !== 'money'">Number of units to {{ form.action?.toLowerCase() }}</small>
+              <small v-if="isReassign" class="hint limit-hint">Max available: {{ currentValue }}</small>
             </div>
 
             <!-- Transfer/Reassign → pick target beneficiary -->
             <div class="form-group" v-if="['Transfer', 'Reassign'].includes(form.action)">
-              <label>Transfer To <span class="req">*</span></label>
+              <label>{{ form.action === 'Reassign' ? 'Reassign To' : 'Transfer To' }} <span class="req">*</span></label>
               <select v-model="form.toBeneficiaryId" required :disabled="hasPendingAdjustment && !isResubmitting">
-                <option value="">Select recipient</option>
-                <option
-                  v-for="ben in otherBeneficiaries"
-                  :key="ben.beneficiaryId"
-                  :value="ben.beneficiaryId"
-                >
-                  {{ ben.name }}
-                </option>
+                <option value="">Select beneficiary</option>
+                <!-- Reassign: show same person at top with clear label -->
+                <template v-if="form.action === 'Reassign'">
+                  <option
+                    :value="props.item?.beneficiaryId"
+                    class="option-same"
+                  >
+                    ↩ Restore to same — {{ beneficiaryName }}
+                  </option>
+                  <option disabled>── Other team members ──</option>
+                  <option
+                    v-for="ben in otherBeneficiaries.filter(b => b.beneficiaryId !== props.item?.beneficiaryId)"
+                    :key="ben.beneficiaryId"
+                    :value="ben.beneficiaryId"
+                  >
+                    {{ ben.name }}
+                  </option>
+                </template>
+                <!-- Transfer: only other beneficiaries -->
+                <template v-else>
+                  <option
+                    v-for="ben in otherBeneficiaries"
+                    :key="ben.beneficiaryId"
+                    :value="ben.beneficiaryId"
+                  >
+                    {{ ben.name }}
+                  </option>
+                </template>
               </select>
+              <small v-if="form.action === 'Reassign' && form.toBeneficiaryId === props.item?.beneficiaryId" class="hint same-hint">
+                ✓ Restore — amount will be moved from returned to active for {{ beneficiaryName }}
+              </small>
+              <small v-else-if="form.action === 'Reassign' && form.toBeneficiaryId" class="hint transfer-hint">
+                ✓ Reassign — amount will be moved to a new active record for the selected person
+              </small>
             </div>
           </div>
 
@@ -114,8 +141,12 @@
             <p><strong>{{ itemType === 'money' ? 'Value' : 'Quantity' }}:</strong>
               {{ itemType === 'money' ? formatCurrency(form.amount) : form.amount + ' units' }}</p>
             <p v-if="['Transfer', 'Reassign'].includes(form.action)">
-              <strong>Transfer To:</strong>
-              {{ otherBeneficiaries.find(b => b.beneficiaryId === form.toBeneficiaryId)?.name }}
+              <strong>{{ form.action === 'Reassign' ? 'Reassign To' : 'Transfer To' }}:</strong>
+              {{
+                form.toBeneficiaryId === props.item?.beneficiaryId
+                  ? `↩ Original beneficiary (${beneficiaryName}) — restore`
+                  : otherBeneficiaries.find(b => b.beneficiaryId === form.toBeneficiaryId)?.name
+              }}
             </p>
             <p><strong>Reason:</strong> {{ form.reason }}</p>
             <p v-if="recurring"><strong>Period:</strong> {{ item?.isRecurring?.recurring_type }} #{{ recurring.recurring_id }}</p>
@@ -182,9 +213,9 @@ watch(() => props.isOpen, (val) => {
   }
 })
 
-// Auto-fill amount when switching to Return or Reassign
+// Auto-fill amount when switching to Return
 watch(() => form.action, (a) => {
-  if (['Return', 'Reassign'].includes(a)) form.amount = currentValue.value
+  if (a === 'Return') form.amount = currentValue.value
 })
 
 // ── Action types (match backend ENUM exactly) ─────────────────────────────────
@@ -236,6 +267,7 @@ const currentValue = computed(() => {
 
 const otherBeneficiaries = computed(() => {
   if (!props.item) return props.beneficiaries
+  if (form.action === 'Reassign') return props.beneficiaries
   return props.beneficiaries.filter(b => b.beneficiaryId !== props.item.beneficiaryId)
 })
 
@@ -361,6 +393,9 @@ input, select, textarea {
 }
 input:disabled, select:disabled, textarea:disabled { background: #f8fafc; color: #94a3b8; }
 .hint { font-size: 11px; color: #94a3b8; }
+.limit-hint { color: #ef4444; font-weight: 600; }
+.same-hint { color: #059669; font-weight: 600; }
+.transfer-hint { color: #6a11cb; font-weight: 600; }
 
 .confirm-view { margin-bottom: 16px; }
 .confirm-banner { margin-bottom: 12px; }

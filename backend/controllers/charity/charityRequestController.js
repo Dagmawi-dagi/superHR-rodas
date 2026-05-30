@@ -95,13 +95,52 @@ const applyAdjustmentEffects = async (request, t) => {
 
   // ─── 2. REASSIGN ITEM APPROVAL ───
   if (action === 'Reassign') {
-    const { donation_item_id, to_beneficiary_id, recurring_id } = metadata;
-    if (!donation_item_id || !to_beneficiary_id) return;
+    const { donation_item_id, to_beneficiary_id, recurring_id, amount } = metadata;
+    if (!donation_item_id || !to_beneficiary_id || amount === undefined) return;
 
     const item = await CharityDonationItem.findByPk(donation_item_id, { transaction: t });
     if (!item) return;
 
-    const isRestoringToSame = parseInt(to_beneficiary_id) === item.beneficiaryId;
+    const isMoney = item.type === 'money';
+    const reassignVal = parseFloat(amount || 0);
+
+    // ─── Helper: Create or Update Active Target Record ───
+    const addToTarget = async (val) => {
+      // Find an existing ACTIVE (not returned) non-recurring item for this beneficiary
+      let targetItem = await CharityDonationItem.findOne({
+        where: { 
+          donationId: item.donationId, 
+          beneficiaryId: parseInt(to_beneficiary_id), 
+          type: item.type, 
+          isRecurring: null,
+          isReturned: null 
+        },
+        transaction: t
+      });
+
+      if (targetItem) {
+        if (isMoney) {
+          targetItem.totalValueInBirr = money(parseFloat(targetItem.totalValueInBirr) + val);
+          targetItem.unitValueInBirr  = targetItem.totalValueInBirr;
+        } else {
+          targetItem.quantity = parseFloat(targetItem.quantity) + val;
+          targetItem.totalValueInBirr = money(targetItem.quantity * parseFloat(targetItem.unitValueInBirr));
+        }
+        await targetItem.save({ transaction: t });
+      } else {
+        await CharityDonationItem.create({
+          donationId:       item.donationId,
+          beneficiaryId:    parseInt(to_beneficiary_id),
+          type:             item.type,
+          description:      item.description,
+          quantity:         isMoney ? 1 : val,
+          unitValueInBirr:  isMoney ? val : item.unitValueInBirr,
+          totalValueInBirr: val,
+          paymentMethod:    item.paymentMethod,
+          createdBy:        request.requestedBy
+        }, { transaction: t });
+      }
+    };
 
     if (recurring_id && item.isRecurring) {
       // ── Scenario: Recurring Period ──
@@ -110,42 +149,61 @@ const applyAdjustmentEffects = async (request, t) => {
       if (idx === -1) return;
       const recPeriod = isRec.recurrings[idx];
 
-      if (isRestoringToSame) {
-        // Just undo the return
-        recPeriod.is_returned = null;
-        item.isRecurring = isRec;
-        await item.save({ transaction: t });
-      } else {
-        // Move to new beneficiary (create new item for them)
-        const isMoney = item.type === 'money';
-        await CharityDonationItem.create({
-          donationId:       item.donationId,
-          beneficiaryId:    parseInt(to_beneficiary_id),
-          type:             item.type,
-          description:      `(Reassigned) ${item.description || ''}`,
-          quantity:         isMoney ? 1 : recPeriod.quantity,
-          unitValueInBirr:  isMoney ? recPeriod.total_value_in_birr : item.unitValueInBirr,
-          totalValueInBirr: recPeriod.total_value_in_birr,
-          paymentMethod:    recPeriod.payment_method || item.paymentMethod,
-          createdBy:        request.requestedBy
-        }, { transaction: t });
+      const currentPeriodVal = parseFloat(isMoney ? recPeriod.total_value_in_birr : recPeriod.quantity);
 
-        // Remove the period from original item
+      if (reassignVal >= currentPeriodVal - 0.001) {
+        // Full Reassignment of this period
+        await addToTarget(parseFloat(recPeriod.total_value_in_birr));
+        // Remove the period from original
         isRec.recurrings.splice(idx, 1);
         isRec.recurring_count = isRec.recurrings.length;
         if (isRec.recurrings.length === 0) {
           await item.destroy({ transaction: t });
         } else {
           item.isRecurring = isRec;
+          item.onAdjustment = null;
           await item.save({ transaction: t });
         }
+      } else {
+        // Partial Reassignment of this period
+        const valToTransfer = isMoney ? reassignVal : money(reassignVal * parseFloat(item.unitValueInBirr));
+        await addToTarget(valToTransfer);
+
+        // Subtract from original period
+        if (isMoney) {
+          recPeriod.total_value_in_birr = money(parseFloat(recPeriod.total_value_in_birr) - reassignVal);
+          recPeriod.unit_value_in_birr  = recPeriod.total_value_in_birr;
+        } else {
+          recPeriod.quantity = parseFloat(recPeriod.quantity) - reassignVal;
+          recPeriod.total_value_in_birr = money(recPeriod.quantity * parseFloat(item.unitValueInBirr));
+        }
+        item.isRecurring = isRec;
+        item.onAdjustment = null;
+        await item.save({ transaction: t });
       }
     } else {
       // ── Scenario: One-time Item ──
-      if (isRestoringToSame) {
-        await item.update({ isReturned: null, isDelivered: false }, { transaction: t });
+      const currentItemVal = parseFloat(isMoney ? item.totalValueInBirr : item.quantity);
+
+      if (reassignVal >= currentItemVal - 0.001) {
+        // Full Reassignment
+        await addToTarget(parseFloat(item.totalValueInBirr));
+        await item.destroy({ transaction: t });
       } else {
-        await item.update({ beneficiaryId: parseInt(to_beneficiary_id), isReturned: null, isDelivered: false }, { transaction: t });
+        // Partial Reassignment
+        const valToTransfer = isMoney ? reassignVal : money(reassignVal * parseFloat(item.unitValueInBirr));
+        await addToTarget(valToTransfer);
+
+        // Subtract from original (which stays "Returned")
+        if (isMoney) {
+          item.totalValueInBirr = money(parseFloat(item.totalValueInBirr) - reassignVal);
+          item.unitValueInBirr  = item.totalValueInBirr;
+        } else {
+          item.quantity = parseFloat(item.quantity) - reassignVal;
+          item.totalValueInBirr = money(item.quantity * parseFloat(item.unitValueInBirr));
+        }
+        item.onAdjustment = null;
+        await item.save({ transaction: t });
       }
     }
     

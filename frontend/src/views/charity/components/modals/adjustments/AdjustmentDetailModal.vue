@@ -84,8 +84,11 @@
                   key.replace(/_/g, ' ')
                      .replace('recurring id', 'Period ID')
                      .replace('donation item id', 'Item ID')
-                     .replace('toBeneficiaryId', 'To Beneficiary ID')
+                     .replace('to beneficiary id', 'To Beneficiary ID')
+                     .replace('from beneficiary id', 'From Beneficiary ID')
+                     .replace('donation id', 'Donation Batch ID')
                      .replace('amount', 'Adjustment Value')
+                     .replace('reason', 'Provided Reason')
                 }}:</span>
                 <span class="meta-val">{{ val }}</span>
               </div>
@@ -171,6 +174,7 @@ const types = [
   { id: 'Increase', label: 'Increase', cls: 'increase' },
   { id: 'Transfer', label: 'Transfer', cls: 'transfer' },
   { id: 'Return',   label: 'Return',   cls: 'return'   },
+  { id: 'Reassign', label: 'Reassign', cls: 'reassign' },
 ]
 
 const isValid = computed(() => {

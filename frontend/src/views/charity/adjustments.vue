@@ -28,11 +28,13 @@
           <option value="">All Actions</option>
           <option value="NewBeneficiary">New Beneficiary</option>
           <option value="NewCharityTeam">New Team</option>
+          <option value="NewDonation">New Donation Batch</option>
           <option value="Transfer">Item Transfer</option>
           <option value="TransferBeneficiary">Team Transfer</option>
           <option value="Deduct">Deduction</option>
           <option value="Increase">Increase</option>
           <option value="Return">Return</option>
+          <option value="Reassign">Reassign</option>
         </select>
       </template>
     </FilterBar>
@@ -211,8 +213,13 @@ const handleResubmit = async (req: CharityRequestApprove, updatedData?: any) => 
 }
 
 const handleEditRequest = async (req: CharityRequestApprove) => {
-  // We need to fetch enough info to show the adjustment modal
-  // 1. Get the item
+  // 1. If it's a NewDonation, redirect to the donation edit page
+  if (req.action === 'NewDonation' && req.metadata.donation_id) {
+    router.push(`/charity/donations/${req.metadata.donation_id}/edit`)
+    return
+  }
+
+  // 2. Otherwise, handle standard line-item adjustments
   if (!req.metadata.donation_item_id) return
   
   loading.value = true
@@ -224,10 +231,10 @@ const handleEditRequest = async (req: CharityRequestApprove) => {
   }
   
   const item = itemRes.data
-  // 2. Get beneficiaries for the team
+  // 3. Get beneficiaries for the team
   const benRes = await CharityService.getBeneficiariesByTeam(item.donation.teamId)
   
-  // 3. Find specific recurring period if needed
+  // 4. Find specific recurring period if needed
   let recurring = null
   if (req.metadata.recurring_id && item.isRecurring) {
     recurring = item.isRecurring.recurrings.find((r: any) => r.recurring_id === req.metadata.recurring_id)
@@ -302,11 +309,13 @@ const addToast = (message: string, type: 'success' | 'error' = 'success') => {
 }
 .action-pill.newbeneficiary { background: #3b82f6; }
 .action-pill.newcharityteam { background: #8b5cf6; }
+.action-pill.newdonation { background: #6a11cb; }
 .action-pill.transferbeneficiary { background: #f59e0b; }
 .action-pill.transfer { background: #f59e0b; }
 .action-pill.deduct { background: #ef4444; }
 .action-pill.increase { background: #10b981; }
 .action-pill.return { background: #64748b; }
+.action-pill.reassign { background: #dc2626; }
 
 .requester-info { display: flex; flex-direction: column; }
 .req-name { font-weight: 600; color: #1e293b; }
