@@ -2,7 +2,7 @@
   <div v-if="isOpen" class="modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
-        <h3 class="modal-title">{{ isResubmitting ? 'Edit & Resubmit' : 'Request Adjustment' }}</h3>
+        <h3 class="modal-title">{{ isReassign ? 'Reassign Returned Item' : isResubmitting ? 'Edit & Resubmit' : 'Request Adjustment' }}</h3>
         <div class="header-right">
           <span v-if="hasPendingAdjustment && !isResubmitting" class="status-badge pending">UNDER ADJUSTMENT</span>
           <span v-if="isResubmitting" class="status-badge commented">CLARIFICATION</span>
@@ -11,7 +11,7 @@
       </div>
 
       <!-- Target info summary -->
-      <div class="target-info">
+      <div class="target-info" :class="{ 'is-reassign': isReassign }">
         <div class="info-row">
           <span class="label">Beneficiary:</span>
           <span class="value">{{ beneficiaryName }}</span>
@@ -45,15 +45,15 @@
 
           <!-- Action type selector -->
           <div class="form-group">
-            <label>Adjustment Type <span class="req">*</span></label>
+            <label>{{ isReassign ? 'Action Type (Locked to Reassign)' : 'Adjustment Type' }} <span class="req">*</span></label>
             <div class="type-grid">
               <button
-                v-for="t in types" :key="t.id"
+                v-for="t in filteredTypes" :key="t.id"
                 type="button"
                 class="type-btn"
                 :class="[{ active: form.action === t.id }, t.cls]"
                 @click="form.action = t.id"
-                :disabled="hasPendingAdjustment && !isResubmitting"
+                :disabled="(hasPendingAdjustment && !isResubmitting) || (isReassign && t.id !== 'Reassign')"
               >
                 {{ t.label }}
               </button>
@@ -67,16 +67,16 @@
               <input
                 v-model.number="form.amount"
                 type="number" step="0.01" min="0.01"
-                :max="['Deduct', 'Return', 'Transfer'].includes(form.action) ? currentValue : undefined"
-                :disabled="form.action === 'Return' || (hasPendingAdjustment && !isResubmitting)"
+                :max="['Deduct', 'Return', 'Transfer', 'Reassign'].includes(form.action) ? currentValue : undefined"
+                :disabled="['Return', 'Reassign'].includes(form.action) || (hasPendingAdjustment && !isResubmitting)"
                 required
                 :placeholder="itemType === 'money' ? '0.00' : '0'"
               />
               <small class="hint" v-if="itemType !== 'money'">Number of units to {{ form.action?.toLowerCase() }}</small>
             </div>
 
-            <!-- Transfer → pick target beneficiary -->
-            <div class="form-group" v-if="form.action === 'Transfer'">
+            <!-- Transfer/Reassign → pick target beneficiary -->
+            <div class="form-group" v-if="['Transfer', 'Reassign'].includes(form.action)">
               <label>Transfer To <span class="req">*</span></label>
               <select v-model="form.toBeneficiaryId" required :disabled="hasPendingAdjustment && !isResubmitting">
                 <option value="">Select recipient</option>
@@ -113,7 +113,7 @@
             <p><strong>Action:</strong> {{ form.action }}</p>
             <p><strong>{{ itemType === 'money' ? 'Value' : 'Quantity' }}:</strong>
               {{ itemType === 'money' ? formatCurrency(form.amount) : form.amount + ' units' }}</p>
-            <p v-if="form.action === 'Transfer'">
+            <p v-if="['Transfer', 'Reassign'].includes(form.action)">
               <strong>Transfer To:</strong>
               {{ otherBeneficiaries.find(b => b.beneficiaryId === form.toBeneficiaryId)?.name }}
             </p>
@@ -146,7 +146,8 @@ const props = defineProps({
   item:          { type: Object,  default: null },   // CharityDonationItem
   recurring:     { type: Object,  default: null },   // one entry from isRecurring.recurrings[]
   beneficiaries: { type: Array,   default: () => [] }, // all beneficiaries in the team (for Transfer)
-  requestToEdit: { type: Object,  default: null }    // Existing request if resubmitting
+  requestToEdit: { type: Object,  default: null },   // Existing request if resubmitting
+  isReassign:    { type: Boolean, default: false }   // Lock action to Reassign for returned items
 })
 
 const emit = defineEmits(['close', 'success'])
@@ -173,17 +174,17 @@ watch(() => props.isOpen, (val) => {
       form.reason = props.requestToEdit.metadata?.reason || ''
       form.toBeneficiaryId = props.requestToEdit.metadata?.toBeneficiaryId || ''
     } else {
-      form.action          = 'Deduct'
-      form.amount          = null
+      form.action          = props.isReassign ? 'Reassign' : 'Deduct'
+      form.amount          = props.isReassign ? currentValue.value : null
       form.reason          = ''
       form.toBeneficiaryId = ''
     }
   }
 })
 
-// Auto-fill amount when switching to Return
+// Auto-fill amount when switching to Return or Reassign
 watch(() => form.action, (a) => {
-  if (a === 'Return') form.amount = currentValue.value
+  if (['Return', 'Reassign'].includes(a)) form.amount = currentValue.value
 })
 
 // ── Action types (match backend ENUM exactly) ─────────────────────────────────
@@ -192,7 +193,13 @@ const types = [
   { id: 'Increase', label: 'Increase', cls: 'increase' },
   { id: 'Transfer', label: 'Transfer', cls: 'transfer' },
   { id: 'Return',   label: 'Return',   cls: 'return'   },
+  { id: 'Reassign', label: 'Reassign', cls: 'reassign' },
 ]
+
+const filteredTypes = computed(() => {
+  if (props.isReassign) return types.filter(t => t.id === 'Reassign')
+  return types.filter(t => t.id !== 'Reassign')
+})
 
 // ── Computed helpers ──────────────────────────────────────────────────────────
 
@@ -212,7 +219,7 @@ const beneficiaryName = computed(() => {
 
 const itemType = computed(() => props.item?.type || 'money')
 
-// Value to display + use as max for Deduct/Return/Transfer
+// Value to display + use as max for Deduct/Return/Transfer/Reassign
 const currentValue = computed(() => {
   if (!props.item) return 0
   if (props.recurring) {
@@ -235,8 +242,8 @@ const otherBeneficiaries = computed(() => {
 const isValid = computed(() => {
   if (!props.item || !form.action || !form.reason?.trim()) return false
   if (form.amount === null || form.amount <= 0)             return false
-  if (form.action === 'Transfer' && !form.toBeneficiaryId)  return false
-  if (['Deduct', 'Return', 'Transfer'].includes(form.action) && form.amount > currentValue.value) return false
+  if (['Transfer', 'Reassign'].includes(form.action) && !form.toBeneficiaryId)  return false
+  if (['Deduct', 'Return', 'Transfer', 'Reassign'].includes(form.action) && form.amount > (currentValue.value + 0.001)) return false
   return true
 })
 
@@ -257,12 +264,12 @@ const handleSubmit = async () => {
 
   const metadata = {
     amount:           form.amount,
-    ...(form.action === 'Transfer' && { toBeneficiaryId: form.toBeneficiaryId }),
+    ...( ['Transfer', 'Reassign'].includes(form.action) && { toBeneficiaryId: form.toBeneficiaryId }),
   }
 
   let res
   if (isResubmitting.value) {
-    res = await CharityService.resubmitRequest(props.requestToEdit.requestId, {
+    res = await CharityService.resubmitWorkflowRequest(props.requestToEdit.requestId, {
       action: form.action,
       reason: form.reason,
       metadata
@@ -315,11 +322,13 @@ const formatCurrency = (v) =>
 .target-info {
   background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 20px;
 }
+.target-info.is-reassign { background: #fff1f2; border-color: #fca5a5; }
 .info-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
 .info-row:last-child { margin-bottom: 0; }
 .label { color: #64748b; }
 .value { color: #1e293b; font-weight: 600; }
 .highlight { color: #7c3aed; font-size: 15px; }
+.is-reassign .highlight { color: #dc2626; }
 
 .pending-warning {
   margin-top: 10px; padding: 8px 12px; background: #fef3c7;
@@ -340,6 +349,7 @@ const formatCurrency = (v) =>
 .type-btn.active.increase { background: #dcfce7; border-color: #22c55e; color: #15803d; }
 .type-btn.active.transfer { background: #fef3c7; border-color: #f59e0b; color: #b45309; }
 .type-btn.active.return   { background: #e0f2fe; border-color: #0ea5e9; color: #0369a1; }
+.type-btn.active.reassign { background: #dc2626; border-color: #dc2626; color: white; }
 
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
 .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }

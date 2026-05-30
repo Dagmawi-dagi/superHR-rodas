@@ -87,8 +87,8 @@ import { useRoute } from 'vue-router'
 import StatsCards from './components/common/StatsCards.vue'
 import FilterBar from './components/common/FilterBar.vue'
 import ListTable from './components/common/ListTable.vue'
-import AssignBeneficiaryModal from './components/modals/AssignBeneficiaryModal.vue'
-import TransferBeneficiaryModal from './components/modals/TransferBeneficiaryModal.vue'
+import AssignBeneficiaryModal from './components/modals/beneficiaries/AssignBeneficiaryModal.vue'
+import TransferBeneficiaryModal from './components/modals/beneficiaries/TransferBeneficiaryModal.vue'
 import CharityService, { type CharityBeneficiary, type CharityTeam } from '@/stores/charity'
 
 const route = useRoute()

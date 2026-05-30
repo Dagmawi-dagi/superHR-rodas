@@ -4,19 +4,17 @@ const { Model } = require('sequelize');
 module.exports = (sequelize, DataTypes) => {
   class CharityDonation extends Model {
     static associate(models) {
-      // Which team owns this donation batch
+      // Which team owns this donation
       CharityDonation.belongsTo(models.CharityTeam, {
         foreignKey: 'teamId',
         as: 'team',
       });
-
-      // Who created the donation
+      // The teamleader/admin who created the draft
       CharityDonation.belongsTo(models.User, {
         foreignKey: 'createdBy',
         as: 'creator',
       });
-
-      // All items inside this donation
+      // Line items
       CharityDonation.hasMany(models.CharityDonationItem, {
         foreignKey: 'donationId',
         as: 'items',
@@ -34,40 +32,23 @@ module.exports = (sequelize, DataTypes) => {
       },
       teamId: {
         type: DataTypes.INTEGER,
-        allowNull: true,
         field: 'team_id',
-        references: { model: 'charity_teams', key: 'team_id' },
       },
-      // Maintained by app logic: sum of all donation_item.totalValueInBirr
       totalValueInBirr: {
         type: DataTypes.DECIMAL(15, 2),
         defaultValue: 0,
         field: 'total_value_in_birr',
       },
-      status: {
-        type: DataTypes.ENUM('draft', 'pending', 'approved', 'cancelled'),
-        defaultValue: 'draft',
-      },
-      comments: {
-        type: DataTypes.JSONB,
-        allowNull: false,
-        defaultValue: [],
-      },
       description: {
         type: DataTypes.TEXT,
-        allowNull: true,
       },
-      // Global target delivery date for every item in this donation batch
       donationDeliveryDate: {
         type: DataTypes.DATEONLY,
-        allowNull: true,
         field: 'donation_delivery_date',
       },
       createdBy: {
         type: DataTypes.INTEGER,
-        allowNull: true,
         field: 'created_by',
-        references: { model: 'users', key: 'user_id' },
       },
     },
     {

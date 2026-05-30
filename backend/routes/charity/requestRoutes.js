@@ -20,6 +20,6 @@ router.get('/:id',                authMiddleware(ALL),   ctrl.getRequestById);
 router.post('/:id/approve',       authMiddleware(ADMIN), ctrl.approveRequest);
 router.post('/:id/reject',        authMiddleware(ADMIN), ctrl.rejectRequest);
 router.post('/:id/comment',       authMiddleware(ADMIN), ctrl.commentRequest);
-router.post('/:id/resubmit',      authMiddleware(ALL),   ctrl.resubmitRequest); // teamleader can resubmit
+router.post('/:id/resubmit',      authMiddleware(ALL),   ctrl.resubmitWorkflowRequest); // teamleader can resubmit
 
 module.exports = router;

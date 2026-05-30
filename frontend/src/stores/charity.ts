@@ -269,6 +269,10 @@ class CharityService {
     try { const r = await api.post(`/charity/donations/items/${itemId}/return`, { reason }); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
+  async reassignItem(itemId: number, beneficiaryId: number, reason?: string) {
+    try { const r = await api.post(`/charity/donations/items/${itemId}/reassign`, { beneficiaryId, reason }); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
 
   // ── Approvals / Requests ──────────────────────────────────────────────────
   async getRequests(params?: { status?: string; action?: string; page?: number; size?: number }) {
@@ -298,7 +302,7 @@ class CharityService {
     try { const r = await api.post(`/charity/requests/${id}/comment`, { text }); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
-  async resubmitRequest(id: number, data?: any) {
+  async resubmitWorkflowRequest(id: number, data?: any) {
     try { const r = await api.post(`/charity/requests/${id}/resubmit`, data); return r.data }
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }

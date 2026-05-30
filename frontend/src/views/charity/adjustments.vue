@@ -107,8 +107,8 @@ import FilterBar from './components/common/FilterBar.vue'
 import ListTable from './components/common/ListTable.vue'
 import CharityService, { type CharityRequestApprove } from '@/stores/charity'
 import { useAuthStore } from '@/stores/auth'
-import AdjustmentDetailModal from './components/modals/adjustment_detail_modal.vue'
-import AdjustmentModal from './components/modals/adjustment_modal.vue'
+import AdjustmentDetailModal from './components/modals/adjustments/AdjustmentDetailModal.vue'
+import AdjustmentModal from './components/modals/adjustments/AdjustmentModal.vue'
 
 const loading = ref(false)
 const processing = ref(false)
@@ -199,7 +199,7 @@ const handleApprove = async (req: CharityRequestApprove) => {
 const handleResubmit = async (req: CharityRequestApprove, updatedData?: any) => {
   if (!confirm('Resubmit this request for approval?')) return
   processing.value = true
-  const res = await CharityService.resubmitRequest(req.requestId, updatedData)
+  const res = await CharityService.resubmitWorkflowRequest(req.requestId, updatedData)
   if (res.success) {
     addToast('✅ Request resubmitted successfully')
     selectedRequest.value = null

@@ -25,11 +25,29 @@ const money = (v) => Math.round(parseFloat(v || 0) * 100) / 100;
 const recalcTotal = async (donationId, t) => {
   if (!donationId) return 0;
   const items = await CharityDonationItem.findAll({
-    where: { donationId }, attributes: ['totalValueInBirr'], transaction: t,
+    where: { donationId }, transaction: t,
   });
-  const total = money(items.reduce((s, i) => s + money(i.totalValueInBirr), 0));
-  await CharityDonation.update({ totalValueInBirr: total }, { where: { donationId }, transaction: t });
-  return total;
+
+  let total = 0;
+  for (const item of items) {
+    if (item.isRecurring) {
+      // Sum only non-returned periods
+      const recs = item.isRecurring.recurrings || [];
+      total += recs.reduce((s, r) => {
+        if (r.is_returned) return s; // Skip returned periods
+        return s + money(r.total_value_in_birr || 0);
+      }, 0);
+    } else {
+      // One-time item: skip if returned
+      if (!item.isReturned) {
+        total += money(item.totalValueInBirr || 0);
+      }
+    }
+  }
+
+  const finalTotal = money(total);
+  await CharityDonation.update({ totalValueInBirr: finalTotal }, { where: { donationId }, transaction: t });
+  return finalTotal;
 };
 
 // Sync onAdjustment array in item when a request status changes
@@ -67,6 +85,74 @@ const executeTranferIfApproved = async (request, t) => {
 
 const applyAdjustmentEffects = async (request, t) => {
   const { action, metadata } = request;
+
+  // ─── 1. NEW DONATION APPROVAL ───
+  if (action === 'NewDonation') {
+    // Donation status is now derived from this request's 'approved' status.
+    // No direct update to charity_donation table needed.
+    return;
+  }
+
+  // ─── 2. REASSIGN ITEM APPROVAL ───
+  if (action === 'Reassign') {
+    const { donation_item_id, to_beneficiary_id, recurring_id } = metadata;
+    if (!donation_item_id || !to_beneficiary_id) return;
+
+    const item = await CharityDonationItem.findByPk(donation_item_id, { transaction: t });
+    if (!item) return;
+
+    const isRestoringToSame = parseInt(to_beneficiary_id) === item.beneficiaryId;
+
+    if (recurring_id && item.isRecurring) {
+      // ── Scenario: Recurring Period ──
+      const isRec = JSON.parse(JSON.stringify(item.isRecurring));
+      const idx = isRec.recurrings.findIndex(r => r.recurring_id === parseInt(recurring_id));
+      if (idx === -1) return;
+      const recPeriod = isRec.recurrings[idx];
+
+      if (isRestoringToSame) {
+        // Just undo the return
+        recPeriod.is_returned = null;
+        item.isRecurring = isRec;
+        await item.save({ transaction: t });
+      } else {
+        // Move to new beneficiary (create new item for them)
+        const isMoney = item.type === 'money';
+        await CharityDonationItem.create({
+          donationId:       item.donationId,
+          beneficiaryId:    parseInt(to_beneficiary_id),
+          type:             item.type,
+          description:      `(Reassigned) ${item.description || ''}`,
+          quantity:         isMoney ? 1 : recPeriod.quantity,
+          unitValueInBirr:  isMoney ? recPeriod.total_value_in_birr : item.unitValueInBirr,
+          totalValueInBirr: recPeriod.total_value_in_birr,
+          paymentMethod:    recPeriod.payment_method || item.paymentMethod,
+          createdBy:        request.requestedBy
+        }, { transaction: t });
+
+        // Remove the period from original item
+        isRec.recurrings.splice(idx, 1);
+        isRec.recurring_count = isRec.recurrings.length;
+        if (isRec.recurrings.length === 0) {
+          await item.destroy({ transaction: t });
+        } else {
+          item.isRecurring = isRec;
+          await item.save({ transaction: t });
+        }
+      }
+    } else {
+      // ── Scenario: One-time Item ──
+      if (isRestoringToSame) {
+        await item.update({ isReturned: null, isDelivered: false }, { transaction: t });
+      } else {
+        await item.update({ beneficiaryId: parseInt(to_beneficiary_id), isReturned: null, isDelivered: false }, { transaction: t });
+      }
+    }
+    
+    await recalcTotal(item.donationId, t);
+    return;
+  }
+
   const adjustmentActions = ['Deduct', 'Increase', 'Transfer', 'Return'];
   if (!adjustmentActions.includes(action)) return;
 
@@ -115,7 +201,6 @@ const applyAdjustmentEffects = async (request, t) => {
       const recItem = isRec.recurrings[idx];
       if (action === 'Return') {
         recItem.is_returned = { reason: metadata.reason || 'Returned' };
-        updateValues(recItem, -1);
       } else if (action === 'Deduct') {
         updateValues(recItem, -1);
       } else if (action === 'Increase') {
@@ -125,7 +210,10 @@ const applyAdjustmentEffects = async (request, t) => {
       }
 
       item.isRecurring = isRec;
-      item.totalValueInBirr = money(isRec.recurrings.reduce((s, r) => s + money(r.total_value_in_birr), 0));
+      item.totalValueInBirr = money(isRec.recurrings.reduce((s, r) => {
+        if (r.is_returned) return s;
+        return s + money(r.total_value_in_birr);
+      }, 0));
       if (!isMoney) {
         item.quantity = isRec.recurrings.reduce((s, r) => s + parseFloat(r.quantity), 0);
       }
@@ -134,8 +222,6 @@ const applyAdjustmentEffects = async (request, t) => {
     // One-time item
     if (action === 'Return') {
       item.isReturned = { reason: metadata.reason || 'Returned' };
-      item.quantity = 0;
-      item.totalValueInBirr = 0;
     } else if (action === 'Deduct') {
       updateValues(item, -1);
     } else if (action === 'Increase') {
@@ -308,7 +394,7 @@ exports.commentRequest = async (req, res) => {
 };
 
 // ─── POST /:id/resubmit  (charity_teamleader) ─────────────────────────────────
-exports.resubmitRequest = async (req, res) => {
+exports.resubmitWorkflowRequest = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const request = await CharityRequestApprove.findByPk(req.params.id, { transaction: t });
@@ -350,7 +436,7 @@ exports.submitAdjustment = async (req, res) => {
   try {
     const { action, donationItemId, recurringId, reason, metadata } = req.body;
 
-    const validActions = ['Deduct', 'Increase', 'Transfer', 'Return'];
+    const validActions = ['Deduct', 'Increase', 'Transfer', 'Return', 'Reassign'];
     if (!validActions.includes(action)) {
       await t.rollback();
       return res.status(400).json({ success: false, error: `action must be one of: ${validActions.join(', ')}` });

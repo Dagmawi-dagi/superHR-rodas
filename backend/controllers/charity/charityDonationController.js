@@ -40,6 +40,20 @@ const recalcTotal = async (donationId, t) => {
   return total;
 };
 
+// Internal helper to get the current state of a donation batch from workflow
+const getDonationWorkflowStatus = async (donationId) => {
+  const lastReq = await CharityRequestApprove.findOne({
+    where: { action: 'NewDonation', 'metadata.donation_id': donationId },
+    order: [['created_at', 'DESC']]
+  });
+  if (!lastReq) return 'draft';
+  if (lastReq.status === 'pending') return 'pending';
+  if (lastReq.status === 'approved') return 'approved';
+  if (lastReq.status === 'rejected') return 'cancelled';
+  if (lastReq.status === 'commented') return 'draft'; // Feedback loop
+  return 'draft';
+};
+
 const donationIncludes = [
   { model: CharityTeam, as: 'team',    attributes: ['teamId', 'name'] },
   { model: User,        as: 'creator', attributes: ['userId', 'fullName'] },
@@ -57,11 +71,10 @@ const itemIncludes = [
 // GET /
 exports.getDonations = async (req, res) => {
   try {
-    const { page, size, status, teamId, fromDate, toDate } = req.query;
+    const { page, size, teamId, fromDate, toDate } = req.query;
     const { limit, offset } = paginate(page, size);
     const where = {};
 
-    if (status) where.status = status;
     if (teamId) where.teamId = parseInt(teamId);
     if (fromDate && toDate) where.donationDeliveryDate = { [Op.between]: [fromDate, toDate] };
     else if (fromDate)      where.donationDeliveryDate = { [Op.gte]: fromDate };
@@ -77,8 +90,14 @@ exports.getDonations = async (req, res) => {
       order: [['created_at', 'DESC']], distinct: true,
     });
 
+    // Decorate with derived status
+    const decoratedRows = await Promise.all(rows.map(async (d) => {
+       const status = await getDonationWorkflowStatus(d.donationId);
+       return { ...d.toJSON(), status };
+    }));
+
     res.json({
-      success: true, data: rows,
+      success: true, data: decoratedRows,
       pagination: { totalItems: count, totalPages: Math.ceil(count / limit), currentPage: parseInt(page) || 1, pageSize: limit },
     });
   } catch (err) {
@@ -97,13 +116,27 @@ exports.getDonationById = async (req, res) => {
       ],
     });
     if (!donation) return res.status(404).json({ success: false, error: 'Donation not found' });
-    res.json({ success: true, data: donation });
+
+    // Derive status
+    const status = await getDonationWorkflowStatus(donation.donationId);
+
+    // Find the active NewDonation request for this donation
+    const activeRequest = await CharityRequestApprove.findOne({
+      where: {
+        action: 'NewDonation',
+        status: { [Op.in]: ['pending', 'commented'] },
+        'metadata.donation_id': donation.donationId
+      },
+      order: [['created_at', 'DESC']]
+    });
+
+    res.json({ success: true, data: { ...donation.toJSON(), status, activeRequest } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 };
 
-// POST /  create (status: draft)
+// POST /  create (status: draft by default via logic)
 exports.createDonation = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -122,7 +155,7 @@ exports.createDonation = async (req, res) => {
 
     const donation = await CharityDonation.create(
       { teamId: resolvedTeamId, description, donationDeliveryDate,
-        status: 'draft', totalValueInBirr: 0, createdBy: req.user.userId },
+        totalValueInBirr: 0, createdBy: req.user.userId },
       { transaction: t }
     );
 
@@ -165,9 +198,14 @@ exports.createDonation = async (req, res) => {
 exports.updateDonation = async (req, res) => {
   const t = await sequelize.transaction();
   try {
+    const status = await getDonationWorkflowStatus(req.params.id);
+    if (status !== 'draft') {
+       await t.rollback();
+       return res.status(400).json({ success: false, error: 'Only draft donations can be edited' });
+    }
+
     const donation = await CharityDonation.findByPk(req.params.id, { transaction: t });
     if (!donation) { await t.rollback(); return res.status(404).json({ success: false, error: 'Donation not found' }); }
-    if (donation.status !== 'draft') { await t.rollback(); return res.status(400).json({ success: false, error: 'Only draft donations can be edited' }); }
 
     const updates = {};
     ['description', 'donationDeliveryDate'].forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
@@ -236,21 +274,60 @@ exports.updateDonation = async (req, res) => {
   }
 };
 
-// POST /:id/submit  draft → pending
+// POST /:id/submit  draft → pending (creates or updates approval request)
 exports.submitDonation = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const donation = await CharityDonation.findByPk(req.params.id, {
+    const donationId = parseInt(req.params.id);
+    const status = await getDonationWorkflowStatus(donationId);
+    if (status !== 'draft') {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Donation is already submitted or approved' });
+    }
+
+    const donation = await CharityDonation.findByPk(donationId, {
       include: [{ model: CharityDonationItem, as: 'items' }], transaction: t,
     });
     if (!donation) { await t.rollback(); return res.status(404).json({ success: false, error: 'Donation not found' }); }
-    if (donation.status !== 'draft') { await t.rollback(); return res.status(400).json({ success: false, error: 'Donation is not in draft' }); }
     if (!donation.items?.length) {
       await t.rollback();
       return res.status(400).json({ success: false, error: 'Add at least one item before submitting' });
     }
 
-    await donation.update({ status: 'pending' }, { transaction: t });
+    // Check if there is an existing 'commented' request to reuse
+    const existingReq = await CharityRequestApprove.findOne({
+      where: {
+        action: 'NewDonation',
+        status: 'commented',
+        'metadata.donation_id': donation.donationId
+      },
+      transaction: t
+    });
+
+    if (existingReq) {
+      // Reuse existing request: update status back to pending and refresh metadata
+      await existingReq.update({
+        status: 'pending',
+        metadata: {
+          ...existingReq.metadata,
+          description: donation.description,
+          resubmitted_at: new Date().toISOString()
+        }
+      }, { transaction: t });
+    } else {
+      // Create fresh approval request
+      await CharityRequestApprove.create({
+        action:      'NewDonation',
+        requestedBy: req.user.userId,
+        status:      'pending',
+        metadata: {
+          donation_id: donation.donationId,
+          description: donation.description,
+        },
+        comments: [],
+      }, { transaction: t });
+    }
+
     await t.commit();
     res.json({ success: true, message: 'Donation submitted for approval' });
   } catch (err) {
@@ -259,64 +336,27 @@ exports.submitDonation = async (req, res) => {
   }
 };
 
-// POST /:id/approve  pending → approved  (charity_admin)
-exports.approveDonation = async (req, res) => {
-  const t = await sequelize.transaction();
-  try {
-    const donation = await CharityDonation.findByPk(req.params.id, { transaction: t });
-    if (!donation) { await t.rollback(); return res.status(404).json({ success: false, error: 'Donation not found' }); }
-    if (donation.status !== 'pending') { await t.rollback(); return res.status(400).json({ success: false, error: 'Donation is not pending' }); }
-
-    await donation.update({ status: 'approved' }, { transaction: t });
-    await t.commit();
-    res.json({ success: true, message: 'Donation approved' });
-  } catch (err) {
-    await t.rollback();
-    res.status(500).json({ success: false, error: err.message });
-  }
-};
-
-// POST /:id/comment  pending → draft (with comments for correction)
-exports.commentDonation = async (req, res) => {
-  const t = await sequelize.transaction();
-  try {
-    const donation = await CharityDonation.findByPk(req.params.id, { transaction: t });
-    if (!donation) { await t.rollback(); return res.status(404).json({ success: false, error: 'Donation not found' }); }
-    if (donation.status !== 'pending') { await t.rollback(); return res.status(400).json({ success: false, error: 'Only pending donations can be commented/returned' }); }
-
-    const { text } = req.body;
-    if (!text) { await t.rollback(); return res.status(400).json({ success: false, error: 'Comment text is required' }); }
-
-    const existingComments = Array.isArray(donation.comments) ? donation.comments : [];
-    const newComment = {
-      commentId:   existingComments.length + 1,
-      commentedBy: req.user.userId,
-      commentedAt: new Date().toISOString(),
-      text,
-    };
-
-    await donation.update({
-      status: 'draft',
-      comments: [...existingComments, newComment]
-    }, { transaction: t });
-
-    await t.commit();
-    res.json({ success: true, message: 'Donation returned to draft with comments' });
-  } catch (err) {
-    await t.rollback();
-    res.status(500).json({ success: false, error: err.message });
-  }
-};
-
-// POST /:id/cancel  any → cancelled
+// POST /:id/cancel
 exports.cancelDonation = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const donation = await CharityDonation.findByPk(req.params.id, { transaction: t });
     if (!donation) { await t.rollback(); return res.status(404).json({ success: false, error: 'Donation not found' }); }
-    if (donation.status === 'cancelled') { await t.rollback(); return res.status(400).json({ success: false, error: 'Already cancelled' }); }
+    
+    const status = await getDonationWorkflowStatus(donation.donationId);
+    if (status === 'cancelled') { await t.rollback(); return res.status(400).json({ success: false, error: 'Already cancelled' }); }
 
-    await donation.update({ status: 'cancelled' }, { transaction: t });
+    // Logic: In the new system, "cancelling" means we should reject any active request or just mark a new state?
+    // For now, if admin manually cancels, we create a 'rejected' request to finalize the state.
+    await CharityRequestApprove.create({
+       action: 'NewDonation',
+       requestedBy: req.user.userId,
+       status: 'rejected',
+       approvedBy: req.user.userId,
+       reviewedAt: new Date(),
+       metadata: { donation_id: donation.donationId, reason: 'Manually cancelled by admin' }
+    }, { transaction: t });
+
     await t.commit();
     res.json({ success: true, message: 'Donation cancelled' });
   } catch (err) {
@@ -329,8 +369,7 @@ exports.cancelDonation = async (req, res) => {
 //  DONATION ITEMS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// GET /:id/items  — list items of a donation
-// charity_teamleader: only sees items of their own team's donations
+// GET /:id/items
 exports.getItems = async (req, res) => {
   try {
     const { page, size, type, isDelivered } = req.query;
@@ -364,25 +403,18 @@ exports.getItems = async (req, res) => {
   }
 };
 
-// POST /:id/items  — add item (draft only)
+// POST /:id/items
 exports.addItem = async (req, res) => {
   const t = await sequelize.transaction();
   try {
+    const status = await getDonationWorkflowStatus(req.params.id);
+    if (status !== 'draft') {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Cannot add items to a non-draft donation' });
+    }
+
     const { beneficiaryId, type, description, quantity, unitValueInBirr, paymentMethod, isRecurring } = req.body;
-
-    if (!beneficiaryId || !type) {
-      await t.rollback();
-      return res.status(400).json({ success: false, error: 'beneficiaryId and type are required' });
-    }
-
-    const donation = await CharityDonation.findByPk(req.params.id, { transaction: t });
-    if (!donation || donation.status !== 'draft') {
-      await t.rollback();
-      return res.status(400).json({ success: false, error: 'Donation not found or not in draft' });
-    }
-
-    const ben = await CharityBeneficiary.findByPk(beneficiaryId, { transaction: t });
-    if (!ben) { await t.rollback(); return res.status(404).json({ success: false, error: 'Beneficiary not found' }); }
+    if (!beneficiaryId || !type) { await t.rollback(); return res.status(400).json({ success: false, error: 'beneficiaryId and type are required' }); }
 
     const qty   = parseFloat(quantity || 0);
     const unit  = parseFloat(unitValueInBirr || 0);
@@ -416,22 +448,23 @@ exports.addItem = async (req, res) => {
   }
 };
 
-// PUT /items/:itemId  — edit item (draft only)
+// PUT /items/:itemId
 exports.updateItem = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const item = await CharityDonationItem.findByPk(req.params.itemId, {
-      include: [{ model: CharityDonation, as: 'donation', attributes: ['status', 'donationId'] }],
-      transaction: t,
-    });
+    const item = await CharityDonationItem.findByPk(req.params.itemId, { transaction: t });
     if (!item) { await t.rollback(); return res.status(404).json({ success: false, error: 'Item not found' }); }
-    if (item.donation.status !== 'draft') { await t.rollback(); return res.status(400).json({ success: false, error: 'Donation is not editable' }); }
+
+    const status = await getDonationWorkflowStatus(item.donationId);
+    if (status !== 'draft') {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Donation is not editable' });
+    }
 
     const updates = {};
     ['description', 'quantity', 'unitValueInBirr', 'paymentMethod', 'isRecurring', 'beneficiaryId']
       .forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
 
-    // Recalculate total
     if (updates.isRecurring) {
       updates.totalValueInBirr = money((updates.isRecurring.recurrings || []).reduce((s, r) => s + money(r.total_value_in_birr), 0));
     } else if (updates.quantity !== undefined || updates.unitValueInBirr !== undefined) {
@@ -441,7 +474,7 @@ exports.updateItem = async (req, res) => {
     }
 
     await item.update(updates, { transaction: t });
-    await recalcTotal(item.donation.donationId, t);
+    await recalcTotal(item.donationId, t);
     await t.commit();
     res.json({ success: true, message: 'Item updated', data: item });
   } catch (err) {
@@ -450,19 +483,21 @@ exports.updateItem = async (req, res) => {
   }
 };
 
-// DELETE /items/:itemId  — soft-delete (draft only)
+// DELETE /items/:itemId
 exports.deleteItem = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const item = await CharityDonationItem.findByPk(req.params.itemId, {
-      include: [{ model: CharityDonation, as: 'donation', attributes: ['status', 'donationId'] }],
-      transaction: t,
-    });
+    const item = await CharityDonationItem.findByPk(req.params.itemId, { transaction: t });
     if (!item) { await t.rollback(); return res.status(404).json({ success: false, error: 'Item not found' }); }
-    if (item.donation.status !== 'draft') { await t.rollback(); return res.status(400).json({ success: false, error: 'Cannot delete item after submission' }); }
 
-    const donationId = item.donation.donationId;
-    await item.destroy({ transaction: t }); // paranoid soft-delete
+    const status = await getDonationWorkflowStatus(item.donationId);
+    if (status !== 'draft') {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Cannot delete item after submission' });
+    }
+
+    const donationId = item.donationId;
+    await item.destroy({ transaction: t });
     await recalcTotal(donationId, t);
     await t.commit();
     res.json({ success: true, message: 'Item deleted' });
@@ -472,13 +507,12 @@ exports.deleteItem = async (req, res) => {
   }
 };
 
-// POST /items/:itemId/receipts  — upload bank receipts
+// POST /items/:itemId/receipts
 exports.uploadReceipts = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const files = req.files;
     if (!files?.length) { await t.rollback(); return res.status(400).json({ success: false, error: 'No files uploaded' }); }
-
     const item = await CharityDonationItem.findByPk(req.params.itemId, { transaction: t });
     if (!item) { await t.rollback(); return res.status(404).json({ success: false, error: 'Item not found' }); }
 
@@ -494,17 +528,16 @@ exports.uploadReceipts = async (req, res) => {
   }
 };
 
-// POST /items/:itemId/deliver  — set is_delivered: true (approved donations)
+// POST /items/:itemId/deliver
 exports.markDelivered = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const item = await CharityDonationItem.findByPk(req.params.itemId, {
-      include: [{ model: CharityDonation, as: 'donation', attributes: ['status'] }],
-      transaction: t,
-    });
+    const item = await CharityDonationItem.findByPk(req.params.itemId, { transaction: t });
     if (!item) { await t.rollback(); return res.status(404).json({ success: false, error: 'Item not found' }); }
-    if (item.donation.status !== 'approved') { await t.rollback(); return res.status(400).json({ success: false, error: 'Donation must be approved before marking delivery' }); }
-    if (item.isDelivered) { await t.rollback(); return res.status(400).json({ success: false, error: 'Item already marked as delivered' }); }
+
+    const status = await getDonationWorkflowStatus(item.donationId);
+    if (status !== 'approved') { await t.rollback(); return res.status(400).json({ success: false, error: 'Donation must be approved' }); }
+    if (item.isDelivered) { await t.rollback(); return res.status(400).json({ success: false, error: 'Already marked' }); }
 
     await item.update({ isDelivered: true }, { transaction: t });
     await t.commit();
@@ -515,7 +548,7 @@ exports.markDelivered = async (req, res) => {
   }
 };
 
-// POST /items/:itemId/return  — set is_returned: { reason }
+// POST /items/:itemId/return
 exports.returnItem = async (req, res) => {
   const t = await sequelize.transaction();
   try {
@@ -535,6 +568,46 @@ exports.returnItem = async (req, res) => {
   }
 };
 
+// POST /items/:itemId/reassign
+exports.reassignItem = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { beneficiaryId, reason, recurringId } = req.body;
+    if (!beneficiaryId) { await t.rollback(); return res.status(400).json({ success: false, error: 'beneficiaryId is required' }); }
+    const item = await CharityDonationItem.findByPk(req.params.itemId, { transaction: t });
+    if (!item) { await t.rollback(); return res.status(404).json({ success: false, error: 'Item not found' }); }
+
+    let isTargetReturned = false;
+    if (recurringId && item.isRecurring) {
+      const rec = item.isRecurring.recurrings.find(r => r.recurring_id === parseInt(recurringId));
+      isTargetReturned = !!(rec && rec.is_returned);
+    } else isTargetReturned = !!item.isReturned;
+
+    if (!isTargetReturned) { await t.rollback(); return res.status(400).json({ success: false, error: 'Target item/period is not returned' }); }
+
+    const newBen = await CharityBeneficiary.findByPk(beneficiaryId, { transaction: t });
+    if (!newBen) { await t.rollback(); return res.status(404).json({ success: false, error: 'Target beneficiary not found' }); }
+
+    const currentAdj = Array.isArray(item.onAdjustment) ? item.onAdjustment : (item.onAdjustment ? [item.onAdjustment] : []);
+    const isLocked = currentAdj.some(a => ['pending', 'commented'].includes(a.status) && a.recurring_id === (recurringId ? parseInt(recurringId) : null));
+    if (isLocked) { await t.rollback(); return res.status(400).json({ success: false, error: 'Already pending adjustment' }); }
+
+    const request = await CharityRequestApprove.create({
+      action: 'Reassign', requestedBy: req.user.userId, status: 'pending',
+      metadata: { donation_item_id: item.donationItemId, recurring_id: recurringId ? parseInt(recurringId) : null, from_beneficiary_id: item.beneficiaryId, to_beneficiary_id: parseInt(beneficiaryId), reason: reason || 'Reassigned' },
+      comments: [],
+    }, { transaction: t });
+
+    await item.update({ onAdjustment: [...currentAdj, { adjustment_id: request.requestId, status: 'pending', action: 'Reassign', recurring_id: recurringId ? parseInt(recurringId) : null }] }, { transaction: t });
+
+    await t.commit();
+    res.json({ success: true, message: 'Reassignment request submitted' });
+  } catch (err) {
+    await t.rollback();
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 // ─── GET /stats/summary ───────────────────────────────────────────────────────
 exports.getDonationStats = async (req, res) => {
   try {
@@ -544,14 +617,9 @@ exports.getDonationStats = async (req, res) => {
       where.teamId = team ? team.teamId : -1;
     }
 
-    const [total, byStatus, totalValue] = await Promise.all([
+    const [total, totalValue] = await Promise.all([
       CharityDonation.count({ where }),
-      CharityDonation.findAll({
-        where,
-        attributes: ['status', [sequelize.fn('COUNT', sequelize.col('donation_id')), 'count']],
-        group: ['status'], raw: true,
-      }),
-      CharityDonation.sum('total_value_in_birr', { where: { ...where, status: { [Op.notIn]: ['cancelled'] } } }),
+      CharityDonation.sum('total_value_in_birr', { where }),
     ]);
 
     res.json({
@@ -559,7 +627,7 @@ exports.getDonationStats = async (req, res) => {
       data: {
         total,
         totalValue: money(totalValue || 0),
-        statusBreakdown: byStatus.reduce((acc, r) => { acc[r.status] = parseInt(r.count); return acc; }, {}),
+        statusBreakdown: {}, // status column removed from DB
       },
     });
   } catch (err) {

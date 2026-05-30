@@ -20,7 +20,7 @@ const { Model } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
   class CharitySetting extends Model {
-    // ── Helpers ───────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────── Helpers ────────────────────────────────────────────────────────
 
     /** Find a company by name (case-insensitive) */
     findCompany(name) {

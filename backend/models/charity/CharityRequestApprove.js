@@ -83,11 +83,13 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.ENUM(
           'NewBeneficiary',
           'NewCharityTeam',
+          'NewDonation',
           'TransferBeneficiary',
           'Deduct',
           'Increase',
           'Transfer',
-          'Return'
+          'Return',
+          'Reassign'
         ),
         allowNull: false,
       },
@@ -137,7 +139,8 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
-      // No paranoid — approval records should never be soft-deleted
+      paranoid: true,
+      deletedAt: 'deleted_at',
     }
   );
 

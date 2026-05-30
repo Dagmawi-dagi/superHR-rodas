@@ -57,8 +57,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import FilterBar from '../common/FilterBar.vue'
-import ListTable from '../common/ListTable.vue'
+import FilterBar from '../../common/FilterBar.vue'
+import ListTable from '../../common/ListTable.vue'
 import CharityService, { type CharityBeneficiary } from '@/stores/charity'
 
 const props = defineProps<{

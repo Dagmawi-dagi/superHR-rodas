@@ -16,8 +16,6 @@ router.post('/',                        authMiddleware(ALL),   ctrl.createDonati
 router.get('/:id',                      authMiddleware(ALL),   ctrl.getDonationById);
 router.put('/:id',                      authMiddleware(ALL),   ctrl.updateDonation);      // draft only
 router.post('/:id/submit',              authMiddleware(ALL),   ctrl.submitDonation);      // draft → pending
-router.post('/:id/approve',             authMiddleware(ADMIN), ctrl.approveDonation);     // pending → approved
-router.post('/:id/comment',             authMiddleware(ADMIN), ctrl.commentDonation);     // pending → draft (correction feedback)
 router.post('/:id/cancel',              authMiddleware(ADMIN), ctrl.cancelDonation);
 
 // ── Donation Items ────────────────────────────────────────────────────────────
@@ -29,6 +27,7 @@ router.delete('/items/:itemId',         authMiddleware(ALL),   ctrl.deleteItem);
 
 router.post('/items/:itemId/deliver',   authMiddleware(ALL),   ctrl.markDelivered);       // approved donation
 router.post('/items/:itemId/return',    authMiddleware(ALL),   ctrl.returnItem);          // sets is_returned
+router.post('/items/:itemId/reassign',  authMiddleware(ALL),   ctrl.reassignItem);        // clears is_returned, moves to new beneficiary
 
 router.post(
   '/items/:itemId/receipts',
