@@ -89,42 +89,8 @@ const router = createRouter({
           meta: { title: "HR attendance Config", roles: ["admin", "hr","attendance"] },
         },
         // ── CHARITY SECTION ───────────────────────────────────────────────────
-        {
-          path: 'charity/donations',
-          name: 'charity-donations',
-          component: () => import('@/views/charity/donations.vue'),
-          meta: { title: 'Donations', roles: ['admin', 'charity_admin', 'charity_teamleader'] },
-        },
-        {
-          path: 'charity/my-donations',
-          name: 'charity-my-donations',
-          component: () => import('@/views/charity/donations.vue'),
-        },
-        {
-          path: 'charity/donations/create',
-          name: 'charity-donations-create',
-          component: () => import('@/views/charity/donation_create.vue'),
-          meta: { title: 'Create Donation', roles: ['admin', 'charity_admin', 'charity_teamleader'] },
-        },
-        {
-          path: 'charity/donations/:id',
-          name: 'charity-donation-detail',
-          component: () => import('@/views/charity/donation_create.vue'),
-          meta: { title: 'Donation Detail', roles: ['admin', 'charity_admin', 'charity_teamleader'] },
-        },
-        {
-          path: 'charity/donations/:id/edit',
-          name: 'charity-donations-edit',
-          component: () => import('@/views/charity/donation_create.vue'),
-          meta: { title: 'Edit Donation', roles: ['admin', 'charity_admin', 'charity_teamleader'] },
-        },
-        {
-          path: 'charity/donations/adjustments',
-          name: 'charity-adjustments',
-          component: () => import('@/views/charity/adjustments.vue'),
-          meta: { title: 'Adjustment Requests', roles: ['admin', 'charity_admin'] },
-        },
-        {
+        
+           {
           path: 'charity/teams',
           name: 'charity-teams',
           component: () => import('@/views/charity/teams.vue'),
@@ -181,6 +147,11 @@ const router = createRouter({
           name: 'charity-beneficiaries-edit',
           component: () => import('@/views/charity/beneficiary_create.vue'),
           meta: { title: 'Edit Beneficiary', roles: ['admin', 'charity_admin', 'charity_teamleader'] },
+        },
+        {
+          path: '/charity/beneficiaries/:id/details',
+          name: 'BeneficiaryDetails',
+          component: () => import('@/views/charity/beneficiary_details.vue')
         },
         {
           path: 'charity/settings',

@@ -127,16 +127,15 @@ const roleMenus = {
   // ── charity_admin ──────────────────────────────────────────────────────────
   charity_admin: [
     { name: 'Dashboard', path: '/dashboard', icon: 'HomeIcon' },
-    { name: 'All Donations',      path: '/charity/donations',                 icon: 'ArchiveBoxIcon' },
-    { name: 'Adjustment Requests',path: '/charity/donations/adjustments',      icon: 'AdjustmentsHorizontalIcon' },
     { name: 'Beneficiaries',      path: '/charity/beneficiaries',             icon: 'UsersIcon' },
-    { name: 'Charity Teams', path: '/charity/teams',                  icon: 'RectangleStackIcon' },
+    { name: 'Teams', path: '/charity/teams',                  icon: 'RectangleStackIcon' },
+    { name: 'charity Settings', path: '/charity/settings', icon: 'CogIcon' },
+
   ],
 
   // ── charity_teamleader ─────────────────────────────────────────────────────
   charity_teamleader: [
     { name: 'Dashboard',        path: '/dashboard',            icon: 'HomeIcon' },
-    { name: 'My Donations',     path: '/charity/my-donations',     icon: 'ArchiveBoxIcon' },
     { name: 'My Beneficiaries', path: '/charity/my-beneficiaries', icon: 'UsersIcon' },
   ],
 

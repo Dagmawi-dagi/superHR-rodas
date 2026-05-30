@@ -1,100 +1,109 @@
 <template>
-  <div class="charity-settings-page">
-    <div class="page-header">
-      <div>
-        <h1 class="page-title">Charity Settings</h1>
-        <p class="page-subtitle">Configure global parameters and manage donation companies</p>
-      </div>
-      <button class="btn-primary" @click="saveSettings" :disabled="saving">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
-          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 21 7 13"/><polyline points="7 3 7 8 15 3"/>
-        </svg>
-        {{ saving ? 'Saving...' : 'Save Settings' }}
+  <div class="settings-page">
+    <!-- Header -->
+    <div class="settings-header">
+      <h1>Charity Settings</h1>
+      <p>Configure payment schedules and global defaults</p>
+    </div>
+
+    <!-- Tabs -->
+    <div class="settings-tabs">
+      <button 
+        v-for="tab in tabs" 
+        :key="tab.id"
+        @click="activeTab = tab.id"
+        :class="{ active: activeTab === tab.id }"
+      >
+        {{ tab.name }}
       </button>
     </div>
 
-    <div v-if="loading" class="loading-state">
-      <div class="spinner"></div>
-      <p>Loading settings...</p>
-    </div>
-
-    <div v-else class="settings-content">
-      <!-- Donation Companies Section -->
-      <div class="settings-card">
+    <div class="settings-content">
+      <!-- ═══════════════ PAYMENT DATES ═══════════════ -->
+      <div v-if="activeTab === 'dates'" class="settings-card">
         <div class="card-header">
-          <div class="header-icon companies">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          <div class="header-left">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon">
+              <path d="M8 2v4M16 2v4M3 10h18M21 14.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8.5"/>
+              <path d="M21 16.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0Z"/>
+              <path d="M18.5 18v3M16.5 18v3"/>
+            </svg>
+            <h3>Payment Dates</h3>
           </div>
-          <div class="header-text">
-            <h3>Donation Companies</h3>
-            <p>Manage main and partner organizations that provide donations</p>
-          </div>
-          <button class="btn-secondary" @click="addCompany">+ Add Company</button>
+          <button class="btn-save" @click="saveDates" :disabled="savingDates">Save Settings</button>
         </div>
-
         <div class="card-body">
-          <div class="companies-list">
-            <div v-for="(company, index) in settings.companies" :key="index" class="company-item">
-              <div class="company-header">
-                <input type="text" v-model="company.name" placeholder="Company Name" class="company-name-input" />
-                <button class="remove-btn" @click="removeCompany(index)">×</button>
-              </div>
-              <div class="company-fields">
-                <div class="field-group">
-                  <label>Type</label>
-                  <select v-model="company.full_info.type">
-                    <option value="main">Main Donor</option>
-                    <option value="partner">Partner</option>
-                    <option value="sister">Sister Company</option>
-                  </select>
-                </div>
-                <div class="field-group">
-                  <label>Phone</label>
-                  <input type="tel" v-model="company.full_info.phone" placeholder="+251..." />
-                </div>
-                <div class="field-group">
-                  <label>Email</label>
-                  <input type="email" v-model="company.full_info.email" placeholder="email@company.com" />
-                </div>
-                <div class="field-group full">
-                  <label>Address</label>
-                  <input type="text" v-model="company.full_info.address" placeholder="Physical address" />
-                </div>
-              </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Next Payment / Distribution Date</label>
+              <input type="date" v-model="nextPaymentDate" class="date-input" />
+              <span class="hint">This date will be used as the default delivery date for new donations.</span>
             </div>
-            <div v-if="!settings.companies.length" class="empty-state">
-              <p>No companies configured yet.</p>
+            <div class="form-group">
+              <label>Days Since Last Payment (interval)</label>
+              <input type="number" v-model.number="daysSinceLastPayment" min="1" step="1" />
+              <span class="hint">Number of days from one payment to the next.</span>
             </div>
+          </div>
+
+          <!-- Payment History -->
+          <div class="history-list" v-if="paymentHistory.length > 0">
+            <h4>Payment History</h4>
+            <table class="history-table">
+              <thead>
+                <tr><th>Date</th><th>Status</th><th>Notes</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="(item, idx) in paymentHistory" :key="idx">
+                  <td>{{ formatDate(item.date) }}</td>
+                  <td><span :class="['status-badge', item.status === 'completed' ? 'success' : 'pending']">{{ item.status || 'Completed' }}</span></td>
+                  <td>{{ item.notes || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="empty-hint">
+            No payment history yet. Complete a payment cycle to see history.
           </div>
         </div>
       </div>
 
-      <!-- General Configuration Section -->
-      <div class="settings-card">
+      <!-- ═══════════════ DEFAULTS ═══════════════ -->
+      <div v-if="activeTab === 'defaults'" class="settings-card">
         <div class="card-header">
-          <div class="header-icon config">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <div class="header-left">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="header-icon">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            <h3>Global Defaults</h3>
           </div>
-          <div class="header-text">
-            <h3>General Configuration</h3>
-            <p>System-wide defaults for the charity module</p>
-          </div>
+          <button class="btn-save" @click="saveDefaults" :disabled="savingDefaults">Save</button>
         </div>
         <div class="card-body">
-          <div class="config-grid">
-            <div class="field-group">
-              <label>Default Currency</label>
-              <input type="text" v-model="settings.config.default_currency" placeholder="ETB" />
+          <div class="form-row">
+            <div class="form-group">
+              <label>Currency</label>
+              <select v-model="config.currency">
+                <option value="ETB">ETB (Birr)</option>
+                <option value="USD">USD</option>
+                <option value="EUR">EUR</option>
+              </select>
             </div>
-            <div class="field-group">
-              <label>Fiscal Year Start</label>
-              <input type="date" v-model="settings.config.fiscal_year_start" />
+            <div class="form-group">
+              <label>Default Payment Method</label>
+              <select v-model="config.defaultPayment">
+                <option value="bank">Bank</option>
+                <option value="cash">Cash</option>
+              </select>
             </div>
-            <div class="field-group">
-              <label class="checkbox-label">
-                <input type="checkbox" v-model="settings.config.auto_approve_small_donations" />
-                Auto-approve donations under 500 ETB
-              </label>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Default Monthly Allocation (ETB)</label>
+              <input type="number" step="0.01" v-model.number="config.monthlyAllocation" />
+            </div>
+            <div class="form-group">
+              <!-- spacer -->
             </div>
           </div>
         </div>
@@ -103,138 +112,283 @@
 
     <!-- Toasts -->
     <div class="toast-container">
-      <div v-for="t in toasts" :key="t.id" :class="['toast', `toast-${t.type}`]">
-        {{ t.message }}
-      </div>
+      <div v-for="t in toasts" :key="t.id" :class="['toast', `toast-${t.type}`]">{{ t.message }}</div>
     </div>
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import CharityService from '@/stores/charity'
+<script setup>
+import { ref, reactive, onMounted } from 'vue'
 
-const loading = ref(false)
-const saving = ref(false)
-const toasts = ref<any[]>([])
+const tabs = [
+  { id: 'dates', name: 'Payment Dates' },
+  { id: 'defaults', name: 'Defaults' },
+]
 
-const settings = ref({
-  companies: [] as any[],
-  config: {
-    default_currency: 'ETB',
-    fiscal_year_start: '',
-    auto_approve_small_donations: false
-  }
+const activeTab = ref('dates')
+const savingDates = ref(false)
+const savingDefaults = ref(false)
+const toasts = ref([])
+
+// ── Payment Dates ─────────────────────────────────────────────────
+const nextPaymentDate = ref('2026-06-15')
+const daysSinceLastPayment = ref(30)   // new setting name
+
+const paymentHistory = ref([
+  { date: '2026-05-15', status: 'completed', notes: 'May distribution' },
+  { date: '2026-04-15', status: 'completed', notes: 'April distribution' },
+  { date: '2026-03-15', status: 'completed', notes: 'March distribution' },
+  { date: '2026-02-15', status: 'completed', notes: 'February distribution' },
+])
+
+const saveDates = async () => {
+  savingDates.value = true
+  await new Promise(r => setTimeout(r, 400))
+  localStorage.setItem('charity_next_payment_date', nextPaymentDate.value)
+  localStorage.setItem('charity_days_since_last_payment', String(daysSinceLastPayment.value))
+  addToast('Payment settings saved', 'success')
+  savingDates.value = false
+}
+
+// ── Defaults ─────────────────────────────────────────────────────
+const config = reactive({
+  currency: 'ETB',
+  defaultPayment: 'bank',
+  monthlyAllocation: 1500,
 })
 
-const loadSettings = async () => {
-  loading.value = true
-  const res = await CharityService.getSettings()
-  if (res.success && res.data) {
-    settings.value = {
-      companies: res.data.companies || [],
-      config: res.data.config || {
-        default_currency: 'ETB',
-        fiscal_year_start: '',
-        auto_approve_small_donations: false
-      }
-    }
-  }
-  loading.value = false
+const saveDefaults = async () => {
+  savingDefaults.value = true
+  await new Promise(r => setTimeout(r, 400))
+  localStorage.setItem('charity_defaults', JSON.stringify(config))
+  addToast('Defaults saved', 'success')
+  savingDefaults.value = false
 }
 
-const addCompany = () => {
-  settings.value.companies.push({
-    name: '',
-    full_info: {
-      type: 'partner',
-      phone: '',
-      email: '',
-      address: ''
-    }
-  })
+// ── Helpers ──────────────────────────────────────────────────────
+const formatDate = (d) => {
+  if (!d) return ''
+  const date = new Date(d)
+  return date.toLocaleDateString('en-ET', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
-const removeCompany = (index: number) => {
-  settings.value.companies.splice(index, 1)
-}
-
-const addToast = (msg: string, type: string = 'success') => {
+const addToast = (msg, type = 'success') => {
   const id = Date.now()
   toasts.value.push({ id, message: msg, type })
   setTimeout(() => toasts.value = toasts.value.filter(t => t.id !== id), 5000)
 }
 
-const saveSettings = async () => {
-  saving.value = true
-  const res = await CharityService.updateSettings(settings.value)
-  if (res.success) {
-    addToast('Settings saved successfully!')
-  } else {
-    addToast(res.error || 'Failed to save settings', 'error')
+onMounted(() => {
+  const savedNextDate = localStorage.getItem('charity_next_payment_date')
+  if (savedNextDate) nextPaymentDate.value = savedNextDate
+  const savedDays = localStorage.getItem('charity_days_since_last_payment')
+  if (savedDays) daysSinceLastPayment.value = parseInt(savedDays)
+  const savedDefaults = localStorage.getItem('charity_defaults')
+  if (savedDefaults) {
+    const parsed = JSON.parse(savedDefaults)
+    Object.assign(config, parsed)
   }
-  saving.value = false
-}
-
-onMounted(loadSettings)
+})
 </script>
 
 <style scoped>
-.charity-settings-page { padding: 24px; background: #f8fafc; min-height: 100vh; }
-.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 32px; }
-.page-title { font-size: 24px; font-weight: 700; color: #1e293b; margin: 0; }
-.page-subtitle { font-size: 14px; color: #64748b; margin-top: 4px; }
-
-.btn-primary {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 20px; background: linear-gradient(135deg, #6a11cb, #7c3aed); color: white;
-  border: none; border-radius: 10px; font-size: 14px; font-weight: 600;
-  cursor: pointer; transition: all 0.2s;
+.settings-page {
+  padding: 24px;
+  background: #f5f7fb;
+  min-height: 100vh;
 }
-.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-.btn-icon { width: 18px; height: 18px; }
-
-.btn-secondary { padding: 6px 12px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 12px; font-weight: 600; color: #475569; cursor: pointer; }
-
-.settings-content { display: flex; flex-direction: column; gap: 24px; max-width: 900px; }
-.settings-card { background: white; border-radius: 16px; border: 1px solid #f1f5f9; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; }
-.card-header { padding: 20px 24px; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; gap: 16px; }
-.header-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
-.header-icon svg { width: 20px; height: 20px; }
-.header-icon.companies { background: #eff6ff; color: #3b82f6; }
-.header-icon.config { background: #f5f3ff; color: #8b5cf6; }
-
-.header-text { flex: 1; }
-.header-text h3 { font-size: 16px; font-weight: 700; color: #1e293b; margin: 0; }
-.header-text p { font-size: 13px; color: #64748b; margin: 2px 0 0; }
-
-.card-body { padding: 24px; }
-
-.companies-list { display: flex; flex-direction: column; gap: 16px; }
-.company-item { padding: 16px; border: 1px solid #f1f5f9; border-radius: 12px; background: #fafafa; }
-.company-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-.company-name-input { font-size: 15px; font-weight: 700; color: #1e293b; background: none; border: none; border-bottom: 1px dashed #cbd5e1; width: 60%; padding: 4px 0; outline: none; }
-.company-name-input:focus { border-bottom-color: #6a11cb; }
-.remove-btn { width: 24px; height: 24px; border-radius: 50%; border: none; background: #fee2e2; color: #ef4444; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-
-.company-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-.field-group { display: flex; flex-direction: column; gap: 4px; }
-.field-group.full { grid-column: span 3; }
-.field-group label { font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
-.field-group input, .field-group select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; outline: none; }
-.field-group input:focus { border-color: #6a11cb; }
-
-.config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-.checkbox-label { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #475569; cursor: pointer; margin-top: 12px; }
-
-.loading-state { text-align: center; padding: 60px; }
-.spinner { width: 40px; height: 40px; border: 3px solid #e2e8f0; border-top-color: #6a11cb; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.empty-state { text-align: center; padding: 32px; color: #94a3b8; font-style: italic; }
-
-.toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 1000; display: flex; flex-direction: column; gap: 12px; }
-.toast { padding: 14px 24px; border-radius: 12px; color: white; font-weight: 600; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+.settings-header {
+  margin-bottom: 24px;
+}
+.settings-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+.settings-header p {
+  color: #64748b;
+  font-size: 14px;
+}
+.settings-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  background: white;
+  padding: 4px;
+  border-radius: 12px;
+  width: fit-content;
+  border: 1px solid #e2e8f0;
+}
+.settings-tabs button {
+  padding: 8px 24px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #64748b;
+}
+.settings-tabs button.active {
+  background: #6366f1;
+  color: white;
+}
+.settings-card {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  overflow: hidden;
+  border: 1px solid #f1f5f9;
+}
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: #fafcfd;
+  border-bottom: 1px solid #f1f5f9;
+}
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.header-icon {
+  width: 22px;
+  height: 22px;
+  color: #6a11cb;
+}
+.card-header h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #334155;
+  margin: 0;
+}
+.card-body {
+  padding: 24px;
+}
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.form-row:last-child {
+  margin-bottom: 0;
+}
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+.form-group input,
+.form-group select {
+  padding: 10px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 14px;
+  outline: none;
+}
+.form-group input:focus,
+.form-group select:focus {
+  border-color: #6a11cb;
+  box-shadow: 0 0 0 3px rgba(106,17,203,0.1);
+}
+.hint {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+.date-input {
+  max-width: 280px;
+}
+.history-list h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #475569;
+  margin: 0 0 12px;
+}
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.history-table th,
+.history-table td {
+  text-align: left;
+  padding: 10px 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.history-table th {
+  font-weight: 600;
+  color: #475569;
+  background: #f8fafc;
+}
+.status-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.status-badge.success {
+  background: #e6f7ee;
+  color: #0d6b36;
+}
+.status-badge.pending {
+  background: #fef3c7;
+  color: #d97706;
+}
+.empty-hint {
+  text-align: center;
+  padding: 32px;
+  border: 2px dashed #e2e8f0;
+  border-radius: 12px;
+  color: #94a3b8;
+  font-size: 14px;
+}
+.btn-save {
+  padding: 8px 18px;
+  background: linear-gradient(135deg, #6a11cb, #7c3aed);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(106,17,203,0.2);
+}
+.btn-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.toast {
+  padding: 14px 24px;
+  border-radius: 12px;
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+}
 .toast-success { background: #10b981; }
 .toast-error { background: #ef4444; }
+@media (max-width: 768px) {
+  .form-row { grid-template-columns: 1fr; }
+  .settings-page { padding: 16px; }
+  .history-table th, .history-table td { padding: 8px 4px; }
+}
 </style>
