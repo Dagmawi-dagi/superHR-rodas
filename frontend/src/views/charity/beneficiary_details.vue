@@ -7,178 +7,198 @@
       </router-link>
       <div class="header-title">
         <h1>Beneficiary Details</h1>
-        <p>{{ beneficiary.name }} – Manage deliveries and adjustments</p>
+        <p v-if="beneficiary">{{ beneficiary.fullname }} – Manage deliveries and adjustments</p>
       </div>
       <div class="header-actions">
-        <router-link :to="`/charity/beneficiaries/${beneficiaryId}/edit`" class="btn-outline">
+        <button v-if="beneficiary" class="btn-outline transfer-btn" @click="showTransferModal = true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon-small"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+          Transfer Team
+        </button>
+        <router-link v-if="beneficiary" :to="`/charity/beneficiaries/${beneficiaryId}/edit`" class="btn-outline">
           Edit Beneficiary
         </router-link>
       </div>
     </div>
 
-    <!-- Beneficiary Summary Card -->
-    <div class="summary-card">
-      <div class="summary-grid">
-        <div class="summary-item"><span class="label">Full Name</span><span class="value">{{ beneficiary.name }}</span></div>
-        <div class="summary-item"><span class="label">Team</span><span class="value">{{ beneficiary.team?.name || '—' }}</span></div>
-        <div class="summary-item"><span class="label">Monthly Allocation</span><span class="value allocation-value">{{ formatCurrency(beneficiary.monthlyAllocation) }}</span></div>
-        <div class="summary-item"><span class="label">Payment Method</span><span class="value">{{ beneficiary.paymentMethod }}</span></div>
-        <div class="summary-item"><span class="label">Status</span><span :class="['status-badge', beneficiary.isActive ? 'active' : 'inactive']">{{ beneficiary.isActive ? 'Active' : 'Inactive' }}</span></div>
-      </div>
-    </div>
+    <!-- Modals -->
+    <TransferBeneficiaryModal 
+      :is-open="showTransferModal" 
+      :beneficiary="beneficiary"
+      :current-team-name="beneficiary?.team?.name || 'Unassigned'"
+      @close="showTransferModal = false"
+      @success="handleTransferSuccess"
+    />
 
-    <!-- Tabs -->
-    <div class="details-tabs">
-      <button 
-        v-for="tab in tabs" 
-        :key="tab.id"
-        @click="activeTab = tab.id"
-        :class="{ active: activeTab === tab.id }"
-      >
-        {{ tab.name }}
-        <span class="tab-count">{{ tab.id === 'deliveries' ? deliveries.length : adjustments.length }}</span>
-      </button>
-    </div>
+    <div v-if="loading" class="loading-state">Loading beneficiary data...</div>
+    <div v-else-if="error" class="error-alert">{{ error }} <button @click="fetchBeneficiary">Retry</button></div>
 
-    <div class="tab-content">
-      <!-- Deliveries Tab -->
-      <div v-if="activeTab === 'deliveries'" class="tab-pane">
-        <div class="actions-bar">
-          <button class="btn-primary small" @click="prepareNewDelivery">+ New Delivery</button>
+    <template v-else-if="beneficiary">
+      <!-- Beneficiary Summary Card -->
+      <div class="summary-card">
+        <div class="summary-grid">
+          <div class="summary-item"><span class="label">Full Name</span><span class="value">{{ beneficiary.fullname }}</span></div>
+          <div class="summary-item"><span class="label">Team</span><span class="value">{{ beneficiary.team?.name || '—' }}</span></div>
+          <div class="summary-item"><span class="label">Monthly Allocation</span><span class="value allocation-value">{{ CharityService.formatCurrency(beneficiary.monthlyAllocation) }}</span></div>
+          <div class="summary-item"><span class="label">Payment Method</span><span class="value">{{ beneficiary.paymentMethod }}</span></div>
+          <div class="summary-item"><span class="label">Status</span><span :class="['status-badge', beneficiary.isActive ? 'active' : 'inactive']">{{ beneficiary.isActive ? 'Active' : 'Inactive' }}</span></div>
         </div>
+      </div>
 
-        <!-- Add Delivery Modal (with disabled fields from settings) -->
-        <div v-if="showAddDelivery" class="modal-overlay" @click.self="showAddDelivery = false">
-          <div class="modal">
-            <div class="modal-header">
-              <h3>Add New Delivery</h3>
-              <button class="modal-close" @click="showAddDelivery = false">×</button>
-            </div>
-            <div class="modal-body">
-              <div class="form-row">
-                <div class="form-field">
-                  <label>Delivery Date (auto)</label>
-                  <input type="text" :value="formatDate(calculatedDeliveryDate)" disabled />
-                  <span class="hint">Calculated from last delivery + {{ daysSinceLastPayment }} days</span>
+      <!-- Tabs -->
+      <div class="details-tabs">
+        <button 
+          v-for="tab in tabs" 
+          :key="tab.id"
+          @click="activeTab = tab.id"
+          :class="{ active: activeTab === tab.id }"
+        >
+          {{ tab.name }}
+          <span class="tab-count">{{ tab.id === 'deliveries' ? (beneficiary.deliveries?.length || 0) : (beneficiary.adjustments?.length || 0) }}</span>
+        </button>
+      </div>
+
+      <div class="tab-content">
+        <!-- Deliveries Tab -->
+        <div v-if="activeTab === 'deliveries'" class="tab-pane">
+          <div class="actions-bar">
+            <button class="btn-primary small" @click="openDeliveryModal()">+ New Delivery</button>
+          </div>
+
+          <!-- Add/Edit Delivery Modal -->
+          <div v-if="showAddDelivery" class="modal-overlay" @click.self="showAddDelivery = false">
+            <div class="modal">
+              <div class="modal-header">
+                <h3>{{ isEditingDelivery ? 'Edit Delivery' : 'Add New Delivery' }}</h3>
+                <button class="modal-close" @click="showAddDelivery = false">×</button>
+              </div>
+              <div class="modal-body">
+                <div class="form-row">
+                  <div class="form-field full">
+                    <label>Distribution Release</label>
+                    <select v-model="newDelivery.distribution_release_id" :disabled="isEditingDelivery">
+                      <option value="">Select a release date</option>
+                      <option v-for="rel in settings?.distributionRelease" :key="rel.distribution_release_id" :value="rel.distribution_release_id">
+                        {{ CharityService.formatDate(rel.date) }} ({{ rel.payment_for_indays }} days)
+                      </option>
+                    </select>
+                  </div>
                 </div>
-                <div class="form-field">
-                  <label>Coverage (days)</label>
-                  <input type="number" v-model.number="newDelivery.for_indays" disabled />
+                <div class="form-row">
+                  <div class="form-field">
+                    <label>Delivered?</label>
+                    <select v-model="newDelivery.is_delivered">
+                      <option :value="true">Yes</option>
+                      <option :value="false">No</option>
+                    </select>
+                  </div>
+                  <div class="form-field">
+                    <label>Receipt Reference</label>
+                    <input type="text" v-model="newDelivery.recipt" placeholder="Receipt #" />
+                  </div>
                 </div>
-                <div class="form-field">
-                  <label>Delivered?</label>
-                  <select v-model="newDelivery.delivered">
-                    <option :value="true">Yes</option>
-                    <option :value="false">No</option>
-                  </select>
+                <div class="form-row">
+                  <div class="form-field full">
+                    <label>Return Reason (if applicable)</label>
+                    <input type="text" v-model="newDelivery.is_returned.reason" placeholder="Reason for return (optional)" />
+                  </div>
                 </div>
               </div>
-              <div class="form-row">
-                <div class="form-field">
-                  <label>Receipt Reference</label>
-                  <input type="text" v-model="newDelivery.receipt" placeholder="Receipt #" />
-                </div>
+              <div class="modal-footer">
+                <button class="btn-outline" @click="showAddDelivery = false">Cancel</button>
+                <button class="btn-primary" @click="handleDeliverySubmit" :disabled="submitting">
+                  {{ submitting ? 'Saving...' : isEditingDelivery ? 'Update Delivery' : 'Add Delivery' }}
+                </button>
               </div>
-              <div class="form-row">
-                <div class="form-field full">
-                  <label>Return Reason (if applicable)</label>
-                  <input type="text" v-model="newDelivery.is_return.reason" placeholder="Reason for return (optional)" />
-                </div>
-              </div>
-            </div>
-            <div class="modal-footer">
-              <button class="btn-outline" @click="showAddDelivery = false">Cancel</button>
-              <button class="btn-primary" @click="addDelivery" :disabled="addingDelivery">Add Delivery</button>
             </div>
           </div>
+
+          <!-- Deliveries Table -->
+          <ListTable
+            :columns="deliveryColumns"
+            :rows="beneficiary.deliveries || []"
+            row-key="delivery_id"
+            :pagination="null"
+          >
+            <template #cell-distribution_release_date="{ row }">
+              <span class="release-date">{{ CharityService.formatDate(row.distribution_release_date) }}</span>
+            </template>
+            <template #cell-distribution_release_payment_for_indays="{ value }">{{ value }} days</template>
+            <template #cell-is_returned="{ row }">
+              <span v-if="row.is_returned?.reason" class="return-badge" :title="row.is_returned.reason">Returned</span>
+              <span v-else>—</span>
+            </template>
+            <template #cell-created_at="{ value }">{{ CharityService.formatDate(value) }}</template>
+            <template #cell-created_by="{ value }">User #{{ value }}</template>
+            <template #cell-updated_by="{ value }">User #{{ value }}</template>
+            <!-- Actions – Edit -->
+            <template #actions="{ row }">
+              <button class="action-btn edit" title="Edit Delivery" @click="openDeliveryModal(row)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+            </template>
+          </ListTable>
         </div>
 
-        <!-- Deliveries Table -->
-        <ListTable
-          :columns="deliveryColumns"
-          :rows="deliveries"
-          row-key="id"
-          :pagination="null"
-        >
-          <template #cell-for_indays="{ value }">{{ value }} days</template>
-          <template #cell-delivered="{ value }">
-            <span :class="['status-badge', value ? 'active' : 'inactive']">{{ value ? 'Delivered' : 'Pending' }}</span>
-          </template>
-          <template #cell-is_return="{ row }">
-            <span v-if="row.is_return?.reason" class="return-badge" :title="row.is_return.reason">Returned</span>
-            <span v-else>—</span>
-          </template>
-          <template #cell-created_at="{ value }">{{ formatDate(value) }}</template>
-          <template #actions="{ row }">
-            <button @click="removeDelivery(row.id)" class="action-btn delete" title="Delete">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </template>
-        </ListTable>
-      </div>
+        <!-- Adjustments Tab -->
+        <div v-if="activeTab === 'adjustments'" class="tab-pane">
+          <div class="actions-bar">
+            <button class="btn-primary small" @click="showAddAdjustment = true">+ New Adjustment</button>
+          </div>
 
-      <!-- Adjustments Tab -->
-      <div v-if="activeTab === 'adjustments'" class="tab-pane">
-        <div class="actions-bar">
-          <button class="btn-primary small" @click="showAddAdjustment = true">+ New Adjustment</button>
-        </div>
-
-        <!-- Add Adjustment Modal -->
-        <div v-if="showAddAdjustment" class="modal-overlay" @click.self="showAddAdjustment = false">
-          <div class="modal">
-            <div class="modal-header">
-              <h3>Add New Adjustment</h3>
-              <button class="modal-close" @click="showAddAdjustment = false">×</button>
-            </div>
-            <div class="modal-body">
-              <div class="form-row">
-                <div class="form-field">
-                  <label>Type</label>
-                  <select v-model="newAdjustment.type">
-                    <option value="increase">Increase Allocation</option>
-                    <option value="deduct">Deduct Allocation</option>
-                  </select>
+          <!-- Add Adjustment Modal -->
+          <div v-if="showAddAdjustment" class="modal-overlay" @click.self="showAddAdjustment = false">
+            <div class="modal">
+              <div class="modal-header">
+                <h3>Add New Adjustment</h3>
+                <button class="modal-close" @click="showAddAdjustment = false">×</button>
+              </div>
+              <div class="modal-body">
+                <div class="form-row">
+                  <div class="form-field">
+                    <label>Type</label>
+                    <select v-model="newAdjustment.type">
+                      <option value="increase">Increase Allocation</option>
+                      <option value="Deduct">Deduct Allocation</option>
+                    </select>
+                  </div>
+                  <div class="form-field">
+                    <label>Amount (ETB)</label>
+                    <input type="number" step="0.01" v-model.number="newAdjustment.amount" placeholder="0.00" />
+                  </div>
                 </div>
-                <div class="form-field">
-                  <label>Amount (ETB)</label>
-                  <input type="number" step="0.01" v-model.number="newAdjustment.amount" placeholder="0.00" />
+                <div class="form-row">
+                  <div class="form-field full">
+                    <label>Reason</label>
+                    <textarea v-model="newAdjustment.reason" rows="2" placeholder="Reason for adjustment"></textarea>
+                  </div>
                 </div>
               </div>
-              <div class="form-row">
-                <div class="form-field full">
-                  <label>Reason</label>
-                  <textarea v-model="newAdjustment.reason" rows="2" placeholder="Reason for adjustment"></textarea>
-                </div>
+              <div class="modal-footer">
+                <button class="btn-outline" @click="showAddAdjustment = false">Cancel</button>
+                <button class="btn-primary" @click="handleAddAdjustment" :disabled="submitting">
+                   {{ submitting ? 'Adding...' : 'Add Adjustment' }}
+                </button>
               </div>
-            </div>
-            <div class="modal-footer">
-              <button class="btn-outline" @click="showAddAdjustment = false">Cancel</button>
-              <button class="btn-primary" @click="addAdjustment" :disabled="addingAdjustment">Add Adjustment</button>
             </div>
           </div>
-        </div>
 
-        <!-- Adjustments Table -->
-        <ListTable
-          :columns="adjustmentColumns"
-          :rows="adjustments"
-          row-key="id"
-          :pagination="null"
-        >
-          <template #cell-type="{ value }">
-            <span :class="['type-badge', value === 'increase' ? 'increase' : 'deduct']">{{ value === 'increase' ? 'Increase' : 'Deduct' }}</span>
-          </template>
-          <template #cell-amount="{ value }">{{ formatCurrency(value) }}</template>
-          <template #cell-created_at="{ value }">{{ formatDate(value) }}</template>
-          <template #cell-createdBy="{ value }">User #{{ value }}</template>
-          <template #actions="{ row }">
-            <button @click="removeAdjustment(row.id)" class="action-btn delete" title="Delete">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          </template>
-        </ListTable>
+          <!-- Adjustments Table -->
+          <ListTable
+            :columns="adjustmentColumns"
+            :rows="beneficiary.adjustments || []"
+            row-key="adjustment_id"
+            :pagination="null"
+          >
+            <template #cell-type="{ value }">
+              <span :class="['type-badge', value === 'increase' ? 'increase' : 'deduct']">{{ value === 'increase' ? 'Increase' : 'Deduct' }}</span>
+            </template>
+            <template #cell-amount="{ value }">{{ CharityService.formatCurrency(value) }}</template>
+            <template #cell-created_at="{ value }">{{ CharityService.formatDate(value) }}</template>
+            <template #cell-created_by="{ value }">User #{{ value }}</template>
+          </ListTable>
+        </div>
       </div>
-    </div>
+    </template>
 
     <!-- Toasts -->
     <div class="toast-container">
@@ -188,13 +208,21 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, reactive, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
+import CharityService from '@/stores/charity'
 import ListTable from './components/common/ListTable.vue'
+import TransferBeneficiaryModal from './components/modals/beneficiaries/TransferBeneficiaryModal.vue'
 
 const route = useRoute()
-const router = useRouter()
-const beneficiaryId = Number(route.params.id)
+const beneficiaryId = route.params.id
+
+const beneficiary = ref(null)
+const settings = ref(null)
+const loading = ref(true)
+const error = ref(null)
+const submitting = ref(false)
+const showTransferModal = ref(false)
 
 const tabs = [
   { id: 'deliveries', name: 'Deliveries' },
@@ -203,218 +231,138 @@ const tabs = [
 const activeTab = ref('deliveries')
 const showAddDelivery = ref(false)
 const showAddAdjustment = ref(false)
+const isEditingDelivery = ref(false)
+const currentDeliveryId = ref(null)
 
-// Settings from localStorage (loaded on mount)
-const daysSinceLastPayment = ref(30)
-const globalNextPaymentDate = ref('2026-06-15')
-
-// Dummy data for beneficiary
-const beneficiary = ref({
-  beneficiaryId: 1,
-  name: 'Abebe Kebede',
-  team: { teamId: 1, name: 'Team Alpha' },
-  monthlyAllocation: 1500,
-  paymentMethod: 'bank',
-  isActive: true,
-})
-
-// Dummy deliveries
-const deliveries = ref([
-  { id: 1, created_at: '2026-05-15T10:00:00Z', for_indays: 30, is_return: { reason: '' }, delivered: true, receipt: 'REC-001' },
-  { id: 2, created_at: '2026-04-10T09:30:00Z', for_indays: 30, is_return: { reason: 'Wrong address' }, delivered: false, receipt: '' },
-])
-
-// Dummy adjustments
-const adjustments = ref([
-  { id: 1, created_at: '2026-05-01T08:00:00Z', type: 'increase', amount: 200, reason: { text: 'Cost of living increase' }, createdBy: 101 },
-  { id: 2, created_at: '2026-04-15T14:20:00Z', type: 'deduct', amount: 100, reason: { text: 'Overpayment correction' }, createdBy: 102 },
-])
-
-// New delivery form (auto-populated with settings)
 const newDelivery = reactive({
-  for_indays: 30,
-  delivered: true,
-  receipt: '',
-  is_return: { reason: '' }
+  distribution_release_id: '',
+  is_delivered: true,
+  recipt: '',
+  is_returned: { reason: '' }
 })
-const addingDelivery = ref(false)
 
-// New adjustment form
 const newAdjustment = reactive({
   type: 'increase',
   amount: 0,
   reason: ''
 })
-const addingAdjustment = ref(false)
 
-// Table columns
 const deliveryColumns = [
-  { key: 'created_at', label: 'Date' },
-  { key: 'for_indays', label: 'Coverage' },
-  { key: 'delivered', label: 'Status' },
-  { key: 'is_return', label: 'Return' },
-  { key: 'receipt', label: 'Receipt' },
+  { key: 'distribution_release_date', label: 'Release Date' },
+  { key: 'distribution_release_payment_for_indays', label: 'Coverage' },
+  { key: 'amount', label: 'Amount', format: 'currency' },
+  { key: 'is_delivered', label: 'Delivered', format: 'boolean' },
+  { key: 'is_returned', label: 'Return' },
+  { key: 'recipt', label: 'Receipt' },
+  { key: 'created_at', label: 'Created At' },
+  { key: 'created_by', label: 'Created By' },
+  { key: 'updated_by', label: 'Updated By' },
 ]
 
 const adjustmentColumns = [
   { key: 'created_at', label: 'Date' },
   { key: 'type', label: 'Type' },
   { key: 'amount', label: 'Amount', format: 'currency' },
-  { key: 'reason', label: 'Reason', formatter: (val) => val?.text || val },
-  { key: 'createdBy', label: 'Created By' },
+  { key: 'reason', label: 'Reason' },
+  { key: 'created_by', label: 'By User' },
 ]
 
-// Toasts
 const toasts = ref([])
-
-// Helper functions
-function formatCurrency(val) {
-  return new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(val ?? 0)
-}
-function formatDate(dateStr) {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return d.toLocaleDateString('en-ET')
-}
 function addToast(msg, type = 'success') {
   const id = Date.now()
   toasts.value.push({ id, message: msg, type })
   setTimeout(() => toasts.value = toasts.value.filter(t => t.id !== id), 5000)
 }
 
-// Load settings from localStorage
-function loadSettings() {
-  const savedDays = localStorage.getItem('charity_days_since_last_payment')
-  if (savedDays) daysSinceLastPayment.value = parseInt(savedDays)
-  const savedNextDate = localStorage.getItem('charity_next_payment_date')
-  if (savedNextDate) globalNextPaymentDate.value = savedNextDate
+const fetchBeneficiary = async () => {
+  loading.value = true
+  try {
+    const res = await CharityService.getBeneficiaryById(beneficiaryId)
+    if (res.success) beneficiary.value = res.data
+    else error.value = res.error
+  } catch (err) {
+    error.value = 'Failed to load beneficiary details'
+  } finally {
+    loading.value = false
+  }
 }
 
-// Calculate the next delivery date based on last delivery + interval, or fallback to global next date
-const calculatedDeliveryDate = computed(() => {
-  if (deliveries.value.length === 0) {
-    return globalNextPaymentDate.value
+const fetchSettings = async () => {
+  try {
+    const res = await CharityService.getSettings()
+    if (res.success) settings.value = res.data
+  } catch (err) {
+    console.error('Failed to fetch settings', err)
   }
-  // Get the most recent delivery date (by created_at)
-  const sorted = [...deliveries.value].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-  const lastDate = new Date(sorted[0].created_at)
-  const nextDate = new Date(lastDate)
-  nextDate.setDate(lastDate.getDate() + daysSinceLastPayment.value)
-  return nextDate.toISOString().split('T')[0]
-})
+}
 
-// Prepare modal: set for_indays from setting, and the date will be shown from computed
-function prepareNewDelivery() {
-  newDelivery.for_indays = daysSinceLastPayment.value
-  newDelivery.delivered = true
-  newDelivery.receipt = ''
-  newDelivery.is_return.reason = ''
+const openDeliveryModal = (editRow = null) => {
+  if (editRow) {
+    isEditingDelivery.value = true
+    currentDeliveryId.value = editRow.delivery_id
+    newDelivery.distribution_release_id = editRow.distribution_release_id
+    newDelivery.is_delivered = editRow.is_delivered
+    newDelivery.recipt = editRow.recipt || ''
+    newDelivery.is_returned.reason = editRow.is_returned?.reason || ''
+  } else {
+    isEditingDelivery.value = false
+    currentDeliveryId.value = null
+    newDelivery.distribution_release_id = ''
+    newDelivery.is_delivered = true
+    newDelivery.recipt = ''
+    newDelivery.is_returned.reason = ''
+  }
   showAddDelivery.value = true
 }
 
-// Add delivery (saves the date from computed value as created_at)
-function addDelivery() {
-  if (addingDelivery.value) return
-  addingDelivery.value = true
-  const newId = Math.max(0, ...deliveries.value.map(d => d.id), 0) + 1
-  const delivery = {
-    id: newId,
-    created_at: new Date(calculatedDeliveryDate.value).toISOString(),
-    for_indays: newDelivery.for_indays,
-    delivered: newDelivery.delivered,
-    receipt: newDelivery.receipt,
-    is_return: { reason: newDelivery.is_return.reason }
-  }
-  deliveries.value.push(delivery)
-  showAddDelivery.value = false
-  addToast('Delivery added successfully')
-  addingDelivery.value = false
-}
-
-function removeDelivery(id) {
-  deliveries.value = deliveries.value.filter(d => d.id !== id)
-  addToast('Delivery removed', 'error')
-}
-
-// Add adjustment with validation
-function addAdjustment() {
-  if (addingAdjustment.value) return
-  if (!newAdjustment.amount || newAdjustment.amount <= 0) {
-    addToast('Please enter a valid amount', 'error')
-    return
-  }
-  addingAdjustment.value = true
-  let newAllocation = beneficiary.value.monthlyAllocation
-  if (newAdjustment.type === 'increase') {
-    newAllocation += newAdjustment.amount
-  } else {
-    newAllocation -= newAdjustment.amount
-    if (newAllocation < 0) {
-      addToast('Deduction would make allocation negative', 'error')
-      addingAdjustment.value = false
-      return
+const handleDeliverySubmit = async () => {
+  if (!newDelivery.distribution_release_id) return addToast('Please select a release', 'error')
+  submitting.value = true
+  try {
+    const payload = {
+      ...newDelivery,
+      is_returned: newDelivery.is_returned.reason ? newDelivery.is_returned : null
     }
-  }
-  const newId = Math.max(0, ...adjustments.value.map(a => a.id), 0) + 1
-  const adjustment = {
-    id: newId,
-    created_at: new Date().toISOString(),
-    type: newAdjustment.type,
-    amount: newAdjustment.amount,
-    reason: { text: newAdjustment.reason },
-    createdBy: 999
-  }
-  adjustments.value.push(adjustment)
-  beneficiary.value.monthlyAllocation = newAllocation
-  newAdjustment.type = 'increase'
-  newAdjustment.amount = 0
-  newAdjustment.reason = ''
-  showAddAdjustment.value = false
-  addToast(`${adjustment.type === 'increase' ? 'Increased' : 'Deducted'} allocation by ${formatCurrency(adjustment.amount)}. New allocation: ${formatCurrency(beneficiary.value.monthlyAllocation)}`)
-  addingAdjustment.value = false
+    
+    const res = isEditingDelivery.value
+      ? await CharityService.updateDelivery(beneficiaryId, currentDeliveryId.value, payload)
+      : await CharityService.addDelivery(beneficiaryId, payload)
+
+    if (res.success) {
+      addToast(isEditingDelivery.value ? 'Delivery updated successfully' : 'Delivery recorded successfully')
+      showAddDelivery.value = false
+      beneficiary.value = res.data
+    } else addToast(res.error, 'error')
+  } catch (err) { addToast('Failed to save delivery', 'error') }
+  finally { submitting.value = false }
 }
 
-function removeAdjustment(id) {
-  const adjustmentToRemove = adjustments.value.find(a => a.id === id)
-  if (adjustmentToRemove) {
-    let newAllocation = beneficiary.value.monthlyAllocation
-    if (adjustmentToRemove.type === 'increase') {
-      newAllocation -= adjustmentToRemove.amount
-    } else {
-      newAllocation += adjustmentToRemove.amount
-    }
-    beneficiary.value.monthlyAllocation = newAllocation
-    adjustments.value = adjustments.value.filter(a => a.id !== id)
-    addToast(`Adjustment removed. Allocation reverted to ${formatCurrency(beneficiary.value.monthlyAllocation)}`, 'error')
-  }
+const handleAddAdjustment = async () => {
+  if (!newAdjustment.amount || newAdjustment.amount <= 0) return addToast('Invalid amount', 'error')
+  if (!newAdjustment.reason) return addToast('Reason is required', 'error')
+  
+  submitting.value = true
+  try {
+    const res = await CharityService.addAdjustment(beneficiaryId, newAdjustment)
+    if (res.success) {
+      addToast('Adjustment applied successfully')
+      showAddAdjustment.value = false
+      beneficiary.value = res.data
+      newAdjustment.amount = 0
+      newAdjustment.reason = ''
+    } else addToast(res.error, 'error')
+  } catch (err) { addToast('Failed to apply adjustment', 'error') }
+  finally { submitting.value = false }
 }
 
-// Load beneficiary and settings
+const handleTransferSuccess = (data) => {
+  addToast(`Beneficiary transferred to ${data.targetTeamName}`)
+  beneficiary.value = data.beneficiary
+}
+
 onMounted(() => {
-  loadSettings()
-  if (beneficiaryId === 2) {
-    beneficiary.value = {
-      beneficiaryId: 2,
-      name: 'Mekedonia Association',
-      team: null,
-      monthlyAllocation: 5000,
-      paymentMethod: 'cash',
-      isActive: true
-    }
-    deliveries.value = []
-    adjustments.value = []
-  } else if (beneficiaryId === 3) {
-    beneficiary.value = {
-      beneficiaryId: 3,
-      name: 'Zelalem Worku',
-      team: { teamId: 2, name: 'Team Beta' },
-      monthlyAllocation: 800,
-      paymentMethod: 'bank',
-      isActive: false
-    }
-    deliveries.value = [{ id: 3, created_at: '2026-05-20T11:00:00Z', for_indays: 30, is_return: { reason: '' }, delivered: false, receipt: '' }]
-    adjustments.value = []
-  }
+  fetchBeneficiary()
+  fetchSettings()
 })
 </script>
 
@@ -425,7 +373,9 @@ onMounted(() => {
 .header-title { flex: 1; }
 .header-title h1 { font-size: 24px; font-weight: 600; color: #0f172a; margin: 0 0 4px; }
 .header-title p { font-size: 14px; color: #64748b; margin: 0; }
-.header-actions .btn-outline { padding: 8px 16px; background: white; border: 1px solid #e2e8f0; border-radius: 10px; text-decoration: none; color: #475569; font-weight: 500; }
+.header-actions { display: flex; gap: 12px; }
+.header-actions .btn-outline { padding: 8px 16px; background: white; border: 1px solid #e2e8f0; border-radius: 10px; text-decoration: none; color: #475569; font-weight: 500; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.btn-icon-small { width: 14px; height: 14px; }
 .summary-card { background: white; border-radius: 16px; padding: 20px 24px; margin-bottom: 24px; border: 1px solid #e9edf2; }
 .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
 .summary-item .label { font-size: 12px; color: #64748b; text-transform: uppercase; }
@@ -456,10 +406,11 @@ onMounted(() => {
 .form-field label { font-size: 13px; font-weight: 500; color: #334155; }
 input, select, textarea { padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 14px; }
 input:disabled, select:disabled { background: #f8fafc; color: #94a3b8; cursor: not-allowed; }
-.hint { font-size: 11px; color: #94a3b8; margin-top: 2px; }
-.action-btn { width: 28px; height: 28px; border-radius: 6px; border: 1px solid #e2e8f0; background: white; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
-.action-btn.delete { color: #ef4444; }
+.action-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #e2e8f0; background: white; color: #64748b; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; margin-right: 6px; }
+.action-btn svg { width: 16px; height: 16px; }
+.action-btn:hover { border-color: #6a11cb; color: #6a11cb; background: #f5f3ff; }
 .return-badge { background: #fef3c7; color: #d97706; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+.release-date { font-weight: 600; color: #1e293b; }
 .type-badge { padding: 4px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
 .type-badge.increase { background: #e0f2fe; color: #0369a1; }
 .type-badge.deduct { background: #fee2e2; color: #b91c1c; }
@@ -467,8 +418,7 @@ input:disabled, select:disabled { background: #f8fafc; color: #94a3b8; cursor: n
 .toast { padding: 14px 24px; border-radius: 12px; color: white; font-weight: 600; }
 .toast-success { background: #10b981; }
 .toast-error { background: #ef4444; }
-@media (max-width: 768px) {
-  .form-row { grid-template-columns: 1fr; }
-  .summary-grid { grid-template-columns: 1fr; }
-}
+.loading-state { padding: 40px; text-align: center; color: #64748b; font-size: 16px; }
+.error-alert { background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c; padding: 16px; border-radius: 12px; margin: 24px; text-align: center; }
+.error-alert button { margin-top: 8px; padding: 6px 16px; background: #b91c1c; color: white; border: none; border-radius: 6px; cursor: pointer; }
 </style>

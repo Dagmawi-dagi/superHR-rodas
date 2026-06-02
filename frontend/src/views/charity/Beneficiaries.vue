@@ -12,6 +12,11 @@
       </router-link>
     </div>
 
+    <div v-if="error" class="error-alert">
+      {{ error }}
+      <button @click="fetchBeneficiaries">Retry</button>
+    </div>
+
     <!-- Stats Cards -->
     <StatsCards :cards="statsCards" />
 
@@ -28,21 +33,27 @@
         </select>
       </template>
       <template #actions>
-        <button class="btn-outline" @click="refreshData">Refresh</button>
+        <button class="btn-outline" :disabled="loading" @click="fetchBeneficiaries">
+          {{ loading ? 'Refreshing...' : 'Refresh' }}
+        </button>
       </template>
     </FilterBar>
 
     <!-- Table -->
     <ListTable
       :columns="benColumns"
-      :rows="filteredBeneficiaries"
+      :rows="beneficiaries"
       row-key="beneficiaryId"
       :pagination="pagination"
+      :loading="loading"
       @page-change="onPageChange"
       @sort-change="onSort"
     >
+      <template #cell-fullname="{ value }">
+        <span class="fullname-text">{{ value }}</span>
+      </template>
       <template #cell-monthlyAllocation="{ value }">
-        <span class="amount-text">{{ formatCurrency(value) }}</span>
+        <span class="amount-text">{{ CharityService.formatCurrency(value) }}</span>
       </template>
       <template #cell-team="{ row }">
         {{ row.team ? row.team.name : '—' }}
@@ -74,47 +85,129 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import CharityService from '@/stores/charity'
 import StatsCards from './components/common/StatsCards.vue'
 import FilterBar   from './components/common/FilterBar.vue'
 import ListTable   from './components/common/ListTable.vue'
 
-const beneficiariesData = [
-  { beneficiaryId: 1, name: 'Abebe Kebede', team: { teamId: 1, name: 'Team Alpha' }, monthlyAllocation: 1500, paymentMethod: 'bank', isActive: true },
-  { beneficiaryId: 2, name: 'Mekedonia Association', team: null, monthlyAllocation: 5000, paymentMethod: 'cash', isActive: true },
-  { beneficiaryId: 3, name: 'Zelalem Worku', team: { teamId: 2, name: 'Team Beta' }, monthlyAllocation: 800, paymentMethod: 'bank', isActive: false },
-]
-const beneficiaries = ref(beneficiariesData)
-const teams = ref([{ teamId: 1, name: 'Team Alpha' }, { teamId: 2, name: 'Team Beta' }])
-const filters = ref({ search: '', teamId: '' })
-const filteredBeneficiaries = computed(() => {
-  let list = beneficiaries.value
-  if (filters.value.search) { const q = filters.value.search.toLowerCase(); list = list.filter(b => b.name.toLowerCase().includes(q)) }
-  if (filters.value.teamId) list = list.filter(b => b.team?.teamId === Number(filters.value.teamId))
-  return list
+const beneficiaries = ref([])
+const teams = ref([])
+const loading = ref(false)
+const error = ref(null)
+
+const filters = ref({ 
+  search: '', 
+  teamId: '',
+  isActive: undefined
 })
-const clearFilters = () => { filters.value = { search: '', teamId: '' } }
-const pagination = ref({ currentPage: 1, totalPages: 1, totalItems: 3, pageSize: 10 })
-const onPageChange = (page) => { pagination.value.currentPage = page }
-const onSort = ({ key, dir }) => { console.log('Sort:', key, dir) }
+
+const pagination = ref({ 
+  currentPage: 1, 
+  totalPages: 1, 
+  totalItems: 0, 
+  pageSize: 10 
+})
+
+const fetchTeams = async () => {
+  try {
+    const res = await CharityService.getTeams({ size: 100, isActive: true })
+    if (res.success) {
+      teams.value = res.data
+    }
+  } catch (err) {
+    console.error('Failed to fetch teams', err)
+  }
+}
+
+const fetchBeneficiaries = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const res = await CharityService.getBeneficiaries({
+      page: pagination.value.currentPage,
+      size: pagination.value.pageSize,
+      search: filters.value.search,
+      teamId: filters.value.teamId || undefined,
+      isActive: filters.value.isActive
+    })
+    if (res.success) {
+      beneficiaries.value = res.data
+      pagination.value.totalItems = res.pagination.totalItems
+      pagination.value.totalPages = res.pagination.totalPages
+    } else {
+      error.value = res.error
+    }
+  } catch (err) {
+    error.value = 'Failed to fetch beneficiaries'
+  } finally {
+    loading.value = false
+  }
+}
+
+const clearFilters = () => { 
+  filters.value = { search: '', teamId: '', isActive: undefined }
+  pagination.value.currentPage = 1
+  fetchBeneficiaries()
+}
+
+const onPageChange = (page) => { 
+  pagination.value.currentPage = page 
+  fetchBeneficiaries()
+}
+
+const onSort = ({ key, dir }) => { 
+  console.log('Sort:', key, dir) 
+}
+
 const statsCards = computed(() => [
-  { key: 'total', label: 'Total Beneficiaries', value: beneficiaries.value.length },
+  { key: 'total', label: 'Total Beneficiaries', value: pagination.value.totalItems },
   { key: 'active', label: 'Active', value: beneficiaries.value.filter(b => b.isActive).length, color: '#10b981' },
-  { key: 'allocated', label: 'Total Allocated (ETB)', value: beneficiaries.value.reduce((s, b) => s + b.monthlyAllocation, 0), format: 'currency' },
-  { key: 'teams', label: 'Assigned Teams', value: new Set(beneficiaries.value.filter(b => b.team).map(b => b.team.teamId)).size, color: '#3b82f6' },
+  { key: 'allocated', label: 'Total Allocated (ETB)', value: beneficiaries.value.reduce((s, b) => s + parseFloat(b.monthlyAllocation || 0), 0), format: 'currency' },
+  { key: 'teams', label: 'Assigned Teams', value: teams.value.length, color: '#3b82f6' },
 ])
+
 const benColumns = [
   { key: 'beneficiaryId', label: 'ID', width: '60px' },
-  { key: 'name', label: 'Name' },
+  { key: 'fullname', label: 'Full Name' },
   { key: 'team', label: 'Team' },
   { key: 'monthlyAllocation', label: 'Monthly Allocation', format: 'currency', sortable: true },
   { key: 'paymentMethod', label: 'Payment', format: 'badge' },
   { key: 'isActive', label: 'Active' },
 ]
-const toggleActive = (row) => { row.isActive = !row.isActive; alert(`Beneficiary "${row.name}" is now ${row.isActive ? 'active' : 'inactive'} (UI only)`) }
-const refreshData = () => alert('Refresh — real data not connected')
-function formatCurrency(val) { return new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(val ?? 0) }
-onMounted(() => {})
+
+const toggleActive = async (row) => {
+  try {
+    const res = await CharityService.updateBeneficiary(row.beneficiaryId, { isActive: !row.isActive })
+    if (res.success) {
+      row.isActive = res.data.isActive
+    } else {
+      alert(`Error: ${res.error}`)
+    }
+  } catch (err) {
+    alert('Failed to toggle status')
+  }
+}
+
+// Watchers for filtering
+watch(() => filters.value.teamId, () => {
+  pagination.value.currentPage = 1
+  fetchBeneficiaries()
+})
+
+let searchTimeout
+watch(() => filters.value.search, () => {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    pagination.value.currentPage = 1
+    fetchBeneficiaries()
+  }, 500)
+})
+
+onMounted(() => {
+  fetchTeams()
+  fetchBeneficiaries()
+})
 </script>
 
 <style scoped>
@@ -125,6 +218,7 @@ onMounted(() => {})
 .btn-primary { display: flex; align-items: center; gap: 8px; padding: 10px 20px; background: linear-gradient(135deg, #6a11cb, #7c3aed); color: white; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; text-decoration: none; }
 .btn-icon { width: 18px; height: 18px; }
 .fb-select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: white; font-size: 13px; color: #475569; outline: none; }
+.fullname-text { font-weight: 600; color: #1e293b; }
 .amount-text { font-weight: 600; color: #1e293b; }
 .action-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #e2e8f0; background: white; color: #64748b; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; text-decoration: none; margin-right: 6px; }
 .action-btn svg { width: 16px; height: 16px; }
@@ -133,4 +227,6 @@ onMounted(() => {})
 .btn-outline { padding: 8px 14px; background: white; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 13px; cursor: pointer; color: #475569; }
 .lt-badge--active { background: #e6f7ee; color: #0d6b36; border: 1px solid #b7e4cf; }
 .lt-badge--inactive { background: #fef1f1; color: #b91c1c; border: 1px solid #fecaca; }
+.error-alert { background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c; padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+.error-alert button { background: #b91c1c; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
 </style>

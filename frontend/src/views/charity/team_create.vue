@@ -11,7 +11,10 @@
       </div>
     </div>
 
-    <form @submit.prevent="handleSubmit" class="team-form">
+    <div v-if="loading" class="loading-state">Loading team data...</div>
+    <div v-else-if="error" class="error-alert">{{ error }} <button @click="loadInitialData">Retry</button></div>
+
+    <form v-else @submit.prevent="handleSubmit" class="team-form">
       <!-- Basic Info (Collapsible) -->
       <div class="form-card">
         <div class="card-header collapsible-header" @click="collapsed.identity = !collapsed.identity">
@@ -71,7 +74,7 @@
                 <button v-if="!isView" @click="removeMember(mId)" class="m-remove">×</button>
               </div>
             </div>
-            <div v-else class="empty-members"><p>No members added to this team yet.</p></div>
+            <div v-else class="empty-members"><p>No members added to this team yet. Add members first to pick leaders.</p></div>
           </div>
         </transition>
       </div>
@@ -93,14 +96,11 @@
               <div class="form-field">
                 <label>Team Head <span class="required">*</span></label>
                 <div class="combobox">
-                  <input v-if="!selectedHead" type="text" v-model="headSearch" @focus="showHeadDropdown = true" @blur="hideDropdown('head')" placeholder="Search head..." :disabled="isView" />
+                  <input v-if="!selectedHead" type="text" v-model="headSearch" @focus="showHeadDropdown = true" @blur="hideDropdown('head')" placeholder="Pick from members..." :disabled="isView || form.members.length === 0" />
                   <div v-else class="selected-chip"><div class="chip-avatar">{{ selectedHead.fullName[0] }}</div><span>{{ selectedHead.fullName }}</span><button v-if="!isView" @click="clearLeadership('head')" class="clear-btn">×</button></div>
                   <div v-if="showHeadDropdown" class="combobox-dropdown">
-                    <div v-if="loadingEmps" class="dropdown-item loading">Loading...</div>
-                    <template v-else>
-                      <div v-for="emp in filteredHeads" :key="emp.id" class="dropdown-item" @mousedown.prevent="selectLeadership('head', emp)">{{ emp.fullName }}</div>
-                      <div v-if="filteredHeads.length === 0" class="dropdown-item empty">No results found</div>
-                    </template>
+                    <div v-for="emp in filteredHeads" :key="emp.id" class="dropdown-item" @mousedown.prevent="selectLeadership('head', emp)">{{ emp.fullName }}</div>
+                    <div v-if="filteredHeads.length === 0" class="dropdown-item empty">{{ form.members.length === 0 ? 'Add members first' : 'No members found' }}</div>
                   </div>
                 </div>
                 <span class="error" v-if="errors.head">{{ errors.head }}</span>
@@ -108,14 +108,11 @@
               <div class="form-field">
                 <label>Vice Head</label>
                 <div class="combobox">
-                  <input v-if="!selectedVice" type="text" v-model="viceSearch" @focus="showViceDropdown = true" @blur="hideDropdown('vice')" placeholder="Search vice head..." :disabled="isView" />
+                  <input v-if="!selectedVice" type="text" v-model="viceSearch" @focus="showViceDropdown = true" @blur="hideDropdown('vice')" placeholder="Pick from members..." :disabled="isView || form.members.length === 0" />
                   <div v-else class="selected-chip vice"><div class="chip-avatar">{{ selectedVice.fullName[0] }}</div><span>{{ selectedVice.fullName }}</span><button v-if="!isView" @click="clearLeadership('vice')" class="clear-btn">×</button></div>
                   <div v-if="showViceDropdown" class="combobox-dropdown">
-                    <div v-if="loadingEmps" class="dropdown-item loading">Loading...</div>
-                    <template v-else>
-                      <div v-for="emp in filteredVices" :key="emp.id" class="dropdown-item" @mousedown.prevent="selectLeadership('vice', emp)">{{ emp.fullName }}</div>
-                      <div v-if="filteredVices.length === 0" class="dropdown-item empty">No results found</div>
-                    </template>
+                    <div v-for="emp in filteredVices" :key="emp.id" class="dropdown-item" @mousedown.prevent="selectLeadership('vice', emp)">{{ emp.fullName }}</div>
+                    <div v-if="filteredVices.length === 0" class="dropdown-item empty">{{ form.members.length === 0 ? 'Add members first' : 'No members found' }}</div>
                   </div>
                 </div>
               </div>
@@ -124,13 +121,13 @@
         </transition>
       </div>
 
-      <!-- Assigned Beneficiaries (Collapsible, only when team exists) -->
+      <!-- Beneficiaries (Collapsible, only for existing team) -->
       <div class="form-card" v-if="isEdit || isView">
         <div class="card-header collapsible-header" @click="collapsed.beneficiaries = !collapsed.beneficiaries">
           <div class="header-left">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             <h3>Assigned Beneficiaries</h3>
-            <span class="count-badge">{{ assignedBeneficiaries.length }} assigned</span>
+            <span class="count-badge">{{ beneficiaries.length }} beneficiaries</span>
           </div>
           <div class="header-right">
             <svg class="collapse-chevron" :class="{ rotated: !collapsed.beneficiaries }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
@@ -138,25 +135,42 @@
         </div>
         <transition name="collapse">
           <div v-show="!collapsed.beneficiaries" class="card-body">
-            <div v-if="!isView" class="member-search-bar">
-              <div class="combobox full">
-                <input type="text" v-model="benSearch" @focus="showBenDropdown = true" @blur="hideDropdown('ben')" placeholder="Search and add beneficiaries to this team..." />
-                <div v-if="showBenDropdown" class="combobox-dropdown">
-                  <div v-for="ben in filteredBeneficiaries" :key="ben.beneficiaryId" class="dropdown-item" @mousedown.prevent="addBeneficiary(ben)">{{ ben.name }}</div>
-                  <div v-if="filteredBeneficiaries.length === 0" class="dropdown-item empty">No beneficiaries found</div>
-                </div>
-              </div>
-            </div>
-            <ListTable :columns="assignedBenColumns" :rows="assignedBeneficiaries" row-key="beneficiaryId" :pagination="null">
-              <template #cell-monthlyAllocation="{ value }"><span class="amount-text">{{ formatCurrency(value) }}</span></template>
-              <template #cell-paymentMethod="{ value }"><span :class="['lt-badge', `lt-badge--${value}`]">{{ value }}</span></template>
+            <FilterBar
+              v-model:search="benSearch"
+              search-placeholder="Search beneficiaries..."
+              @clear="benSearch = ''"
+            />
+            
+            <ListTable
+              :columns="benColumns"
+              :rows="beneficiaries"
+              row-key="beneficiaryId"
+              :loading="loadingBeneficiaries"
+              :pagination="null"
+            >
+              <template #cell-fullname="{ row }">
+                <router-link :to="`/charity/beneficiaries/${row.beneficiaryId}/details`" class="ben-link">
+                  {{ row.fullname }}
+                </router-link>
+              </template>
+              <template #cell-monthlyAllocation="{ value }">
+                <strong>{{ CharityService.formatCurrency(value) }}</strong>
+              </template>
+              <template #cell-isActive="{ value }">
+                <span :class="['lt-badge', value ? 'lt-badge--active' : 'lt-badge--inactive']">
+                  {{ value ? 'Active' : 'Inactive' }}
+                </span>
+              </template>
+              <!-- Actions – Edit and Details -->
               <template #actions="{ row }">
-                <button v-if="!isView" class="action-btn delete" @click="removeBeneficiary(row)" title="Remove">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                </button>
+                <router-link :to="`/charity/beneficiaries/${row.beneficiaryId}/edit`" class="action-btn edit" title="Edit">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </router-link>
+                <router-link :to="`/charity/beneficiaries/${row.beneficiaryId}/details`" class="action-btn details" title="Details">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><circle cx="12" cy="8" r="0.5" fill="currentColor" stroke="none"/></svg>
+                </router-link>
               </template>
             </ListTable>
-            <div v-if="assignedBeneficiaries.length === 0" class="empty-members"><p>No beneficiaries assigned to this team yet.</p></div>
           </div>
         </transition>
       </div>
@@ -178,9 +192,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import CharityService from '@/stores/charity'
+import FilterBar from './components/common/FilterBar.vue'
 import ListTable from './components/common/ListTable.vue'
 
 const router = useRouter()
@@ -189,36 +204,9 @@ const route = useRoute()
 const isEdit = computed(() => !!route.params.id && route.path.includes('edit'))
 const isView = computed(() => !!route.params.id && !route.path.includes('edit'))
 
-// ── Dummy teams (same as list page) ───────────────────────────────────
-const dummyTeams = [
-  {
-    teamId: 1,
-    name: 'Team Alpha',
-    description: 'First distribution team',
-    headEmployeeId: 1,
-    viceEmployeeId: 2,
-    members: [1, 2, 3],
-    isActive: true,
-  },
-  {
-    teamId: 2,
-    name: 'Team Beta',
-    description: 'Second distribution team',
-    headEmployeeId: null,
-    viceEmployeeId: null,
-    members: [],
-    isActive: true,
-  },
-  {
-    teamId: 3,
-    name: 'Team Gamma',
-    description: 'Inactive team',
-    headEmployeeId: 5,
-    viceEmployeeId: null,
-    members: [5],
-    isActive: false,
-  },
-]
+const loading = ref(true)
+const loadingBeneficiaries = ref(false)
+const error = ref<string | null>(null)
 
 // ── Collapsible state ─────────────────────────────────────────────────
 const collapsed = reactive({
@@ -232,12 +220,14 @@ const collapsed = reactive({
 const form = ref({
   name: '',
   description: '',
-  headEmployeeId: null as number | null,
-  viceEmployeeId: null as number | null,
+  head: null as number | null,
+  vice: null as number | null,
   members: [] as number[],
   isActive: true
 })
 
+const beneficiaries = ref<any[]>([])
+const benSearch = ref('')
 const errors = ref({ name: '', head: '' })
 const isSubmitting = ref(false)
 const loadingEmps = ref(false)
@@ -252,82 +242,88 @@ const showHeadDropdown = ref(false)
 const showViceDropdown = ref(false)
 const showMemberDropdown = ref(false)
 
-const selectedHead = computed(() => employees.value.find(e => e.id === form.value.headEmployeeId))
-const selectedVice = computed(() => employees.value.find(e => e.id === form.value.viceEmployeeId))
+const selectedHead = computed(() => employees.value.find(e => e.id === form.value.head))
+const selectedVice = computed(() => employees.value.find(e => e.id === form.value.vice))
+
+const currentMembers = computed(() => {
+  return employees.value.filter(e => form.value.members.includes(e.id))
+})
 
 const filteredHeads = computed(() => {
   const q = headSearch.value.toLowerCase()
-  return employees.value.filter(e => e.fullName.toLowerCase().includes(q) && e.id !== form.value.viceEmployeeId)
+  return currentMembers.value.filter(e => e.fullName.toLowerCase().includes(q) && e.id !== form.value.vice)
 })
 const filteredVices = computed(() => {
   const q = viceSearch.value.toLowerCase()
-  return employees.value.filter(e => e.fullName.toLowerCase().includes(q) && e.id !== form.value.headEmployeeId)
+  return currentMembers.value.filter(e => e.fullName.toLowerCase().includes(q) && e.id !== form.value.head)
 })
 const filteredMembers = computed(() => {
   const q = memberSearch.value.toLowerCase()
   return employees.value.filter(e =>
     e.fullName.toLowerCase().includes(q) &&
-    !form.value.members.includes(e.id) &&
-    e.id !== form.value.headEmployeeId &&
-    e.id !== form.value.viceEmployeeId
+    !form.value.members.includes(e.id)
   )
 })
 
-// ── Beneficiary assignment ────────────────────────────────────────────
-const allBeneficiaries = ref<any[]>([])
-const assignedBeneficiaryIds = ref<number[]>([])
-const benSearch = ref('')
-const showBenDropdown = ref(false)
-
-const assignedBeneficiaries = computed(() => {
-  return allBeneficiaries.value.filter(b => assignedBeneficiaryIds.value.includes(b.beneficiaryId))
-})
-
-const filteredBeneficiaries = computed(() => {
-  const q = benSearch.value.toLowerCase()
-  return allBeneficiaries.value.filter(b =>
-    b.name.toLowerCase().includes(q) && !assignedBeneficiaryIds.value.includes(b.beneficiaryId)
-  )
-})
-
-const assignedBenColumns = [
-  { key: 'beneficiaryId', label: 'ID', width: '60px' },
-  { key: 'name', label: 'Name' },
-  { key: 'monthlyAllocation', label: 'Allocation (ETB)', format: 'currency' },
+const benColumns = [
+  { key: 'fullname', label: 'Full Name' },
+  { key: 'monthlyAllocation', label: 'Allocation' },
   { key: 'paymentMethod', label: 'Payment', format: 'badge' },
+  { key: 'isActive', label: 'Status' },
+  { key: 'actions', label: 'Actions', width: '100px' },
 ]
 
+const fetchBeneficiaries = async () => {
+  if (!route.params.id) return
+  loadingBeneficiaries.value = true
+  try {
+    const res = await CharityService.getBeneficiaries({
+      teamId: Number(route.params.id),
+      search: benSearch.value,
+      size: 500
+    })
+    if (res.success) beneficiaries.value = res.data
+  } catch (err) {
+    console.error('Failed to fetch beneficiaries', err)
+  } finally {
+    loadingBeneficiaries.value = false
+  }
+}
+
+// Watch for search changes
+let searchTimeout: any
+watch(benSearch, () => {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(fetchBeneficiaries, 500)
+})
+
 const loadInitialData = async () => {
-  loadingEmps.value = true
+  loading.value = true
+  error.value = null
   try {
     const empRes = await CharityService.getEmployeesForDropdown()
-    if (empRes.success) {
-      employees.value = empRes.data
-    } else {
-      addToast(empRes.error || 'Failed to load employees', 'error')
-    }
-
-    allBeneficiaries.value = [
-      { beneficiaryId: 1, name: 'Abebe Kebede', monthlyAllocation: 1500, paymentMethod: 'bank', isActive: true },
-      { beneficiaryId: 2, name: 'Mekedonia Association', monthlyAllocation: 5000, paymentMethod: 'cash', isActive: true },
-      { beneficiaryId: 3, name: 'Zelalem Worku', monthlyAllocation: 800, paymentMethod: 'bank', isActive: false },
-      { beneficiaryId: 4, name: 'Fatima Yusuf', monthlyAllocation: 2000, paymentMethod: 'bank', isActive: true },
-    ]
+    if (empRes.success) employees.value = empRes.data
 
     if (isEdit.value || isView.value) {
-      const team = dummyTeams.find(t => t.teamId === Number(route.params.id))
-      if (team) {
+      const res = await CharityService.getTeamById(route.params.id as string)
+      if (res.success) {
+        const team = res.data
         form.value.name = team.name
         form.value.description = team.description
-        form.value.headEmployeeId = team.headEmployeeId
-        form.value.viceEmployeeId = team.viceEmployeeId
-        form.value.members = team.members
+        form.value.head = team.head
+        form.value.vice = team.vice
+        form.value.members = team.members || []
         form.value.isActive = team.isActive
-        assignedBeneficiaryIds.value = team.teamId === 1 ? [1, 2] : team.teamId === 2 ? [3] : []
+        
+        await fetchBeneficiaries()
+      } else {
+        error.value = res.error
       }
     }
+  } catch (err) {
+    error.value = 'Failed to load team data'
   } finally {
-    loadingEmps.value = false
+    loading.value = false
   }
 }
 
@@ -336,13 +332,13 @@ const getEmployeeName = (id: number) => {
 }
 
 const selectLeadership = (role: 'head' | 'vice', emp: any) => {
-  if (role === 'head') { form.value.headEmployeeId = emp.id; showHeadDropdown.value = false; errors.value.head = '' }
-  else { form.value.viceEmployeeId = emp.id; showViceDropdown.value = false }
+  if (role === 'head') { form.value.head = emp.id; showHeadDropdown.value = false; errors.value.head = '' }
+  else { form.value.vice = emp.id; showViceDropdown.value = false }
 }
 
 const clearLeadership = (role: 'head' | 'vice') => {
-  if (role === 'head') { form.value.headEmployeeId = null; headSearch.value = '' }
-  else { form.value.viceEmployeeId = null; viceSearch.value = '' }
+  if (role === 'head') { form.value.head = null; headSearch.value = '' }
+  else { form.value.vice = null; viceSearch.value = '' }
 }
 
 const addMember = (emp: any) => {
@@ -353,6 +349,9 @@ const addMember = (emp: any) => {
 
 const removeMember = (id: number) => {
   form.value.members = form.value.members.filter(mId => mId !== id)
+  // If member was head or vice, clear it
+  if (form.value.head === id) form.value.head = null
+  if (form.value.vice === id) form.value.vice = null
 }
 
 const hideDropdown = (type: string) => {
@@ -360,18 +359,7 @@ const hideDropdown = (type: string) => {
     if (type === 'head') showHeadDropdown.value = false
     if (type === 'vice') showViceDropdown.value = false
     if (type === 'member') showMemberDropdown.value = false
-    if (type === 'ben') showBenDropdown.value = false
   }, 250)
-}
-
-const addBeneficiary = (ben: any) => {
-  assignedBeneficiaryIds.value.push(ben.beneficiaryId)
-  benSearch.value = ''
-  showBenDropdown.value = false
-}
-
-const removeBeneficiary = (ben: any) => {
-  assignedBeneficiaryIds.value = assignedBeneficiaryIds.value.filter(id => id !== ben.beneficiaryId)
 }
 
 const addToast = (message: string, type: string = 'success') => {
@@ -383,25 +371,26 @@ const addToast = (message: string, type: string = 'success') => {
 const handleSubmit = async () => {
   errors.value = { name: '', head: '' }
   if (!form.value.name.trim()) errors.value.name = 'Team name is required'
-  if (!form.value.headEmployeeId) errors.value.head = 'Team head is required'
+  if (!form.value.head) errors.value.head = 'Team head is required'
   if (errors.value.name || errors.value.head) return
 
   isSubmitting.value = true
-  const res = isEdit.value
-    ? await CharityService.updateTeam(Number(route.params.id), form.value)
-    : await CharityService.createTeam(form.value)
+  try {
+    const res = isEdit.value
+      ? await CharityService.updateTeam(Number(route.params.id), form.value)
+      : await CharityService.createTeam(form.value)
 
-  if (res.success) {
-    addToast(isEdit.value ? 'Team updated successfully!' : 'Team created successfully!')
-    setTimeout(() => router.push('/charity/teams'), 1500)
-  } else {
-    addToast(res.error || 'Failed to save team', 'error')
+    if (res.success) {
+      addToast(isEdit.value ? 'Team updated successfully!' : 'Team created successfully!')
+      setTimeout(() => router.push('/charity/teams'), 1500)
+    } else {
+      addToast(res.error || 'Failed to save team', 'error')
+    }
+  } catch (err) {
+    addToast('An unexpected error occurred', 'error')
+  } finally {
+    isSubmitting.value = false
   }
-  isSubmitting.value = false
-}
-
-function formatCurrency(val: number) {
-  return new Intl.NumberFormat('en-ET', { style: 'currency', currency: 'ETB' }).format(val ?? 0)
 }
 
 onMounted(loadInitialData)
@@ -478,17 +467,25 @@ input:disabled, textarea:disabled { background: #f8fafc; color: #94a3b8; cursor:
 
 .error { font-size: 12px; color: #ef4444; margin-top: 4px; font-weight: 500; }
 
-/* Table overrides */
-.amount-text { font-weight: 600; color: #1e293b; }
-.lt-badge--bank { background: #e6f7ee; color: #0d6b36; border: 1px solid #b7e4cf; }
-.lt-badge--cash { background: #fef1f1; color: #b91c1c; border: 1px solid #fecaca; }
-.action-btn.delete { color: #ef4444; }
-.action-btn.delete:hover { background: #fef2f2; border-color: #ef4444; }
+.ben-link { color: #6a11cb; font-weight: 600; text-decoration: none; }
+.ben-link:hover { text-decoration: underline; }
+
+.action-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #e2e8f0; background: white; color: #64748b; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; text-decoration: none; margin-right: 6px; }
+.action-btn svg { width: 16px; height: 16px; }
+.action-btn:hover { border-color: #6a11cb; color: #6a11cb; background: #f5f3ff; }
+.action-btn.details:hover { border-color: #10b981; color: #10b981; background: #e6f7ee; }
+
+.lt-badge--active { background: #e6f7ee; color: #0d6b36; border: 1px solid #b7e4cf; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+.lt-badge--inactive { background: #fef1f1; color: #b91c1c; border: 1px solid #fecaca; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
 
 .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 100; display: flex; flex-direction: column; gap: 12px; }
 .toast { padding: 14px 24px; border-radius: 12px; color: white; font-weight: 600; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
 .toast-success { background: #10b981; }
 .toast-error { background: #ef4444; }
+
+.loading-state { padding: 40px; text-align: center; color: #64748b; font-size: 16px; }
+.error-alert { background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c; padding: 16px; border-radius: 12px; text-align: center; }
+.error-alert button { margin-top: 8px; padding: 6px 16px; background: #b91c1c; color: white; border: none; border-radius: 6px; cursor: pointer; }
 
 @media (max-width: 768px) { .form-row { grid-template-columns: 1fr; } }
 </style>

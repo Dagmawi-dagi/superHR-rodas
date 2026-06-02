@@ -1,34 +1,8 @@
 'use strict';
 const { Model } = require('sequelize');
 
-/**
- * CharitySetting
- *
- * One row per setting type (default key: 'main').
- * Adding a new setting type is just INSERT — no schema change needed.
- *
- * companies JSON shape:
- * [
- *   {
- *     "name":      "Ethio Telecom",
- *     "full_info": { "phone": "…", "email": "…", "address": "…" }
- *   }
- * ]
- *
- * config is a spare bucket for any future global configuration.
- */
-
 module.exports = (sequelize, DataTypes) => {
   class CharitySetting extends Model {
-    // ─────────────────────────────────────────── Helpers ────────────────────────────────────────────────────────
-
-    /** Find a company by name (case-insensitive) */
-    findCompany(name) {
-      return (this.companies ?? []).find(
-        c => c.name.toLowerCase() === name.toLowerCase()
-      );
-    }
-
     static associate(models) {
       // Who last updated this setting row
       CharitySetting.belongsTo(models.User, {
@@ -54,15 +28,19 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 'main',
         field: 'setting_key',
       },
-      // [ { name, full_info: { phone, email, address, … } } ]
-      companies: {
+      // [{ distribution_release_id, date, payment_for_indays }]
+      distributionRelease: {
         type: DataTypes.JSONB,
         defaultValue: [],
+        field: 'distribution_release',
       },
-      // Spare bucket for future global config
-      config: {
+      // { monthly_allocation: 3000, payment_method: 'bank' }
+      defaults: {
         type: DataTypes.JSONB,
-        defaultValue: {},
+        defaultValue: {
+          monthly_allocation: 3000,
+          payment_method: 'bank'
+        },
       },
       updatedBy: {
         type: DataTypes.INTEGER,
@@ -78,7 +56,6 @@ module.exports = (sequelize, DataTypes) => {
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
-      // No paranoid — settings should never be soft-deleted
     }
   );
 

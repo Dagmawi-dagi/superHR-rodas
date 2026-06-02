@@ -51,9 +51,8 @@ const settingRoutes = require("./routes/settingRoutes");
 // Charity module (v2)
 const charityTeamRoutes        = require("./routes/charity/teamRoutes");
 const charityBeneficiaryRoutes = require("./routes/charity/beneficiaryRoutes");
-const charityDonationRoutes    = require("./routes/charity/donationRoutes");
-const charityRequestRoutes     = require("./routes/charity/requestRoutes");
 const charitySettingRoutes     = require("./routes/charity/settingRoutes");
+const charityDashboardRoutes   = require("./routes/charity/dashboardRoutes");
 // ============================================================================
 // GLOBAL MIDDLEWARE
 // ============================================================================
@@ -101,9 +100,8 @@ app.use("/api/settings", settingRoutes);
 // Charity Module Routes (v2)
 app.use("/api/charity/teams",        charityTeamRoutes);
 app.use("/api/charity/beneficiaries",charityBeneficiaryRoutes);
-app.use("/api/charity/donations",    charityDonationRoutes);
-app.use("/api/charity/requests",     charityRequestRoutes);
 app.use("/api/charity/settings",     charitySettingRoutes);
+app.use("/api/charity/dashboard",    charityDashboardRoutes);
 // ============================================================================
 // HEALTH CHECK ENDPOINT
 // ============================================================================

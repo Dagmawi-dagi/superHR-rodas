@@ -11,7 +11,10 @@
       </div>
     </div>
 
-    <form @submit.prevent="handleSubmit" class="ben-form">
+    <div v-if="loading" class="loading-state">Loading data...</div>
+    <div v-else-if="error" class="error-alert">{{ error }} <button @click="initData">Retry</button></div>
+
+    <form v-else @submit.prevent="handleSubmit" class="ben-form">
       <!-- Basic Information (Collapsible) -->
       <div class="form-card">
         <div class="card-header collapsible-header" @click="collapsed.basic = !collapsed.basic">
@@ -27,11 +30,11 @@
           <div v-show="!collapsed.basic" class="card-body">
             <div class="form-field full">
               <label>Full Name <span class="required">*</span></label>
-              <input type="text" v-model="form.name" placeholder="e.g. Abebe Kebede" :disabled="isView" />
-              <span class="error" v-if="errors.name">{{ errors.name }}</span>
+              <input type="text" v-model="form.fullname" placeholder="e.g. Abebe Kebede" :disabled="isView" />
+              <span class="error" v-if="errors.fullname">{{ errors.fullname }}</span>
             </div>
             <div class="form-field full">
-              <label>Charity Team</label>
+              <label>Charity Team <span class="required">*</span></label>
               <div class="combobox">
                 <input
                   v-if="!selectedTeam"
@@ -39,7 +42,7 @@
                   v-model="teamSearch"
                   @focus="showTeamDropdown = true"
                   @blur="hideDropdown('team')"
-                  placeholder="Search team or leave empty..."
+                  placeholder="Search team..."
                   :disabled="isView"
                 />
                 <div v-else class="selected-chip">
@@ -48,13 +51,13 @@
                   <button v-if="!isView" @click="clearTeam" class="clear-btn">×</button>
                 </div>
                 <div v-if="showTeamDropdown" class="combobox-dropdown">
-                  <div class="dropdown-item" @mousedown.prevent="selectTeam(null)">None (unassigned)</div>
                   <div v-for="t in filteredTeams" :key="t.teamId" class="dropdown-item" @mousedown.prevent="selectTeam(t)">
                     {{ t.name }}
                   </div>
                   <div v-if="filteredTeams.length === 0" class="dropdown-item empty">No teams found</div>
                 </div>
               </div>
+              <span class="error" v-if="errors.teamId">{{ errors.teamId }}</span>
             </div>
           </div>
         </transition>
@@ -107,26 +110,26 @@
             <div class="form-row">
               <div class="form-field">
                 <label>Region</label>
-                <input type="text" v-model="form.fullInfo.region" placeholder="e.g. Addis Ababa" :disabled="isView" />
+                <input type="text" v-model="form.fullInfo.location.region" placeholder="e.g. Addis Ababa" :disabled="isView" />
               </div>
               <div class="form-field">
                 <label>City</label>
-                <input type="text" v-model="form.fullInfo.city" placeholder="e.g. Addis Ababa" :disabled="isView" />
+                <input type="text" v-model="form.fullInfo.location.city" placeholder="e.g. Addis Ababa" :disabled="isView" />
               </div>
             </div>
             <div class="form-row">
               <div class="form-field">
                 <label>Woreda</label>
-                <input type="text" v-model="form.fullInfo.woreda" placeholder="e.g. Bole" :disabled="isView" />
+                <input type="text" v-model="form.fullInfo.location.woreda" placeholder="e.g. Bole" :disabled="isView" />
               </div>
               <div class="form-field">
                 <label>Phone</label>
-                <input type="tel" v-model="form.fullInfo.phone" placeholder="+251 9..." :disabled="isView" />
+                <input type="tel" v-model="form.fullInfo.contact.phone" placeholder="+251 9..." :disabled="isView" />
               </div>
             </div>
             <div class="form-field full">
               <label>Email</label>
-              <input type="email" v-model="form.fullInfo.email" placeholder="contact@example.com" :disabled="isView" />
+              <input type="email" v-model="form.fullInfo.contact.email" placeholder="contact@example.com" :disabled="isView" />
             </div>
           </div>
         </transition>
@@ -159,46 +162,18 @@ const route  = useRoute()
 const isEdit = computed(() => !!route.params.id && route.path.includes('edit'))
 const isView = computed(() => !!route.params.id && !route.path.includes('edit'))
 
-// Collapsible state (all expanded by default: false = expanded)
+const loading = ref(true)
+const error = ref(null)
+
+// Collapsible state
 const collapsed = reactive({
   basic: false,
   allocation: false,
   location: false,
 })
 
-// ── Dummy beneficiaries (same as list page) ────────────────────────────
-const dummyBeneficiaries = [
-  {
-    beneficiaryId: 1,
-    name: 'Abebe Kebede',
-    teamId: 1,
-    monthlyAllocation: 1500,
-    paymentMethod: 'bank',
-    fullInfo: { region: 'Addis Ababa', city: 'Addis Ababa', woreda: 'Bole', phone: '+251912345678', email: 'abebe@example.com' },
-  },
-  {
-    beneficiaryId: 2,
-    name: 'Mekedonia Association',
-    teamId: null,
-    monthlyAllocation: 5000,
-    paymentMethod: 'cash',
-    fullInfo: { region: 'Addis Ababa', city: 'Addis Ababa', woreda: 'Kirkos', phone: '+251911234567', email: 'mekedonia@example.com' },
-  },
-  {
-    beneficiaryId: 3,
-    name: 'Zelalem Worku',
-    teamId: 2,
-    monthlyAllocation: 800,
-    paymentMethod: 'bank',
-    fullInfo: { region: 'Oromia', city: 'Adama', woreda: 'Adama 01', phone: '+251933445566', email: '' },
-  },
-]
-
 // ── Teams for dropdown ──────────────────────────────────────────────────
-const teams = ref([
-  { teamId: 1, name: 'Team Alpha' },
-  { teamId: 2, name: 'Team Beta' },
-])
+const teams = ref([])
 const teamSearch = ref('')
 const showTeamDropdown = ref(false)
 
@@ -228,16 +203,13 @@ const hideDropdown = (type) => {
 
 // ── Form ──────────────────────────────────────────────────────────────
 const form = reactive({
-  name: '',
+  fullname: '',
   teamId: null,
   monthlyAllocation: 0,
   paymentMethod: 'bank',
   fullInfo: {
-    region: '',
-    city: '',
-    woreda: '',
-    phone: '',
-    email: '',
+    location: { region: '', city: '', woreda: '' },
+    contact: { phone: '', email: '' },
   },
 })
 
@@ -245,24 +217,51 @@ const errors = ref({})
 const isSubmitting = ref(false)
 const toasts = ref([])
 
-// ── Load beneficiary if editing ───────────────────────────────────────
-const loadBeneficiary = (id) => {
-  const ben = dummyBeneficiaries.find(b => b.beneficiaryId === Number(id))
-  if (ben) {
-    form.name = ben.name
-    form.teamId = ben.teamId
-    form.monthlyAllocation = ben.monthlyAllocation
-    form.paymentMethod = ben.paymentMethod
-    form.fullInfo = { ...ben.fullInfo }
-  } else {
-    form.name = `Beneficiary #${id}`
+const initData = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const [teamsRes, settingsRes] = await Promise.all([
+      CharityService.getTeams({ size: 200, isActive: true }),
+      CharityService.getSettings()
+    ])
+
+    if (teamsRes.success) teams.value = teamsRes.data
+    
+    if (!isEdit.value && !isView.value && settingsRes.success) {
+      // Set defaults for new beneficiary
+      form.monthlyAllocation = settingsRes.data.defaults.monthly_allocation
+      form.paymentMethod = settingsRes.data.defaults.payment_method
+    }
+
+    if (isEdit.value || isView.value) {
+      const benRes = await CharityService.getBeneficiaryById(route.params.id)
+      if (benRes.success) {
+        const b = benRes.data
+        form.fullname = b.fullname
+        form.teamId = b.teamId
+        form.monthlyAllocation = b.monthlyAllocation
+        form.paymentMethod = b.paymentMethod
+        if (b.fullInfo) {
+           if (b.fullInfo.location) form.fullInfo.location = { ...b.fullInfo.location }
+           if (b.fullInfo.contact) form.fullInfo.contact = { ...b.fullInfo.contact }
+        }
+      } else {
+        error.value = benRes.error
+      }
+    }
+  } catch (err) {
+    error.value = 'Failed to load initial data'
+  } finally {
+    loading.value = false
   }
 }
 
 // ── Validation ────────────────────────────────────────────────────────
 const validateForm = () => {
   const newErrors = {}
-  if (!form.name.trim()) newErrors.name = 'Name is required'
+  if (!form.fullname?.trim()) newErrors.fullname = 'Full name is required'
+  if (!form.teamId) newErrors.teamId = 'Team is mandatory'
   errors.value = newErrors
   return Object.keys(newErrors).length === 0
 }
@@ -272,20 +271,22 @@ const handleSubmit = async () => {
   if (!validateForm()) return
   isSubmitting.value = true
 
-  const payload = {
-    name: form.name.trim(),
-    teamId: form.teamId,
-    monthlyAllocation: Number(form.monthlyAllocation),
-    paymentMethod: form.paymentMethod,
-    fullInfo: { ...form.fullInfo },
+  try {
+    const res = isEdit.value 
+      ? await CharityService.updateBeneficiary(route.params.id, form)
+      : await CharityService.createBeneficiary(form)
+
+    if (res.success) {
+      addToast(`✅ Beneficiary "${form.fullname}" ${isEdit.value ? 'updated' : 'created'} successfully!`)
+      setTimeout(() => router.push('/charity/beneficiaries'), 1500)
+    } else {
+      addToast(res.error, 'error')
+    }
+  } catch (err) {
+    addToast('An unexpected error occurred', 'error')
+  } finally {
+    isSubmitting.value = false
   }
-
-  await new Promise(resolve => setTimeout(resolve, 800))
-  console.log('Saving beneficiary:', payload)
-
-  addToast(`✅ Beneficiary "${form.name}" ${isEdit.value ? 'updated' : 'created'} successfully!`)
-  setTimeout(() => router.push('/charity/beneficiaries'), 1500)
-  isSubmitting.value = false
 }
 
 const addToast = (msg, type = 'success') => {
@@ -295,9 +296,7 @@ const addToast = (msg, type = 'success') => {
 }
 
 onMounted(() => {
-  if (isEdit.value || isView.value) {
-    loadBeneficiary(route.params.id)
-  }
+  initData()
 })
 </script>
 
@@ -362,6 +361,10 @@ input:disabled, select:disabled { background: #f8fafc; color: #94a3b8; }
 .toast { padding: 14px 24px; border-radius: 12px; color: white; font-weight: 600; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
 .toast-success { background: #10b981; }
 .toast-error { background: #ef4444; }
+
+.loading-state { padding: 40px; text-align: center; color: #64748b; font-size: 16px; }
+.error-alert { background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c; padding: 16px; border-radius: 12px; text-align: center; }
+.error-alert button { margin-top: 8px; padding: 6px 16px; background: #b91c1c; color: white; border: none; border-radius: 6px; cursor: pointer; }
 
 @media (max-width: 768px) { .form-row { grid-template-columns: 1fr; } }
 </style>

@@ -1,11 +1,11 @@
 'use strict';
 const {
-  CharityTeam, CharityBeneficiary, CharityRequestApprove,
+  CharityTeam, CharityBeneficiary, CharityLog,
   Employee, User, sequelize,
 } = require('../../models');
 const { Op } = require('sequelize');
 
-// ─── helpers ──────────────────────────────────────────────────────────────────
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 const paginate = (page, size) => {
   const limit  = Math.min(parseInt(size)  || 10, 100);
@@ -14,28 +14,36 @@ const paginate = (page, size) => {
 };
 
 const teamIncludes = [
-  { model: Employee, as: 'head', attributes: ['employeeId', 'firstName', 'lastName', 'employeeCode'] },
-  { model: Employee, as: 'vice', attributes: ['employeeId', 'firstName', 'lastName', 'employeeCode'] },
+  { model: Employee, as: 'headMember', attributes: ['employeeId', 'firstName', 'lastName', 'employeeCode'] },
+  { model: Employee, as: 'viceMember', attributes: ['employeeId', 'firstName', 'lastName', 'employeeCode'] },
   { model: User,     as: 'creator', attributes: ['userId', 'username', 'fullName'] },
 ];
 
-// Resolve which team the caller belongs to (teamleader scope)
-const getCallerTeam = async (userId) => {
+const logAction = async (action, module, targetId, details, userId) => {
+  try {
+    await CharityLog.create({ action, module, targetId, details, userId });
+  } catch (err) {
+    console.error('Charity Log Error:', err);
+  }
+};
+
+const getTeamForLeader = async (userId) => {
   const emp = await Employee.findOne({ where: { userId }, attributes: ['employeeId'] });
   if (!emp) return null;
   return CharityTeam.findOne({
     where: {
       isActive: true,
       [Op.or]: [
-        { headEmployeeId: emp.employeeId },
-        { viceEmployeeId: emp.employeeId },
+        { head: emp.employeeId },
+        { vice: emp.employeeId },
         { members: { [Op.contains]: [emp.employeeId] } },
       ],
     },
   });
 };
 
-// ─── GET /  list ──────────────────────────────────────────────────────────────
+// ─── READ ────────────────────────────────────────────────────────────────────
+
 exports.getTeams = async (req, res) => {
   try {
     const { page, size, search, isActive } = req.query;
@@ -46,8 +54,10 @@ exports.getTeams = async (req, res) => {
     if (isActive !== undefined) where.isActive = isActive === 'true';
 
     if (req.user.role === 'charity_teamleader') {
-      const team = await getCallerTeam(req.user.userId);
+      const team = await getTeamForLeader(req.user.userId);
       where.teamId = team ? team.teamId : -1;
+    } else if (!['admin', 'charity_admin'].includes(req.user.role)) {
+      return res.status(403).json({ success: false, error: 'Unauthorized role' });
     }
 
     const { count, rows } = await CharityTeam.findAndCountAll({
@@ -65,166 +75,118 @@ exports.getTeams = async (req, res) => {
   }
 };
 
-// ─── GET /:id  single ─────────────────────────────────────────────────────────
 exports.getTeamById = async (req, res) => {
   try {
     const team = await CharityTeam.findByPk(req.params.id, {
       include: [
         ...teamIncludes,
         { model: CharityBeneficiary, as: 'beneficiaries',
-          attributes: ['beneficiaryId', 'name', 'type', 'isActive'],
+          attributes: ['beneficiaryId', 'fullname', 'isActive'],
           where: { isActive: true }, required: false },
       ],
     });
     if (!team) return res.status(404).json({ success: false, error: 'Team not found' });
+
+    // Auth check
+    if (req.user.role === 'charity_teamleader') {
+      const leaderTeam = await getTeamForLeader(req.user.userId);
+      if (!leaderTeam || leaderTeam.teamId !== team.teamId) {
+        return res.status(403).json({ success: false, error: 'Access denied' });
+      }
+    }
+
     res.json({ success: true, data: team });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
 };
 
-// ─── GET /:id/beneficiaries  team's beneficiary list (paginated) ──────────────
-exports.getTeamBeneficiaries = async (req, res) => {
-  try {
-    const { page, size, search, isActive, type } = req.query;
-    const { limit, offset } = paginate(page, size);
-    const where = { teamId: parseInt(req.params.id) };
+// ─── CREATE ──────────────────────────────────────────────────────────────────
 
-    if (search)              where.name     = { [Op.iLike]: `%${search}%` };
-    if (isActive !== undefined) where.isActive = isActive === 'true';
-    if (type)                where.type     = type;
-
-    const { count, rows } = await CharityBeneficiary.findAndCountAll({
-      where,
-      include: [{ model: User, as: 'creator', attributes: ['userId', 'fullName'] }],
-      limit, offset, order: [['name', 'ASC']], distinct: true,
-    });
-
-    res.json({
-      success: true, data: rows,
-      pagination: { totalItems: count, totalPages: Math.ceil(count / limit), currentPage: parseInt(page) || 1, pageSize: limit },
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-};
-
-// ─── POST /  create ───────────────────────────────────────────────────────────
 exports.createTeam = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { name, description, headEmployeeId, viceEmployeeId, members } = req.body;
+    // Only admin/charity_admin
+    if (!['admin', 'charity_admin'].includes(req.user.role)) {
+      return res.status(403).json({ success: false, error: 'Only admins can create teams' });
+    }
+
+    const { name, description, head, vice, members } = req.body;
     if (!name?.trim()) {
       await t.rollback();
       return res.status(400).json({ success: false, error: 'name is required' });
     }
 
     const team = await CharityTeam.create(
-      { name, description, headEmployeeId, viceEmployeeId, members: members || [],
+      { name, description, head, vice, members: members || [],
         isActive: true, createdBy: req.user.userId },
       { transaction: t }
     );
 
-    // Team creation always needs admin approval if raised by a teamleader
-    if (req.user.role === 'charity_teamleader') {
-      await CharityRequestApprove.create({
-        action: 'NewCharityTeam', requestedBy: req.user.userId, status: 'pending',
-        metadata: { charity_team_id: team.teamId }, comments: [],
-      }, { transaction: t });
-    }
+    await logAction('CREATE', 'team', team.teamId, { name }, req.user.userId);
 
     await t.commit();
-    res.status(201).json({ success: true, message: 'Team created', data: team });
+    res.status(201).json({ success: true, data: team });
   } catch (err) {
-    await t.rollback();
+    if (t) await t.rollback();
     res.status(500).json({ success: false, error: err.message });
   }
 };
 
-// ─── PUT /:id  update ─────────────────────────────────────────────────────────
+// ─── EDIT ────────────────────────────────────────────────────────────────────
+
 exports.updateTeam = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const team = await CharityTeam.findByPk(req.params.id, { transaction: t });
     if (!team) { await t.rollback(); return res.status(404).json({ success: false, error: 'Team not found' }); }
 
-    const fields = ['name', 'description', 'headEmployeeId', 'viceEmployeeId', 'members'];
-    const updates = {};
+    // Auth check
+    if (req.user.role === 'charity_teamleader') {
+      const leaderTeam = await getTeamForLeader(req.user.userId);
+      if (!leaderTeam || leaderTeam.teamId !== team.teamId) {
+        await t.rollback();
+        return res.status(403).json({ success: false, error: 'Access denied' });
+      }
+    }
+
+    const fields = ['name', 'description', 'head', 'vice', 'members', 'isActive'];
+    const updates = { updatedBy: req.user.userId };
     fields.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
 
     await team.update(updates, { transaction: t });
+    await logAction('UPDATE', 'team', team.teamId, updates, req.user.userId);
+
     await t.commit();
-    res.json({ success: true, message: 'Team updated', data: team });
+    res.json({ success: true, data: team });
   } catch (err) {
-    await t.rollback();
+    if (t) await t.rollback();
     res.status(500).json({ success: false, error: err.message });
   }
 };
 
-// ─── DELETE /:id  soft-deactivate team + all its beneficiaries ────────────────
-exports.deactivateTeam = async (req, res) => {
+// ─── DELETE ──────────────────────────────────────────────────────────────────
+
+exports.deleteTeam = async (req, res) => {
   const t = await sequelize.transaction();
   try {
+    // Only admin/charity_admin
+    if (!['admin', 'charity_admin'].includes(req.user.role)) {
+      return res.status(403).json({ success: false, error: 'Only admins can delete teams' });
+    }
+
     const team = await CharityTeam.findByPk(req.params.id, { transaction: t });
     if (!team) { await t.rollback(); return res.status(404).json({ success: false, error: 'Team not found' }); }
 
-    await team.update({ isActive: false }, { transaction: t });
+    await team.update({ deletedBy: req.user.userId }, { transaction: t });
+    await team.destroy({ transaction: t }); // Soft delete
 
-    // Cascade: deactivate all beneficiaries that belong to this team
-    const affected = await CharityBeneficiary.update(
-      { isActive: false },
-      { where: { teamId: team.teamId, isActive: true }, transaction: t }
-    );
+    await logAction('DELETE', 'team', team.teamId, { name: team.name }, req.user.userId);
 
     await t.commit();
-    res.json({ success: true, message: `Team deactivated. ${affected[0]} beneficiary(ies) also deactivated.` });
+    res.json({ success: true, message: 'Team deleted successfully' });
   } catch (err) {
-    await t.rollback();
-    res.status(500).json({ success: false, error: err.message });
-  }
-};
-
-// ─── POST /:id/transfer-beneficiary  move a beneficiary to another team ───────
-exports.transferBeneficiary = async (req, res) => {
-  const t = await sequelize.transaction();
-  try {
-    const { beneficiaryId, targetTeamId, reason } = req.body;
-    if (!beneficiaryId || !targetTeamId) {
-      await t.rollback();
-      return res.status(400).json({ success: false, error: 'beneficiaryId and targetTeamId are required' });
-    }
-
-    const ben  = await CharityBeneficiary.findByPk(beneficiaryId, { transaction: t });
-    const team = await CharityTeam.findByPk(targetTeamId, { transaction: t });
-    if (!ben)  { await t.rollback(); return res.status(404).json({ success: false, error: 'Beneficiary not found' }); }
-    if (!team) { await t.rollback(); return res.status(404).json({ success: false, error: 'Target team not found' }); }
-
-    const request = await CharityRequestApprove.create({
-      action: 'TransferBeneficiary', requestedBy: req.user.userId, status: 'pending',
-      metadata: {
-        beneficiary_id:  ben.beneficiaryId,
-        from_team_id:    ben.teamId,
-        charity_team_id: targetTeamId,
-        reason:          reason || '',
-      },
-      comments: [],
-    }, { transaction: t });
-
-    await t.commit();
-    res.status(201).json({ success: true, message: 'Transfer request submitted, awaiting admin approval', data: request });
-  } catch (err) {
-    await t.rollback();
-    res.status(500).json({ success: false, error: err.message });
-  }
-};
-
-// ─── GET /stats/summary ───────────────────────────────────────────────────────
-exports.getTeamStats = async (req, res) => {
-  try {
-    const total    = await CharityTeam.count();
-    const active   = await CharityTeam.count({ where: { isActive: true } });
-    res.json({ success: true, data: { total, active, inactive: total - active } });
-  } catch (err) {
+    if (t) await t.rollback();
     res.status(500).json({ success: false, error: err.message });
   }
 };

@@ -32,7 +32,7 @@
         >
           <template #cell-location="{ row }">
             <span class="text-sm">
-              {{ row.fullInfo?.location?.city || '—' }}, {{ row.fullInfo?.location?.region || '' }}
+              {{ row.fullInfo?.location?.city || '—' }}{{ row.fullInfo?.location?.region ? `, ${row.fullInfo.location.region}` : '' }}
             </span>
           </template>
         </ListTable>
@@ -75,16 +75,16 @@ const selectedIds = ref<number[]>([])
 const filters = ref({ search: '', location: '' })
 
 const modalColumns = [
-  { key: 'name', label: 'Beneficiary', sortable: true },
-  { key: 'type', label: 'Type', format: 'badge' },
-  { key: 'location', label: 'Location' }
+  { key: 'fullname', label: 'Beneficiary', sortable: true },
+  { key: 'location', label: 'Location' },
+  { key: 'monthlyAllocation', label: 'Allocation', format: 'currency' }
 ]
 
 const loadAvailable = async () => {
   loading.value = true
-  const res = await CharityService.getBeneficiaries()
+  // Fetch beneficiaries not assigned to this team
+  const res = await CharityService.getBeneficiaries({ size: 1000 })
   if (res.success) {
-    // Only show beneficiaries NOT in this team
     availableBeneficiaries.value = res.data.filter((b: CharityBeneficiary) => b.teamId !== props.teamId)
   }
   loading.value = false
@@ -94,7 +94,7 @@ const filteredAvailable = computed(() => {
   let result = availableBeneficiaries.value
   if (filters.value.search) {
     const q = filters.value.search.toLowerCase()
-    result = result.filter(b => b.name.toLowerCase().includes(q))
+    result = result.filter(b => b.fullname.toLowerCase().includes(q))
   }
   if (filters.value.location) {
     const q = filters.value.location.toLowerCase()

@@ -120,23 +120,32 @@ const roleMenus = {
     { name: 'Leave Requests', path: '/leaves', icon: 'CalendarIcon' },
     { name: 'Salary',    path: '/salary',    icon: 'CurrencyDollarIcon' },
     { name: 'Reports',   path: '/reports',   icon: 'ChartBarIcon' },
-    { name: 'Adjustment Requests',path: '/charity/donations/adjustments',      icon: 'AdjustmentsHorizontalIcon' },
+    {
+      name: 'Charity',
+      path: '/charity',
+      icon: 'HeartIcon',
+      dropdownMenu: [
+        { name: 'Beneficiaries', path: '/charity/beneficiaries', icon: 'UsersIcon' },
+        { name: 'Teams',         path: '/charity/teams',         icon: 'RectangleStackIcon' },
+        { name: 'Settings',      path: '/charity/settings',      icon: 'CogIcon' },
+      ]
+    },
     { name: 'Settings', path: '/settings', icon: 'CogIcon' },
   ],
 
   // ── charity_admin ──────────────────────────────────────────────────────────
   charity_admin: [
     { name: 'Dashboard', path: '/dashboard', icon: 'HomeIcon' },
-    { name: 'Beneficiaries',      path: '/charity/beneficiaries',             icon: 'UsersIcon' },
-    { name: 'Teams', path: '/charity/teams',                  icon: 'RectangleStackIcon' },
-    { name: 'charity Settings', path: '/charity/settings', icon: 'CogIcon' },
-
+    { name: 'Beneficiaries', path: '/charity/beneficiaries', icon: 'UsersIcon' },
+    { name: 'Teams',         path: '/charity/teams',         icon: 'RectangleStackIcon' },
+    { name: 'Settings',      path: '/charity/settings',      icon: 'CogIcon' },
   ],
 
   // ── charity_teamleader ─────────────────────────────────────────────────────
   charity_teamleader: [
-    { name: 'Dashboard',        path: '/dashboard',            icon: 'HomeIcon' },
-    { name: 'My Beneficiaries', path: '/charity/my-beneficiaries', icon: 'UsersIcon' },
+    { name: 'Dashboard', path: '/dashboard', icon: 'HomeIcon' },
+    { name: 'My Beneficiaries', path: '/charity/beneficiaries', icon: 'UsersIcon' },
+    { name: 'My Team',          path: '/charity/teams',         icon: 'RectangleStackIcon' }, // Scoped to self in controller
   ],
 
   hr: [

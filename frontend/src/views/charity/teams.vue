@@ -12,6 +12,11 @@
       </router-link>
     </div>
 
+    <div v-if="error" class="error-alert">
+      {{ error }}
+      <button @click="fetchTeams">Retry</button>
+    </div>
+
     <StatsCards :cards="statsCards" />
 
     <FilterBar
@@ -20,26 +25,29 @@
       @clear="clearFilters"
     >
       <template #actions>
-        <button class="btn-outline" @click="refreshData">Refresh</button>
+        <button class="btn-outline" :disabled="loading" @click="fetchTeams">
+          {{ loading ? 'Refreshing...' : 'Refresh' }}
+        </button>
       </template>
     </FilterBar>
 
     <ListTable
       :columns="teamColumns"
-      :rows="filteredTeams"
+      :rows="teams"
       row-key="teamId"
       :pagination="pagination"
+      :loading="loading"
       @page-change="onPageChange"
       @sort-change="onSort"
     >
       <template #cell-members="{ value }">
-        <span class="members-badge">{{ value.length }} members</span>
+        <span class="members-badge">{{ value?.length || 0 }} members</span>
       </template>
-      <template #cell-head="{ row }">
-        {{ row.head ? `${row.head.firstName} ${row.head.lastName}` : 'Not assigned' }}
+      <template #cell-headMember="{ row }">
+        {{ row.headMember ? `${row.headMember.firstName} ${row.headMember.lastName}` : 'Not assigned' }}
       </template>
-      <template #cell-vice="{ row }">
-        {{ row.vice ? `${row.vice.firstName} ${row.vice.lastName}` : 'Not assigned' }}
+      <template #cell-viceMember="{ row }">
+        {{ row.viceMember ? `${row.viceMember.firstName} ${row.viceMember.lastName}` : 'Not assigned' }}
       </template>
       <template #cell-isActive="{ row }">
         <span
@@ -62,43 +70,104 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import CharityService from '@/stores/charity'
 import StatsCards from './components/common/StatsCards.vue'
 import FilterBar   from './components/common/FilterBar.vue'
 import ListTable   from './components/common/ListTable.vue'
 
-const teamsData = [
-  { teamId: 1, name: 'Team Alpha', head: { employeeId: 1, firstName: 'Abebe', lastName: 'Kebede' }, vice: { employeeId: 2, firstName: 'Birtukan', lastName: 'Alemu' }, members: [1,2,3], isActive: true },
-  { teamId: 2, name: 'Team Beta', head: null, vice: null, members: [], isActive: true },
-  { teamId: 3, name: 'Team Gamma', head: { employeeId: 5, firstName: 'Yohannes', lastName: 'Tesfaye' }, vice: null, members: [5], isActive: false },
-]
-const teams = ref(teamsData)
+const teams = ref([])
+const loading = ref(false)
+const error = ref(null)
 const filters = ref({ search: '' })
-const filteredTeams = computed(() => {
-  if (!filters.value.search) return teams.value
-  const q = filters.value.search.toLowerCase()
-  return teams.value.filter(t => t.name.toLowerCase().includes(q))
+
+const pagination = ref({ 
+  currentPage: 1, 
+  totalPages: 1, 
+  totalItems: 0, 
+  pageSize: 10 
 })
-const clearFilters = () => { filters.value = { search: '' } }
-const pagination = ref({ currentPage: 1, totalPages: 1, totalItems: 3, pageSize: 10 })
-const onPageChange = (page) => { pagination.value.currentPage = page }
-const onSort = ({ key, dir }) => { console.log('Sort:', key, dir) }
+
+const fetchTeams = async () => {
+  loading.value = true
+  error.value = null
+  try {
+    const res = await CharityService.getTeams({
+      page: pagination.value.currentPage,
+      size: pagination.value.pageSize,
+      search: filters.value.search
+    })
+    if (res.success) {
+      teams.value = res.data
+      pagination.value.totalItems = res.pagination.totalItems
+      pagination.value.totalPages = res.pagination.totalPages
+    } else {
+      error.value = res.error
+    }
+  } catch (err) {
+    error.value = 'Failed to fetch teams'
+  } finally {
+    loading.value = false
+  }
+}
+
+const clearFilters = () => { 
+  filters.value.search = ''
+  pagination.value.currentPage = 1
+  fetchTeams()
+}
+
+const onPageChange = (page) => { 
+  pagination.value.currentPage = page 
+  fetchTeams()
+}
+
+const onSort = ({ key, dir }) => { 
+  console.log('Sort:', key, dir) 
+  // Sorting is handled by backend in full implementation
+}
+
 const statsCards = computed(() => [
-  { key: 'total', label: 'Total Teams', value: teams.value.length },
+  { key: 'total', label: 'Total Teams', value: pagination.value.totalItems },
   { key: 'active', label: 'Active Teams', value: teams.value.filter(t => t.isActive).length, color: '#10b981' },
-  { key: 'members', label: 'Total Members', value: teams.value.reduce((s, t) => s + t.members.length, 0), color: '#3b82f6' },
+  { key: 'members', label: 'Total Members', value: teams.value.reduce((s, t) => s + (t.members?.length || 0), 0), color: '#3b82f6' },
 ])
+
 const teamColumns = [
   { key: 'teamId', label: 'ID', width: '60px' },
   { key: 'name', label: 'Name' },
-  { key: 'head', label: 'Team Head' },
-  { key: 'vice', label: 'Vice Head' },
+  { key: 'headMember', label: 'Team Head' },
+  { key: 'viceMember', label: 'Vice Head' },
   { key: 'members', label: 'Members' },
   { key: 'isActive', label: 'Active' },
 ]
-const toggleActive = (team) => { team.isActive = !team.isActive; alert(`Team "${team.name}" is now ${team.isActive ? 'active' : 'inactive'} (UI only)`) }
-const refreshData = () => alert('Refresh — real data not connected')
-onMounted(() => {})
+
+const toggleActive = async (team) => {
+  try {
+    const res = await CharityService.updateTeam(team.teamId, { isActive: !team.isActive })
+    if (res.success) {
+      team.isActive = res.data.isActive
+    } else {
+      alert(`Error: ${res.error}`)
+    }
+  } catch (err) {
+    alert('Failed to toggle status')
+  }
+}
+
+// Debounce search
+let searchTimeout
+watch(() => filters.value.search, () => {
+  clearTimeout(searchTimeout)
+  searchTimeout = setTimeout(() => {
+    pagination.value.currentPage = 1
+    fetchTeams()
+  }, 500)
+})
+
+onMounted(() => {
+  fetchTeams()
+})
 </script>
 
 <style scoped>
@@ -115,4 +184,6 @@ onMounted(() => {})
 .btn-outline { padding: 8px 14px; background: white; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 13px; cursor: pointer; color: #475569; }
 .lt-badge--active { background: #e6f7ee; color: #0d6b36; border: 1px solid #b7e4cf; }
 .lt-badge--inactive { background: #fef1f1; color: #b91c1c; border: 1px solid #fecaca; }
+.error-alert { background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c; padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+.error-alert button { background: #b91c1c; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
 </style>

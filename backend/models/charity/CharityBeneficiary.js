@@ -16,10 +16,16 @@ module.exports = (sequelize, DataTypes) => {
         as: 'creator',
       });
 
-      // Donation items targeting this beneficiary
-      CharityBeneficiary.hasMany(models.CharityDonationItem, {
-        foreignKey: 'beneficiaryId',
-        as: 'donationItems',
+      // Who last updated this beneficiary
+      CharityBeneficiary.belongsTo(models.User, {
+        foreignKey: 'updatedBy',
+        as: 'updater',
+      });
+
+      // Who deleted this beneficiary
+      CharityBeneficiary.belongsTo(models.User, {
+        foreignKey: 'deletedBy',
+        as: 'deleter',
       });
     }
   }
@@ -32,15 +38,10 @@ module.exports = (sequelize, DataTypes) => {
         primaryKey: true,
         field: 'beneficiary_id',
       },
-      // Top-level name — index-friendly for list views / search
-      name: {
+      fullname: {
         type: DataTypes.STRING(200),
         allowNull: false,
         validate: { notEmpty: true },
-      },
-      type: {
-        type: DataTypes.ENUM('individual', 'organization'),
-        allowNull: false,
       },
       // Future-proof info bag:
       // { location: { region, city, woreda }, contact: { phone, email }, … }
@@ -51,7 +52,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       teamId: {
         type: DataTypes.INTEGER,
-        allowNull: true,
+        allowNull: false,
         field: 'team_id',
         references: { model: 'charity_teams', key: 'team_id' },
       },
@@ -60,10 +61,44 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: true,
         field: 'is_active',
       },
+      monthlyAllocation: {
+        type: DataTypes.DECIMAL(15, 2),
+        defaultValue: 0,
+        allowNull: false,
+        field: 'monthly_allocation',
+      },
+      paymentMethod: {
+        type: DataTypes.ENUM('cash', 'bank'),
+        defaultValue: 'bank',
+        allowNull: false,
+        field: 'payment_method',
+      },
+      // Array of objects for deliveries
+      deliveries: {
+        type: DataTypes.JSONB,
+        defaultValue: [],
+      },
+      // Array of objects for adjustments
+      adjustments: {
+        type: DataTypes.JSONB,
+        defaultValue: [],
+      },
       createdBy: {
         type: DataTypes.INTEGER,
         allowNull: true,
         field: 'created_by',
+        references: { model: 'users', key: 'user_id' },
+      },
+      updatedBy: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'updated_by',
+        references: { model: 'users', key: 'user_id' },
+      },
+      deletedBy: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'deleted_by',
         references: { model: 'users', key: 'user_id' },
       },
     },

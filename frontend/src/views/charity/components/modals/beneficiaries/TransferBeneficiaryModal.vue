@@ -9,9 +9,9 @@
       <div class="modal-body">
         <!-- Beneficiary Preview -->
         <div class="ben-card">
-          <div class="ben-avatar">{{ beneficiary.name[0] }}</div>
+          <div class="ben-avatar">{{ beneficiary.fullname[0] }}</div>
           <div class="ben-details">
-            <strong>{{ beneficiary.name }}</strong>
+            <strong>{{ beneficiary.fullname }}</strong>
             <p>Currently in: {{ currentTeamName }}</p>
           </div>
         </div>
@@ -55,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import CharityService, { type CharityBeneficiary, type CharityTeam } from '@/stores/charity'
 
 const props = defineProps<{
@@ -79,7 +79,7 @@ const otherTeams = computed(() => {
 
 const loadTeams = async () => {
   loadingTeams.value = true
-  const res = await CharityService.getTeams()
+  const res = await CharityService.getTeams({ size: 200, isActive: true })
   if (res.success) teams.value = res.data
   loadingTeams.value = false
 }
@@ -88,14 +88,11 @@ const handleTransfer = async () => {
   if (!props.beneficiary || !targetTeamId.value) return
   
   saving.value = true
-  // Update beneficiary's teamId
-  const res = await CharityService.updateBeneficiary(props.beneficiary.beneficiaryId, {
-    teamId: Number(targetTeamId.value)
-  })
+  const res = await CharityService.transferBeneficiary(props.beneficiary.beneficiaryId, Number(targetTeamId.value))
 
   if (res.success) {
     emit('success', {
-      beneficiaryName: props.beneficiary.name,
+      beneficiary: res.data,
       targetTeamName: teams.value.find(t => t.teamId === targetTeamId.value)?.name
     })
     emit('close')
@@ -125,7 +122,7 @@ watch(() => props.isOpen, (newVal) => {
 
 .ben-card { display: flex; align-items: center; gap: 16px; padding: 16px; background: #f8fafc; border-radius: 16px; border: 1px solid #f1f5f9; margin-bottom: 24px; }
 .ben-avatar { width: 44px; height: 44px; background: #6a11cb; color: white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; }
-.ben-details strong { display: block; font-size: 15px; color: #1e293b; }
+.ben-details strong { block-size: auto; display: block; font-size: 15px; color: #1e293b; }
 .ben-details p { font-size: 12px; color: #64748b; margin: 2px 0 0; }
 
 .form-group { display: flex; flex-direction: column; gap: 6px; }
