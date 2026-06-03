@@ -10,7 +10,7 @@
         <p v-if="beneficiary">{{ beneficiary.fullname }} – Manage deliveries and adjustments</p>
       </div>
       <div class="header-actions">
-        <button v-if="beneficiary" class="btn-outline transfer-btn" @click="showTransferModal = true">
+        <button v-if="beneficiary" class="btn-outline transfer-btn" @click="showTransferModal = true" :disabled="!beneficiary.isActive" :title="!beneficiary.isActive ? 'Inactive beneficiary cannot be transferred' : ''">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon-small"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
           Transfer Team
         </button>
@@ -57,11 +57,19 @@
         </button>
       </div>
 
+      <!-- Inactive Hint -->
+      <div v-if="!beneficiary.isActive" class="inactive-warning">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="warning-icon"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span>This beneficiary is inactive. Delivery and adjustment operations are disabled until reactivated.</span>
+      </div>
+
       <div class="tab-content">
         <!-- Deliveries Tab -->
         <div v-if="activeTab === 'deliveries'" class="tab-pane">
           <div class="actions-bar">
-            <button class="btn-primary small" @click="openDeliveryModal()">+ New Delivery</button>
+            <button class="btn-primary small" @click="openDeliveryModal()" :disabled="!beneficiary.isActive">
+              + New Delivery
+            </button>
           </div>
 
           <!-- Add/Edit Delivery Modal -->
@@ -132,7 +140,7 @@
             <template #cell-updated_by="{ value }">User #{{ value }}</template>
             <!-- Actions – Edit -->
             <template #actions="{ row }">
-              <button class="action-btn edit" title="Edit Delivery" @click="openDeliveryModal(row)">
+              <button class="action-btn edit" title="Edit Delivery" @click="openDeliveryModal(row)" :disabled="!beneficiary.isActive">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               </button>
             </template>
@@ -142,7 +150,7 @@
         <!-- Adjustments Tab -->
         <div v-if="activeTab === 'adjustments'" class="tab-pane">
           <div class="actions-bar">
-            <button class="btn-primary small" @click="showAddAdjustment = true">+ New Adjustment</button>
+            <button class="btn-primary small" @click="showAddAdjustment = true" :disabled="!beneficiary.isActive">+ New Adjustment</button>
           </div>
 
           <!-- Add Adjustment Modal -->
@@ -208,7 +216,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted,watch } from 'vue'
 import { useRoute } from 'vue-router'
 import CharityService from '@/stores/charity'
 import ListTable from './components/common/ListTable.vue'
@@ -239,6 +247,14 @@ const newDelivery = reactive({
   is_delivered: true,
   recipt: '',
   is_returned: { reason: '' }
+})
+
+// Enforce mutual exclusivity for delivered vs returned
+watch(() => newDelivery.is_delivered, (val) => {
+  if (val) newDelivery.is_returned.reason = ''
+})
+watch(() => newDelivery.is_returned.reason, (val) => {
+  if (val && val.trim()) newDelivery.is_delivered = false
 })
 
 const newAdjustment = reactive({
@@ -421,4 +437,8 @@ input:disabled, select:disabled { background: #f8fafc; color: #94a3b8; cursor: n
 .loading-state { padding: 40px; text-align: center; color: #64748b; font-size: 16px; }
 .error-alert { background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c; padding: 16px; border-radius: 12px; margin: 24px; text-align: center; }
 .error-alert button { margin-top: 8px; padding: 6px 16px; background: #b91c1c; color: white; border: none; border-radius: 6px; cursor: pointer; }
+
+.inactive-warning { display: flex; align-items: center; gap: 12px; background: #fffbeb; border: 1px solid #fef3c7; color: #92400e; padding: 12px 20px; border-radius: 12px; margin-bottom: 24px; font-size: 14px; font-weight: 500; }
+.warning-icon { width: 20px; height: 20px; color: #f59e0b; flex-shrink: 0; }
+button:disabled { opacity: 0.5; cursor: not-allowed !important; }
 </style>

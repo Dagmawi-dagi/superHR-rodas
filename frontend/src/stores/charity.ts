@@ -83,6 +83,8 @@ export interface CharitySetting {
     distribution_release_id: number
     date: string
     payment_for_indays: number
+    usageCount?: number
+    is_completed?: boolean
   }>
   defaults: {
     monthly_allocation: number
@@ -187,6 +189,21 @@ class CharityService {
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
 
+  async bulkAddDelivery(data: { beneficiaryIds: number[]; distribution_release_id: number; is_delivered: boolean; recipt?: string }) {
+    try { const r = await api.post('/charity/beneficiaries/bulk/delivery', data); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+
+  async bulkAddAdjustment(data: { beneficiaryIds: number[]; type: 'Deduct' | 'increase'; amount: number; reason: string }) {
+    try { const r = await api.post('/charity/beneficiaries/bulk/adjustment', data); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+
+  async bulkUpdateBeneficiaries(data: { beneficiaryIds: number[]; updates: any }) {
+    try { const r = await api.put('/charity/beneficiaries/bulk/update', data); return r.data }
+    catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+
   // ── Settings ──────────────────────────────────────────────────────────────
   async getSettings() {
     try { const r = await api.get('/charity/settings'); return r.data }
@@ -208,7 +225,7 @@ class CharityService {
     try {
       const res = await EmployeesService.getEmployees({ limit: 500, employmentStatus: 'active' })
       if (res.success) {
-        return { success: true, data: res.data.map((e: any) => ({ id: e.employeeId, fullName: `${e.firstName} ${e.lastName}` })) }
+        return { success: true, data: res.data.map((e: any) => ({ id: e.id, fullName: e.fullName })) }
       }
       return { success: false, data: [], error: 'Failed to fetch employees' }
     } catch (e: any) { return { success: false, data: [], error: e.message } }

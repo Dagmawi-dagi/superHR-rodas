@@ -38,6 +38,7 @@ exports.getStats = async (req, res) => {
           beneficiaries: { total: 0, active: 0, inactive: 0 },
           teams: { total: 0, active: 0 },
           allocation: { totalMonthly: 0 },
+          distribution: { completed: 0, total: 0, release: null },
           recentActivity: []
         }});
       }

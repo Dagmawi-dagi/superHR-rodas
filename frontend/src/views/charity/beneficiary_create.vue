@@ -144,6 +144,17 @@
       </div>
     </form>
 
+    <!-- Confirmation Modal -->
+    <ConfirmationModal
+      :show="confirm.show"
+      :title="confirm.title"
+      :message="confirm.message"
+      :type="confirm.type"
+      :loading="isSubmitting"
+      @close="confirm.show = false"
+      @confirm="processSubmit"
+    />
+
     <!-- Toasts -->
     <div class="toast-container">
       <div v-for="t in toasts" :key="t.id" :class="['toast', `toast-${t.type}`]">{{ t.message }}</div>
@@ -155,6 +166,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import CharityService from '@/stores/charity'
+import ConfirmationModal from './components/modals/ConfirmationModal.vue'
 
 const router = useRouter()
 const route  = useRoute()
@@ -164,6 +176,14 @@ const isView = computed(() => !!route.params.id && !route.path.includes('edit'))
 
 const loading = ref(true)
 const error = ref(null)
+
+// ── Confirmation state ────────────────────────────────────────────────
+const confirm = reactive({
+  show: false,
+  title: '',
+  message: '',
+  type: 'primary'
+})
 
 // Collapsible state
 const collapsed = reactive({
@@ -267,8 +287,16 @@ const validateForm = () => {
 }
 
 // ── Submit ────────────────────────────────────────────────────────────
-const handleSubmit = async () => {
+const handleSubmit = () => {
   if (!validateForm()) return
+  
+  confirm.show = true
+  confirm.title = isEdit.value ? 'Update Beneficiary' : 'Create Beneficiary'
+  confirm.message = `Are you sure you want to ${isEdit.value ? 'update' : 'register'} the beneficiary "${form.fullname}"?`
+  confirm.type = isEdit.value ? 'warning' : 'primary'
+}
+
+const processSubmit = async () => {
   isSubmitting.value = true
 
   try {
@@ -278,6 +306,7 @@ const handleSubmit = async () => {
 
     if (res.success) {
       addToast(`✅ Beneficiary "${form.fullname}" ${isEdit.value ? 'updated' : 'created'} successfully!`)
+      confirm.show = false
       setTimeout(() => router.push('/charity/beneficiaries'), 1500)
     } else {
       addToast(res.error, 'error')
@@ -309,12 +338,12 @@ onMounted(() => {
 .header-title p { font-size: 14px; color: #64748b; margin: 0; }
 
 .ben-form { display: flex; flex-direction: column; gap: 20px; }
-.form-card { background: white; border-radius: 16px; border: 1px solid #e9edf2; overflow: hidden; }
-.card-header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #fafcfc; border-bottom: 1px solid #e9edf2; }
+.form-card { background: white; border-radius: 16px; border: 1px solid #e9edf2; position: relative; }
+.card-header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; background: #fafcfc; border-bottom: 1px solid #e9edf2; border-top-left-radius: 16px; border-top-right-radius: 16px; }
 .card-header svg { width: 18px; height: 18px; color: #6366f1; }
 .card-header h3 { font-size: 15px; font-weight: 600; color: #1e293b; margin: 0; }
 .optional-badge { margin-left: auto; font-size: 11px; padding: 2px 8px; background: #e2e8f0; color: #64748b; border-radius: 20px; }
-.card-body { padding: 20px; }
+.card-body { padding: 20px; overflow: visible; }
 
 /* Collapsible header */
 .card-header.collapsible-header {

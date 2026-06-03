@@ -155,6 +155,16 @@ exports.updateTeam = async (req, res) => {
     fields.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
 
     await team.update(updates, { transaction: t });
+
+    // ─── Cascade Status Sync ────────────────────────────────────────────────
+    // If the team's isActive status was explicitly changed
+    if (updates.isActive !== undefined) {
+      await CharityBeneficiary.update(
+        { isActive: updates.isActive, updatedBy: req.user.userId },
+        { where: { teamId: team.teamId }, transaction: t }
+      );
+    }
+
     await logAction('UPDATE', 'team', team.teamId, updates, req.user.userId);
 
     await t.commit();

@@ -32,9 +32,6 @@
               </svg>
               <h3>Distribution Schedule</h3>
             </div>
-            <button v-if="canEdit" class="btn-save" @click="saveSettings" :disabled="saving">
-              {{ saving ? 'Saving...' : 'Save Schedule' }}
-            </button>
           </div>
           <div class="card-body">
             <div class="release-form" v-if="canEdit">
@@ -49,7 +46,7 @@
                   <input type="number" v-model.number="newRelease.payment_for_indays" min="1" />
                 </div>
                 <div class="form-group action">
-                  <button class="btn-primary small" @click="addRelease">Add to Schedule</button>
+                  <button class="btn-primary small" @click="confirmAddRelease">Add to Schedule</button>
                 </div>
               </div>
             </div>
@@ -58,14 +55,27 @@
               <h4>Planned & Past Releases</h4>
               <table class="history-table" v-if="settings.distributionRelease?.length > 0">
                 <thead>
-                  <tr><th>Date</th><th>Coverage</th><th v-if="canEdit">Actions</th></tr>
+                  <tr>
+                    <th>Date</th>
+                    <th>Coverage</th>
+                    <th>Status</th>
+                    <th v-if="canEdit">Actions</th>
+                  </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="(rel, idx) in sortedReleases" :key="rel.distribution_release_id">
+                  <tr v-for="rel in sortedReleases" :key="rel.distribution_release_id">
                     <td>{{ CharityService.formatDate(rel.date) }}</td>
                     <td>{{ rel.payment_for_indays }} days</td>
+                    <td @click="canEdit && confirmToggleCompletion(rel)" :class="{ 'clickable': canEdit }">
+                      <span :class="['status-pill', rel.is_completed ? 'completed' : 'pending']">
+                        {{ rel.is_completed ? 'Completed' : 'Active' }}
+                      </span>
+                    </td>
                     <td v-if="canEdit">
-                      <button class="btn-text-danger" @click="removeRelease(idx)">Remove</button>
+                      <div v-if="rel.usageCount > 0" class="usage-locked">
+                        You have {{ rel.usageCount }} beneficiary delivery notes on this release date so you can't remove it.
+                      </div>
+                      <button v-else class="btn-text-danger" @click="confirmRemoveRelease(rel.distribution_release_id)">Remove</button>
                     </td>
                   </tr>
                 </tbody>
@@ -84,9 +94,6 @@
               </svg>
               <h3>Global Defaults</h3>
             </div>
-            <button v-if="canEdit" class="btn-save" @click="saveSettings" :disabled="saving">
-              {{ saving ? 'Saving...' : 'Save Defaults' }}
-            </button>
           </div>
           <div class="card-body">
             <div class="form-row">
@@ -101,6 +108,9 @@
                   <option value="cash">Cash</option>
                 </select>
               </div>
+              <div class="form-group action" v-if="canEdit">
+                <button class="btn-primary small" @click="confirmUpdateDefaults">Update Defaults</button>
+              </div>
             </div>
             <div class="audit-info" v-if="settings.lastUpdatedBy">
               Last updated by {{ settings.lastUpdatedBy.fullName }} on {{ CharityService.formatDate(settings.updatedAt) }}
@@ -110,6 +120,17 @@
       </div>
     </template>
 
+    <!-- Confirmation Modal -->
+    <ConfirmationModal
+      :show="confirm.show"
+      :title="confirm.title"
+      :message="confirm.message"
+      :type="confirm.type"
+      :loading="confirm.loading"
+      @close="confirm.show = false"
+      @confirm="handleConfirm"
+    />
+
     <!-- Toasts -->
     <div class="toast-container">
       <div v-for="t in toasts" :key="t.id" :class="['toast', `toast-${t.type}`]">{{ t.message }}</div>
@@ -118,9 +139,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted,watch } from 'vue'
 import CharityService from '@/stores/charity'
 import { useAuthStore } from '@/stores/auth'
+import ConfirmationModal from './components/modals/ConfirmationModal.vue'
 
 const authStore = useAuthStore()
 const canEdit = computed(() => ['admin', 'charity_admin'].includes(authStore.user?.role))
@@ -132,7 +154,6 @@ const tabs = [
 
 const activeTab = ref('dates')
 const loading = ref(true)
-const saving = ref(false)
 const error = ref(null)
 const toasts = ref([])
 
@@ -144,6 +165,39 @@ const settings = ref({
 const newRelease = reactive({
   date: '',
   payment_for_indays: 30
+})
+
+// Auto-calculate coverage days when date changes
+watch(() => newRelease.date, (newDate) => {
+  if (!newDate) return
+  
+  // Find the latest release with at least one delivery note (usageCount > 0)
+  const usedReleases = (settings.value.distributionRelease || [])
+    .filter(r => (r.usageCount || 0) > 0)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+
+  if (usedReleases.length > 0) {
+    const lastDate = new Date(usedReleases[0].date)
+    const current = new Date(newDate)
+    
+    // Calculate difference in days
+    const diffMs = current - lastDate
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24))
+    
+    if (diffDays > 0) {
+      newRelease.payment_for_indays = diffDays
+    }
+  }
+})
+
+const confirm = reactive({
+  show: false,
+  title: '',
+  message: '',
+  type: 'primary',
+  loading: false,
+  action: null,
+  payload: null
 })
 
 const sortedReleases = computed(() => {
@@ -164,38 +218,85 @@ const fetchSettings = async () => {
   }
 }
 
-const addRelease = () => {
+const confirmAddRelease = () => {
   if (!newRelease.date) return addToast('Please select a date', 'error')
   
-  settings.value.distributionRelease.push({
-    distribution_release_id: Date.now(),
-    date: newRelease.date,
-    payment_for_indays: newRelease.payment_for_indays
-  })
-  
-  newRelease.date = ''
-  addToast('Release added to temporary list. Click Save to persist.')
+  // Check for uncompleted releases
+  const hasUncompleted = settings.value.distributionRelease?.some(r => !r.is_completed)
+  if (hasUncompleted) {
+    return addToast('Please complete all existing releases before adding a new one.', 'error')
+  }
+
+  confirm.show = true
+  confirm.title = 'Add Distribution Release'
+  confirm.message = `Are you sure you want to add a new distribution release for ${CharityService.formatDate(newRelease.date)}?`
+  confirm.type = 'primary'
+  confirm.action = 'addRelease'
 }
 
-const removeRelease = (index) => {
-  settings.value.distributionRelease.splice(index, 1)
-  addToast('Release removed. Click Save to persist.')
+const confirmToggleCompletion = (rel) => {
+  confirm.show = true
+  confirm.title = rel.is_completed ? 'Re-activate Release' : 'Complete Release'
+  confirm.message = `Are you sure you want to mark this release as ${rel.is_completed ? 'Active' : 'Completed'}?`
+  confirm.type = rel.is_completed ? 'warning' : 'primary'
+  confirm.action = 'toggleCompletion'
+  confirm.payload = rel.distribution_release_id
 }
 
-const saveSettings = async () => {
-  saving.value = true
+const confirmRemoveRelease = (id) => {
+  const rel = settings.value.distributionRelease.find(r => r.distribution_release_id === id)
+  confirm.show = true
+  confirm.title = 'Remove Distribution Release'
+  confirm.message = `Are you sure you want to remove the distribution release for ${CharityService.formatDate(rel.date)}?`
+  confirm.type = 'danger'
+  confirm.action = 'removeRelease'
+  confirm.payload = id
+}
+
+const confirmUpdateDefaults = () => {
+  confirm.show = true
+  confirm.title = 'Update Global Defaults'
+  confirm.message = 'Are you sure you want to update the global default settings for all beneficiaries?'
+  confirm.type = 'warning'
+  confirm.action = 'updateDefaults'
+}
+
+const handleConfirm = async () => {
+  confirm.loading = true
   try {
-    const res = await CharityService.updateSettings(settings.value)
+    let updatedSettings = { ...settings.value }
+    
+    if (confirm.action === 'addRelease') {
+      updatedSettings.distributionRelease.push({
+        distribution_release_id: Date.now(),
+        date: newRelease.date,
+        payment_for_indays: newRelease.payment_for_indays,
+        is_completed: false
+      })
+    } else if (confirm.action === 'removeRelease') {
+      updatedSettings.distributionRelease = updatedSettings.distributionRelease.filter(r => r.distribution_release_id !== confirm.payload)
+    } else if (confirm.action === 'toggleCompletion') {
+      updatedSettings.distributionRelease = updatedSettings.distributionRelease.map(r => 
+        r.distribution_release_id === confirm.payload ? { ...r, is_completed: !r.is_completed } : r
+      )
+    }
+    // For updateDefaults, settings.value is already reactive and bound to inputs
+
+    const res = await CharityService.updateSettings(updatedSettings)
     if (res.success) {
       settings.value = res.data
       addToast('Settings updated successfully')
+      if (confirm.action === 'addRelease') {
+        newRelease.date = ''
+      }
+      confirm.show = false
     } else {
       addToast(res.error, 'error')
     }
   } catch (err) {
     addToast('Failed to update settings', 'error')
   } finally {
-    saving.value = false
+    confirm.loading = false
   }
 }
 
@@ -237,6 +338,13 @@ onMounted(() => {
 .btn-save { padding: 8px 18px; background: linear-gradient(135deg, #6a11cb, #7c3aed); color: white; border: none; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 2px 8px rgba(106,17,203,0.2); }
 .btn-primary.small { padding: 10px 16px; background: #6366f1; color: white; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; }
 .btn-text-danger { background: none; border: none; color: #ef4444; cursor: pointer; font-size: 13px; padding: 4px; }
+.usage-locked { font-size: 12px; color: #f59e0b; font-style: italic; max-width: 250px; line-height: 1.4; }
+
+.status-pill { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; display: inline-block; }
+.status-pill.completed { background: #e6f7ee; color: #0d6b36; border: 1px solid #b7e4cf; }
+.status-pill.pending { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
+.clickable { cursor: pointer; }
+
 .audit-info { margin-top: 24px; font-size: 12px; color: #94a3b8; text-align: right; }
 .loading-state { padding: 40px; text-align: center; color: #64748b; }
 .error-alert { background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c; padding: 16px; border-radius: 12px; text-align: center; }

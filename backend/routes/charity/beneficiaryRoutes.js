@@ -6,6 +6,11 @@ const { authMiddleware } = require('../../middleware/authMiddleware');
 const ADMIN  = ['admin', 'charity_admin'];
 const ALL    = ['admin', 'charity_admin', 'charity_teamleader'];
 
+// Bulk Operations (Must be above parameterized routes)
+router.post('/bulk/delivery',   authMiddleware(ALL), ctrl.bulkAddDelivery);
+router.post('/bulk/adjustment', authMiddleware(ALL), ctrl.bulkAddAdjustment);
+router.put('/bulk/update',     authMiddleware(ALL), ctrl.bulkUpdateBeneficiaries);
+
 // CRUD
 router.get('/',               authMiddleware(ALL),   ctrl.getBeneficiaries);
 router.get('/:id',            authMiddleware(ALL),   ctrl.getBeneficiaryById);

@@ -115,12 +115,6 @@ const router = createRouter({
           meta: { title: 'Edit Charity Team', roles: ['admin', 'charity_admin','charity_teamleader'] },
         },
         {
-          path: 'charity/teams/:id/beneficiaries',
-          name: 'charity-team-beneficiaries',
-          component: () => import('@/views/charity/team_beneficiaries.vue'),
-          meta: { title: 'Team Beneficiaries', roles: ['admin', 'charity_admin', 'charity_teamleader'] },
-        },
-        {
           path: 'charity/beneficiaries',
           name: 'charity-beneficiaries',
           component: () => import('@/views/charity/beneficiaries.vue'),

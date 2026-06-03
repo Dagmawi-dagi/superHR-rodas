@@ -184,6 +184,17 @@
       </div>
     </form>
 
+    <!-- Confirmation Modal -->
+    <ConfirmationModal
+      :show="confirm.show"
+      :title="confirm.title"
+      :message="confirm.message"
+      :type="confirm.type"
+      :loading="isSubmitting"
+      @close="confirm.show = false"
+      @confirm="processSubmit"
+    />
+
     <!-- Toasts -->
     <div class="toast-container">
       <div v-for="t in toasts" :key="t.id" :class="['toast', `toast-${t.type}`]">{{ t.message }}</div>
@@ -197,6 +208,7 @@ import { useRouter, useRoute } from 'vue-router'
 import CharityService from '@/stores/charity'
 import FilterBar from './components/common/FilterBar.vue'
 import ListTable from './components/common/ListTable.vue'
+import ConfirmationModal from './components/modals/ConfirmationModal.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -207,6 +219,14 @@ const isView = computed(() => !!route.params.id && !route.path.includes('edit'))
 const loading = ref(true)
 const loadingBeneficiaries = ref(false)
 const error = ref<string | null>(null)
+
+// ── Confirmation state ────────────────────────────────────────────────
+const confirm = reactive({
+  show: false,
+  title: '',
+  message: '',
+  type: 'primary' as 'primary' | 'danger' | 'warning'
+})
 
 // ── Collapsible state ─────────────────────────────────────────────────
 const collapsed = reactive({
@@ -368,12 +388,19 @@ const addToast = (message: string, type: string = 'success') => {
   setTimeout(() => toasts.value = toasts.value.filter(t => t.id !== tId), 5000)
 }
 
-const handleSubmit = async () => {
+const handleSubmit = () => {
   errors.value = { name: '', head: '' }
   if (!form.value.name.trim()) errors.value.name = 'Team name is required'
   if (!form.value.head) errors.value.head = 'Team head is required'
   if (errors.value.name || errors.value.head) return
 
+  confirm.show = true
+  confirm.title = isEdit.value ? 'Update Team' : 'Create Team'
+  confirm.message = `Are you sure you want to ${isEdit.value ? 'update' : 'create'} the team "${form.value.name}"?`
+  confirm.type = isEdit.value ? 'warning' : 'primary'
+}
+
+const processSubmit = async () => {
   isSubmitting.value = true
   try {
     const res = isEdit.value
@@ -382,6 +409,7 @@ const handleSubmit = async () => {
 
     if (res.success) {
       addToast(isEdit.value ? 'Team updated successfully!' : 'Team created successfully!')
+      confirm.show = false
       setTimeout(() => router.push('/charity/teams'), 1500)
     } else {
       addToast(res.error || 'Failed to save team', 'error')
@@ -404,12 +432,12 @@ onMounted(loadInitialData)
 .header-title p { font-size: 14px; color: #64748b; margin-top: 4px; }
 
 .team-form { display: flex; flex-direction: column; gap: 24px; }
-.form-card { background: white; border-radius: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; }
+.form-card { background: white; border-radius: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid #f1f5f9; position: relative; overflow: visible; }
 .card-header { display: flex; align-items: center; gap: 12px; padding: 16px 24px; background: #fafcfd; border-bottom: 1px solid #f1f5f9; border-top-left-radius: 20px; border-top-right-radius: 20px; }
 .card-header svg { width: 20px; height: 20px; color: #6a11cb; }
 .card-header h3 { font-size: 16px; font-weight: 700; color: #334155; margin: 0; }
 .count-badge { margin-left: auto; font-size: 12px; padding: 4px 12px; background: #eff6ff; color: #2563eb; border-radius: 20px; font-weight: 600; }
-.card-body { padding: 24px; }
+.card-body { padding: 24px; overflow: visible; }
 
 /* Collapsible header */
 .card-header.collapsible-header {

@@ -59,27 +59,59 @@
           {{ row.isActive ? 'Active' : 'Inactive' }}
         </span>
       </template>
-      <!-- Actions – only Edit -->
+      <!-- Actions – Edit and Delete -->
       <template #actions="{ row }">
-        <router-link :to="`/charity/teams/${row.teamId}/edit`" class="action-btn edit" title="Edit">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        </router-link>
+        <div class="actions-group">
+          <router-link :to="`/charity/teams/${row.teamId}/edit`" class="action-btn edit" title="Edit">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </router-link>
+          <button class="action-btn delete" title="Delete" @click="confirmDelete(row)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>
+          </button>
+        </div>
       </template>
     </ListTable>
+
+    <!-- Confirmation Modal -->
+    <ConfirmationModal
+      :show="confirm.show"
+      :title="confirm.title"
+      :message="confirm.message"
+      :type="confirm.type"
+      :loading="confirm.loading"
+      @close="confirm.show = false"
+      @confirm="processDelete"
+    />
+
+    <!-- Toasts -->
+    <div class="toast-container">
+      <div v-for="t in toasts" :key="t.id" :class="['toast', `toast-${t.type}`]">{{ t.message }}</div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import CharityService from '@/stores/charity'
 import StatsCards from './components/common/StatsCards.vue'
 import FilterBar   from './components/common/FilterBar.vue'
 import ListTable   from './components/common/ListTable.vue'
+import ConfirmationModal from './components/modals/ConfirmationModal.vue'
 
 const teams = ref([])
 const loading = ref(false)
 const error = ref(null)
 const filters = ref({ search: '' })
+const toasts = ref([])
+
+const confirm = reactive({
+  show: false,
+  title: '',
+  message: '',
+  type: 'danger',
+  loading: false,
+  targetId: null
+})
 
 const pagination = ref({ 
   currentPage: 1, 
@@ -124,7 +156,6 @@ const onPageChange = (page) => {
 
 const onSort = ({ key, dir }) => { 
   console.log('Sort:', key, dir) 
-  // Sorting is handled by backend in full implementation
 }
 
 const statsCards = computed(() => [
@@ -147,12 +178,45 @@ const toggleActive = async (team) => {
     const res = await CharityService.updateTeam(team.teamId, { isActive: !team.isActive })
     if (res.success) {
       team.isActive = res.data.isActive
+      addToast(`Team ${team.isActive ? 'activated' : 'deactivated'} successfully`)
     } else {
-      alert(`Error: ${res.error}`)
+      addToast(res.error, 'error')
     }
   } catch (err) {
-    alert('Failed to toggle status')
+    addToast('Failed to toggle status', 'error')
   }
+}
+
+const confirmDelete = (team) => {
+  confirm.show = true
+  confirm.title = 'Delete Team'
+  confirm.message = `Are you sure you want to delete the team "${team.name}"? This action will archive the team record.`
+  confirm.type = 'danger'
+  confirm.targetId = team.teamId
+}
+
+const processDelete = async () => {
+  confirm.loading = true
+  try {
+    const res = await CharityService.deleteTeam(confirm.targetId)
+    if (res.success) {
+      addToast('Team deleted successfully')
+      confirm.show = false
+      fetchTeams()
+    } else {
+      addToast(res.error, 'error')
+    }
+  } catch (err) {
+    addToast('Failed to delete team', 'error')
+  } finally {
+    confirm.loading = false
+  }
+}
+
+const addToast = (msg, type = 'success') => {
+  const id = Date.now()
+  toasts.value.push({ id, message: msg, type })
+  setTimeout(() => toasts.value = toasts.value.filter(t => t.id !== id), 5000)
 }
 
 // Debounce search
@@ -178,12 +242,18 @@ onMounted(() => {
 .btn-primary { display: flex; align-items: center; gap: 8px; padding: 10px 20px; background: linear-gradient(135deg, #6a11cb, #7c3aed); color: white; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; text-decoration: none; }
 .btn-icon { width: 18px; height: 18px; }
 .members-badge { background: #e0e7ff; color: #3730a3; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.actions-group { display: flex; gap: 8px; }
 .action-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #e2e8f0; background: white; color: #64748b; display: flex; align-items: center; justify-content: center; cursor: pointer; text-decoration: none; }
 .action-btn svg { width: 16px; height: 16px; }
 .action-btn:hover { border-color: #6a11cb; color: #6a11cb; background: #f5f3ff; }
+.action-btn.delete:hover { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
 .btn-outline { padding: 8px 14px; background: white; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 13px; cursor: pointer; color: #475569; }
-.lt-badge--active { background: #e6f7ee; color: #0d6b36; border: 1px solid #b7e4cf; }
-.lt-badge--inactive { background: #fef1f1; color: #b91c1c; border: 1px solid #fecaca; }
+.lt-badge--active { background: #e6f7ee; color: #0d6b36; border: 1px solid #b7e4cf; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+.lt-badge--inactive { background: #fef1f1; color: #b91c1c; border: 1px solid #fecaca; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
 .error-alert { background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c; padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
 .error-alert button { background: #b91c1c; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+.toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 100; display: flex; flex-direction: column; gap: 12px; }
+.toast { padding: 14px 24px; border-radius: 12px; color: white; font-weight: 600; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+.toast-success { background: #10b981; }
+.toast-error { background: #ef4444; }
 </style>

@@ -229,6 +229,11 @@ exports.transferBeneficiary = async (req, res) => {
     const ben = await CharityBeneficiary.findByPk(req.params.id, { transaction: t });
     if (!ben) { await t.rollback(); return res.status(404).json({ success: false, error: 'Beneficiary not found' }); }
 
+    if (!ben.isActive) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Cannot transfer an inactive beneficiary' });
+    }
+
     // Auth check
     if (req.user.role === 'charity_teamleader') {
       const leaderTeamId = await getTeamForLeader(req.user.userId);
@@ -264,6 +269,11 @@ exports.addAdjustment = async (req, res) => {
 
     const ben = await CharityBeneficiary.findByPk(req.params.id, { transaction: t });
     if (!ben) { await t.rollback(); return res.status(404).json({ success: false, error: 'Beneficiary not found' }); }
+
+    if (!ben.isActive) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Cannot add adjustment for an inactive beneficiary' });
+    }
 
     // Auth check
     if (req.user.role === 'charity_teamleader') {
@@ -324,6 +334,11 @@ exports.addDelivery = async (req, res) => {
     const ben = await CharityBeneficiary.findByPk(req.params.id, { transaction: t });
     if (!ben) { await t.rollback(); return res.status(404).json({ success: false, error: 'Beneficiary not found' }); }
 
+    if (!ben.isActive) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Cannot add delivery for an inactive beneficiary' });
+    }
+
     // Auth check
     if (req.user.role === 'charity_teamleader') {
       const leaderTeamId = await getTeamForLeader(req.user.userId);
@@ -356,13 +371,16 @@ exports.addDelivery = async (req, res) => {
       distribution_release_payment_for_indays: releaseInfo.payment_for_indays || 30,
       amount: ben.monthlyAllocation,
       is_delivered: is_delivered || false,
-      is_returned: is_returned || null, // { reason: '' }
+      is_returned: is_delivered ? null : (is_returned || null),
       recipt: recipt || null,
       created_by: req.user.userId,
       created_at: new Date(),
       updated_by: req.user.userId,
       updated_at: new Date()
     };
+    // Mutual exclusivity check
+    if (newDelivery.is_delivered) newDelivery.is_returned = null;
+    else if (newDelivery.is_returned && newDelivery.is_returned.reason) newDelivery.is_delivered = false;
 
     const deliveries = [...(ben.deliveries || []), newDelivery];
 
@@ -387,6 +405,11 @@ exports.updateDelivery = async (req, res) => {
     const ben = await CharityBeneficiary.findByPk(req.params.id, { transaction: t });
     if (!ben) { await t.rollback(); return res.status(404).json({ success: false, error: 'Beneficiary not found' }); }
 
+    if (!ben.isActive) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Cannot update delivery for an inactive beneficiary' });
+    }
+
     // Auth check
     if (req.user.role === 'charity_teamleader') {
       const leaderTeamId = await getTeamForLeader(req.user.userId);
@@ -404,15 +427,21 @@ exports.updateDelivery = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Delivery record not found' });
     }
 
-    // Update only allowed fields
+    // Mutual exclusivity check
+    const nextDelivered = is_delivered !== undefined ? is_delivered : deliveries[index].is_delivered;
+    const nextReturned = is_returned !== undefined ? is_returned : deliveries[index].is_returned;
+
     deliveries[index] = {
       ...deliveries[index],
-      is_delivered: is_delivered !== undefined ? is_delivered : deliveries[index].is_delivered,
+      is_delivered: nextDelivered,
       recipt: recipt !== undefined ? recipt : deliveries[index].recipt,
-      is_returned: is_returned !== undefined ? is_returned : deliveries[index].is_returned,
+      is_returned: nextDelivered ? null : nextReturned,
       updated_by: req.user.userId,
       updated_at: new Date()
     };
+    if (deliveries[index].is_returned && deliveries[index].is_returned.reason) {
+      deliveries[index].is_delivered = false;
+    }
 
     await ben.update({ deliveries, updatedBy: req.user.userId }, { transaction: t });
     
@@ -420,6 +449,191 @@ exports.updateDelivery = async (req, res) => {
 
     await t.commit();
     res.json({ success: true, data: ben });
+  } catch (err) {
+    if (t) await t.rollback();
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+// ─── BULK OPERATIONS ─────────────────────────────────────────────────────────
+
+exports.bulkAddDelivery = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { beneficiaryIds, distribution_release_id, is_delivered, recipt, is_returned } = req.body;
+
+    if (!Array.isArray(beneficiaryIds) || beneficiaryIds.length === 0 || !distribution_release_id) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'beneficiaryIds and distribution_release_id are required' });
+    }
+
+    // Get release info
+    const settings = await CharitySetting.findOne({ where: { settingKey: 'main' }, transaction: t });
+    const releaseInfo = (settings?.distributionRelease || []).find(r => r.distribution_release_id === distribution_release_id);
+    if (!releaseInfo) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Invalid distribution_release_id' });
+    }
+
+    const beneficiaries = await CharityBeneficiary.findAll({
+      where: { beneficiaryId: { [Op.in]: beneficiaryIds } },
+      transaction: t
+    });
+
+    if (beneficiaries.length !== beneficiaryIds.length) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'One or more selected beneficiary IDs are invalid' });
+    }
+
+    const inactiveNames = beneficiaries.filter(b => !b.isActive).map(b => b.fullname);
+    if (inactiveNames.length > 0) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: `Cannot process inactive beneficiaries: ${inactiveNames.join(', ')}` });
+    }
+
+    const alreadyDelivered = beneficiaries.filter(ben => 
+      (ben.deliveries || []).some(d => d.distribution_release_id === distribution_release_id && !d.deleted_at)
+    ).map(b => b.fullname);
+
+    if (alreadyDelivered.length > 0) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: `The following beneficiaries already have a delivery record for this release: ${alreadyDelivered.join(', ')}` });
+    }
+
+    const now = new Date();
+    const results = [];
+
+    for (const ben of beneficiaries) {
+      const newDelivery = {
+        delivery_id: Date.now() + Math.floor(Math.random() * 1000), // Randomize slightly for bulk
+        distribution_release_id,
+        distribution_release_date: releaseInfo.date,
+        distribution_release_payment_for_indays: releaseInfo.payment_for_indays || 30,
+        amount: ben.monthlyAllocation,
+        is_delivered: is_delivered || false,
+        is_returned: is_delivered ? null : (is_returned || null),
+        recipt: recipt || null,
+        created_by: req.user.userId,
+        created_at: now,
+        updated_by: req.user.userId,
+        updated_at: now
+      };
+
+      // Mutual exclusivity check
+      if (newDelivery.is_delivered) newDelivery.is_returned = null;
+      else if (newDelivery.is_returned && newDelivery.is_returned.reason) newDelivery.is_delivered = false;
+
+      const deliveries = [...(ben.deliveries || []), newDelivery];
+      await ben.update({ deliveries, updatedBy: req.user.userId }, { transaction: t });
+      results.push(ben.beneficiaryId);
+    }
+
+    await logAction('BULK_DELIVERY', 'beneficiary', null, { count: results.length, releaseId: distribution_release_id }, req.user.userId);
+
+    await t.commit();
+    res.json({ success: true, count: results.length, data: results });
+  } catch (err) {
+    if (t) await t.rollback();
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+exports.bulkAddAdjustment = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { beneficiaryIds, type, amount, reason } = req.body;
+
+    if (!Array.isArray(beneficiaryIds) || beneficiaryIds.length === 0 || !type || !amount || !reason) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'All fields are required' });
+    }
+
+    const beneficiaries = await CharityBeneficiary.findAll({
+      where: { beneficiaryId: { [Op.in]: beneficiaryIds }, isActive: true },
+      transaction: t
+    });
+
+    const now = new Date();
+    const results = [];
+
+    for (const ben of beneficiaries) {
+      const adjId = Date.now() + Math.floor(Math.random() * 1000);
+      const newAdj = {
+        adjustment_id: adjId,
+        type,
+        reason,
+        amount: parseFloat(amount),
+        created_by: req.user.userId,
+        created_at: now
+      };
+
+      const adjustments = [...(ben.adjustments || []), newAdj];
+      
+      let newAllocation = parseFloat(ben.monthlyAllocation);
+      if (type === 'Deduct') newAllocation -= parseFloat(amount);
+      else if (type === 'increase') newAllocation += parseFloat(amount);
+
+      await ben.update({
+        adjustments,
+        monthlyAllocation: newAllocation,
+        updatedBy: req.user.userId
+      }, { transaction: t });
+      
+      results.push(ben.beneficiaryId);
+    }
+
+    await logAction('BULK_ADJUSTMENT', 'beneficiary', null, { count: results.length, type, amount }, req.user.userId);
+
+    await t.commit();
+    res.json({ success: true, count: results.length, data: results });
+  } catch (err) {
+    if (t) await t.rollback();
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+exports.bulkUpdateBeneficiaries = async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { beneficiaryIds, updates } = req.body; // updates: { teamId, paymentMethod, monthlyAllocation, fullInfo }
+
+    if (!Array.isArray(beneficiaryIds) || beneficiaryIds.length === 0 || !updates) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'beneficiaryIds and updates are required' });
+    }
+
+    const beneficiaries = await CharityBeneficiary.findAll({
+      where: { beneficiaryId: { [Op.in]: beneficiaryIds }, isActive: true },
+      transaction: t
+    });
+
+    const fields = ['teamId', 'paymentMethod', 'monthlyAllocation'];
+    const results = [];
+
+    for (const ben of beneficiaries) {
+      const benUpdates = { updatedBy: req.user.userId };
+      
+      fields.forEach(f => {
+        if (updates[f] !== undefined && updates[f] !== null && updates[f] !== '') {
+          benUpdates[f] = updates[f];
+        }
+      });
+
+      if (updates.fullInfo) {
+        const mergedFullInfo = { ...(ben.fullInfo || {}) };
+        if (updates.fullInfo.location) mergedFullInfo.location = { ...(mergedFullInfo.location || {}), ...updates.fullInfo.location };
+        if (updates.fullInfo.contact) mergedFullInfo.contact = { ...(mergedFullInfo.contact || {}), ...updates.fullInfo.contact };
+        benUpdates.fullInfo = mergedFullInfo;
+      }
+
+      await ben.update(benUpdates, { transaction: t });
+      results.push(ben.beneficiaryId);
+    }
+
+    await logAction('BULK_UPDATE', 'beneficiary', null, { count: results.length, fields: Object.keys(updates) }, req.user.userId);
+
+    await t.commit();
+    res.json({ success: true, count: results.length, data: results });
   } catch (err) {
     if (t) await t.rollback();
     res.status(500).json({ success: false, error: err.message });

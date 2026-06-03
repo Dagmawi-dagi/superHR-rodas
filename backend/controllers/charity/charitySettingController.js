@@ -25,7 +25,31 @@ exports.getSettings = async (req, res) => {
       });
     }
 
-    res.json({ success: true, data: setting });
+    const settingData = setting.get({ plain: true });
+
+    // Fetch usage counts for each release
+    if (settingData.distributionRelease && settingData.distributionRelease.length > 0) {
+      const [counts] = await sequelize.query(`
+        SELECT 
+          (elem->>'distribution_release_id')::bigint as release_id, 
+          COUNT(*)::int as usage_count
+        FROM charity_beneficiaries, jsonb_array_elements(deliveries) as elem
+        WHERE deleted_at IS NULL
+        GROUP BY (elem->>'distribution_release_id')::bigint
+      `);
+
+      const countMap = counts.reduce((acc, row) => {
+        acc[row.release_id] = row.usage_count;
+        return acc;
+      }, {});
+
+      settingData.distributionRelease = settingData.distributionRelease.map(rel => ({
+        ...rel,
+        usageCount: countMap[rel.distribution_release_id] || 0
+      }));
+    }
+
+    res.json({ success: true, data: settingData });
   } catch (err) {
     console.error('getSettings:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -44,31 +68,57 @@ exports.updateSettings = async (req, res) => {
 
     let setting = await CharitySetting.findOne({ where: { settingKey: 'main' }, transaction: t });
 
-    // ── Check if any removed releases are in use ────────────────────────────
+    // ── Completion and Removal Checks ──────────────────────────────────────
     if (setting && distributionRelease !== undefined) {
       const oldReleases = setting.distributionRelease || [];
       const newIds = (distributionRelease || []).map(r => r.distribution_release_id);
+      
+      // 1. Removal Check
       const removedReleases = oldReleases.filter(r => !newIds.includes(r.distribution_release_id));
-
       for (const rel of removedReleases) {
-        // Check if any beneficiary has a delivery with this release ID
-        // deliveries is JSONB array: [{ "distribution_release_id": 123, ... }]
         const [usage] = await sequelize.query(
           `SELECT beneficiary_id FROM charity_beneficiaries 
-           WHERE deliveries @> :match LIMIT 1`,
+           WHERE deleted_at IS NULL AND deliveries @> :match LIMIT 1`,
           {
             replacements: { match: JSON.stringify([{ distribution_release_id: rel.distribution_release_id }]) },
             transaction: t
           }
         );
-
         if (usage.length > 0) {
           await t.rollback();
-          const dateStr = new Date(rel.date).toLocaleDateString();
-          return res.status(400).json({ 
-            success: false, 
-            error: `Cannot remove release for "${dateStr}" because it is already linked to beneficiary deliveries.` 
-          });
+          return res.status(400).json({ success: false, error: `Cannot remove release "${new Date(rel.date).toLocaleDateString()}" linked to deliveries.` });
+        }
+      }
+
+      // 2. Completion Check (Only if a release is being transitioned to is_completed: true)
+      for (const newRel of distributionRelease) {
+        const oldRel = oldReleases.find(r => r.distribution_release_id === newRel.distribution_release_id);
+        
+        // If it's now completed, but wasn't before
+        if (newRel.is_completed && (!oldRel || !oldRel.is_completed)) {
+          // Count total active beneficiaries
+          const activeCount = await CharityBeneficiary.count({ where: { isActive: true }, transaction: t });
+          
+          // Count active beneficiaries with a delivery note for this release
+          const [delivered] = await sequelize.query(
+            `SELECT COUNT(*)::int as count FROM charity_beneficiaries 
+             WHERE is_active = true AND deleted_at IS NULL 
+             AND deliveries @> :match`,
+            {
+              replacements: { match: JSON.stringify([{ distribution_release_id: newRel.distribution_release_id }]) },
+              transaction: t
+            }
+          );
+          
+          const deliveredCount = delivered[0].count;
+
+          if (deliveredCount < activeCount) {
+            await t.rollback();
+            return res.status(400).json({ 
+              success: false, 
+              error: `Cannot complete release. Only ${deliveredCount} of ${activeCount} active beneficiaries have delivery notes for "${new Date(newRel.date).toLocaleDateString()}".` 
+            });
+          }
         }
       }
     }

@@ -162,7 +162,13 @@ const fetchStats = async () => {
   try {
     const res = await CharityService.getDashboardStats()
     if (res.success) {
-      stats.value = res.data
+      stats.value = {
+        beneficiaries: res.data.beneficiaries || { total: 0, active: 0, inactive: 0 },
+        teams: res.data.teams || { total: 0, active: 0 },
+        allocation: res.data.allocation || { totalMonthly: 0 },
+        distribution: res.data.distribution || { completed: 0, total: 0, release: null },
+        recentActivity: res.data.recentActivity || []
+      }
     } else {
       error.value = res.error
     }
