@@ -85,7 +85,7 @@
                     <label>Distribution Release</label>
                     <select v-model="newDelivery.distribution_release_id" :disabled="isEditingDelivery">
                       <option value="">Select a release date</option>
-                      <option v-for="rel in settings?.distributionRelease" :key="rel.distribution_release_id" :value="rel.distribution_release_id">
+                      <option v-for="rel in activeReleases" :key="rel.distribution_release_id" :value="rel.distribution_release_id">
                         {{ CharityService.formatDate(rel.date) }} ({{ rel.payment_for_indays }} days)
                       </option>
                     </select>
@@ -216,7 +216,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted,watch } from 'vue'
+import { ref, reactive, onMounted,watch,computed  } from 'vue'
 import { useRoute } from 'vue-router'
 import CharityService from '@/stores/charity'
 import ListTable from './components/common/ListTable.vue'
@@ -241,6 +241,15 @@ const showAddDelivery = ref(false)
 const showAddAdjustment = ref(false)
 const isEditingDelivery = ref(false)
 const currentDeliveryId = ref(null)
+
+const activeReleases = computed(() => {
+  const all = settings.value?.distributionRelease || []
+  // If editing, make sure the current release is in the list even if it's completed
+  if (isEditingDelivery.value && newDelivery.distribution_release_id) {
+    return all.filter(rel => !rel.is_completed || rel.distribution_release_id === newDelivery.distribution_release_id)
+  }
+  return all.filter(rel => !rel.is_completed)
+})
 
 const newDelivery = reactive({
   distribution_release_id: '',

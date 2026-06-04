@@ -32,7 +32,6 @@ const getTeamForLeader = async (userId) => {
   if (!emp) return null;
   return CharityTeam.findOne({
     where: {
-      isActive: true,
       [Op.or]: [
         { head: emp.employeeId },
         { vice: emp.employeeId },
@@ -61,8 +60,25 @@ exports.getTeams = async (req, res) => {
     }
 
     const { count, rows } = await CharityTeam.findAndCountAll({
-      where, include: teamIncludes, limit, offset,
-      order: [['created_at', 'DESC']], distinct: true,
+      where, 
+      include: teamIncludes,
+      attributes: {
+        include: [
+          [
+            sequelize.literal(`(
+              SELECT COUNT(*)
+              FROM charity_beneficiaries AS beneficiaries
+              WHERE
+                beneficiaries.team_id = "CharityTeam"."team_id"
+                AND beneficiaries.deleted_at IS NULL
+            )`),
+            'beneficiaryCount'
+          ]
+        ]
+      },
+      limit, offset,
+      order: [['created_at', 'DESC']], 
+      distinct: true
     });
 
     res.json({

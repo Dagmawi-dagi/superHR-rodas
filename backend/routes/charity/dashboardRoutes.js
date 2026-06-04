@@ -5,6 +5,7 @@ const { authMiddleware } = require('../../middleware/authMiddleware');
 
 const ALL = ['admin', 'charity_admin', 'charity_teamleader'];
 
-router.get('/stats', authMiddleware(ALL), ctrl.getStats);
+router.get('/stats', authMiddleware(...ALL), ctrl.getStats);
+router.get('/logs', authMiddleware(...ALL), ctrl.getLogs);
 
 module.exports = router;

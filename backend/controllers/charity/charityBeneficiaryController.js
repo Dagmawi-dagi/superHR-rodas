@@ -528,7 +528,12 @@ exports.bulkAddDelivery = async (req, res) => {
       results.push(ben.beneficiaryId);
     }
 
-    await logAction('BULK_DELIVERY', 'beneficiary', null, { count: results.length, releaseId: distribution_release_id }, req.user.userId);
+    await logAction('BULK_DELIVERY', 'beneficiary', null, { 
+      count: results.length, 
+      releaseId: distribution_release_id,
+      releaseDate: releaseInfo.date,
+      isDelivered: is_delivered
+    }, req.user.userId);
 
     await t.commit();
     res.json({ success: true, count: results.length, data: results });
@@ -582,7 +587,12 @@ exports.bulkAddAdjustment = async (req, res) => {
       results.push(ben.beneficiaryId);
     }
 
-    await logAction('BULK_ADJUSTMENT', 'beneficiary', null, { count: results.length, type, amount }, req.user.userId);
+    await logAction('BULK_ADJUSTMENT', 'beneficiary', null, { 
+      count: results.length, 
+      type, 
+      amount,
+      reason
+    }, req.user.userId);
 
     await t.commit();
     res.json({ success: true, count: results.length, data: results });
@@ -595,7 +605,7 @@ exports.bulkAddAdjustment = async (req, res) => {
 exports.bulkUpdateBeneficiaries = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { beneficiaryIds, updates } = req.body; // updates: { teamId, paymentMethod, monthlyAllocation, fullInfo }
+    const { beneficiaryIds, updates } = req.body; // updates: { teamId, paymentMethod, monthlyAllocation, fullInfo, isActive }
 
     if (!Array.isArray(beneficiaryIds) || beneficiaryIds.length === 0 || !updates) {
       await t.rollback();
@@ -603,11 +613,11 @@ exports.bulkUpdateBeneficiaries = async (req, res) => {
     }
 
     const beneficiaries = await CharityBeneficiary.findAll({
-      where: { beneficiaryId: { [Op.in]: beneficiaryIds }, isActive: true },
+      where: { beneficiaryId: { [Op.in]: beneficiaryIds } },
       transaction: t
     });
 
-    const fields = ['teamId', 'paymentMethod', 'monthlyAllocation'];
+    const fields = ['teamId', 'paymentMethod', 'monthlyAllocation', 'isActive'];
     const results = [];
 
     for (const ben of beneficiaries) {
@@ -615,6 +625,8 @@ exports.bulkUpdateBeneficiaries = async (req, res) => {
       
       fields.forEach(f => {
         if (updates[f] !== undefined && updates[f] !== null && updates[f] !== '') {
+          // Teamleader can't bulk change teamId
+          if (f === 'teamId' && req.user.role === 'charity_teamleader') return;
           benUpdates[f] = updates[f];
         }
       });
@@ -630,7 +642,10 @@ exports.bulkUpdateBeneficiaries = async (req, res) => {
       results.push(ben.beneficiaryId);
     }
 
-    await logAction('BULK_UPDATE', 'beneficiary', null, { count: results.length, fields: Object.keys(updates) }, req.user.userId);
+    await logAction('BULK_UPDATE', 'beneficiary', null, { 
+      count: results.length, 
+      appliedUpdates: updates 
+    }, req.user.userId);
 
     await t.commit();
     res.json({ success: true, count: results.length, data: results });

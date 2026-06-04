@@ -121,15 +121,31 @@
             <div v-for="log in stats.recentActivity" :key="log.logId" class="activity-item">
               <div class="activity-dot" :class="log.action.toLowerCase()"></div>
               <div class="activity-content">
-                <div class="activity-msg">
-                  <strong>{{ log.user?.fullName || 'System' }}</strong> 
-                  {{ getActionText(log) }}
+                <div class="activity-msg-wrapper">
+                  <div class="activity-msg">
+                    <strong>{{ log.user?.fullName || 'System' }}</strong> 
+                    {{ getActionText(log) }}
+                  </div>
+                  <div class="activity-details-tooltip" v-if="log.details && Object.keys(log.details).length > 0">
+                    <div class="tooltip-header">Activity Details</div>
+                    <div v-for="(val, key) in filterDetails(log.details)" :key="key" class="tooltip-row">
+                      <span class="t-key">{{ formatDetailKey(key) }}:</span>
+                      <span class="t-val">{{ formatDetailValue(val, key) }}</span>
+                    </div>
+                  </div>
                 </div>
                 <div class="activity-time">{{ timeAgo(log.created_at) }}</div>
               </div>
             </div>
             <div v-if="stats.recentActivity.length === 0" class="empty-feed">
               No recent activity recorded.
+            </div>
+            
+            <div v-if="hasMoreLogs" class="load-more-container">
+              <button @click="loadMoreLogs" class="btn-load-more" :disabled="loadingLogs">
+                <span v-if="loadingLogs" class="mini-spinner"></span>
+                {{ loadingLogs ? 'Loading...' : 'Load More Activity' }}
+              </button>
             </div>
           </div>
         </div>
@@ -147,6 +163,7 @@ const authStore = useAuthStore()
 const isTeamLeader = computed(() => authStore.user?.role === 'charity_teamleader')
 
 const loading = ref(true)
+const loadingLogs = ref(false)
 const error = ref(null)
 const stats = ref({
   beneficiaries: { total: 0, active: 0, inactive: 0 },
@@ -155,6 +172,14 @@ const stats = ref({
   distribution: { completed: 0, total: 0, release: null },
   recentActivity: []
 })
+
+const logPagination = ref({
+  page: 1,
+  limit: 10,
+  hasMore: false
+})
+
+const hasMoreLogs = computed(() => logPagination.value.hasMore)
 
 const fetchStats = async () => {
   loading.value = true
@@ -169,6 +194,9 @@ const fetchStats = async () => {
         distribution: res.data.distribution || { completed: 0, total: 0, release: null },
         recentActivity: res.data.recentActivity || []
       }
+      if (stats.value.recentActivity.length >= 10) {
+        logPagination.value.hasMore = true
+      }
     } else {
       error.value = res.error
     }
@@ -176,6 +204,25 @@ const fetchStats = async () => {
     error.value = 'Failed to connect to server'
   } finally {
     loading.value = false
+  }
+}
+
+const loadMoreLogs = async () => {
+  if (loadingLogs.value || !hasMoreLogs.value) return
+  
+  loadingLogs.value = true
+  try {
+    const nextPage = logPagination.value.page + 1
+    const res = await CharityService.getLogs({ page: nextPage, limit: logPagination.value.limit })
+    if (res.success) {
+      stats.value.recentActivity = [...stats.value.recentActivity, ...res.data]
+      logPagination.value.page = nextPage
+      logPagination.value.hasMore = res.pagination.hasMore
+    }
+  } catch (err) {
+    console.error('Failed to load more logs:', err)
+  } finally {
+    loadingLogs.value = false
   }
 }
 
@@ -189,8 +236,82 @@ const getActionText = (log) => {
   if (action === 'adjustment') return `applied an allocation adjustment`
   if (action === 'delivery') return `recorded a payment delivery`
   if (action === 'delete') return `deactivated a ${module}`
+  if (action === 'update_delivery') return `updated a delivery record`
+  if (action.includes('bulk')) return `performed a bulk ${module} operation`
   
-  return `${action}d a ${module}`
+  return `${action.replace(/_/g, ' ')}d a ${module}`
+}
+
+const keyMap = {
+  fullname: 'Name',
+  fullname_en: 'Name (EN)',
+  monthlyAllocation: 'Monthly Amount',
+  amount: 'Amount',
+  isActive: 'Is Active',
+  isActive_en: 'Is Active',
+  teamId: 'Team ID',
+  paymentMethod: 'Payment Method',
+  type: 'Adjustment Type',
+  reason: 'Reason',
+  is_delivered: 'Delivered',
+  isDelivered: 'Delivered',
+  recipt: 'Receipt Number',
+  count: 'Affected Records',
+  releaseId: 'Release ID',
+  releaseDate: 'Release Date',
+  appliedUpdates: 'Changes Applied'
+}
+
+const formatDetailKey = (key) => {
+  if (typeof key !== 'string') return String(key)
+  return keyMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+}
+
+const formatDetailValue = (val, key) => {
+  if (val === null || val === undefined) return 'N/A'
+  
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No'
+  
+  // Format Currency
+  if (['monthlyAllocation', 'amount'].includes(key)) {
+    return CharityService.formatCurrency(val)
+  }
+
+  // Format Date-like strings
+  if (typeof val === 'string' && val.match(/^\d{4}-\d{2}-\d{2}/)) {
+    return new Date(val).toLocaleDateString()
+  }
+
+  if (typeof val === 'object') {
+    if (key === 'fullInfo') {
+      const parts = []
+      if (val.location) parts.push(val.location.city || val.location.region)
+      if (val.contact) parts.push(val.contact.phone)
+      return parts.join(', ') || 'Contact/Location details'
+    }
+    if (key === 'appliedUpdates') {
+      return Object.keys(val).map(k => `${formatDetailKey(k)}: ${formatDetailValue(val[k], k)}`).join(' | ')
+    }
+    if (Array.isArray(val)) {
+      return val.map(v => formatDetailKey(v)).join(', ')
+    }
+    return 'Detailed info'
+  }
+  
+  return val
+}
+
+const filterDetails = (details) => {
+  if (!details) return {}
+  const filtered = {}
+  const ignoreKeys = ['updatedBy', 'createdBy', 'updated_by', 'created_by', 'created_at', 'updated_at', 'deleted_by', 'deleted_at', 'delivery_id', 'adjustment_id']
+  
+  Object.keys(details).forEach(key => {
+    if (!ignoreKeys.includes(key)) {
+      filtered[key] = details[key]
+    }
+  })
+  return filtered
 }
 
 const timeAgo = (date) => {
@@ -262,8 +383,56 @@ onMounted(fetchStats)
 .activity-dot.adjustment { background: #f59e0b; box-shadow: 0 0 0 4px #fffbeb; }
 
 .activity-content { flex: 1; }
-.activity-msg { font-size: 13.5px; color: #334155; line-height: 1.5; }
+.activity-msg-wrapper { position: relative; }
+.activity-msg { font-size: 13.5px; color: #334155; line-height: 1.5; cursor: help; }
 .activity-time { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+
+/* Tooltip */
+.activity-details-tooltip {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #1e293b;
+  color: white;
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  width: 240px;
+  z-index: 100;
+  display: none;
+  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+  margin-top: 8px;
+}
+.activity-msg-wrapper:hover .activity-details-tooltip {
+  display: block;
+}
+.tooltip-header { font-weight: 700; margin-bottom: 8px; color: #94a3b8; text-transform: uppercase; font-size: 10px; border-bottom: 1px solid #334155; padding-bottom: 4px; }
+.tooltip-row { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.t-key { color: #94a3b8; }
+.t-val { font-weight: 500; text-align: right; }
+
+/* Load More */
+.load-more-container { margin-top: 12px; text-align: center; }
+.btn-load-more {
+  background: #f1f5f9;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6366f1;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+.btn-load-more:hover:not(:disabled) { background: #e2e8f0; color: #4338ca; }
+.btn-load-more:disabled { opacity: 0.7; cursor: not-allowed; }
+
+.mini-spinner { width: 14px; height: 14px; border: 2px solid #6366f1; border-top: 2px solid transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
 
 .empty-feed { text-align: center; padding: 40px 0; color: #94a3b8; font-style: italic; }
 

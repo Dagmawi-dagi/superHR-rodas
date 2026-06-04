@@ -80,7 +80,7 @@
       :type="confirm.type"
       :loading="confirm.loading"
       @close="confirm.show = false"
-      @confirm="processDelete"
+      @confirm="confirm.action === 'toggleStatus' ? processToggleActive() : processDelete()"
     />
 
     <!-- Toasts -->
@@ -173,17 +173,34 @@ const teamColumns = [
   { key: 'isActive', label: 'Active' },
 ]
 
-const toggleActive = async (team) => {
+const toggleActive = (team) => {
+  confirm.show = true
+  confirm.action = 'toggleStatus'
+  confirm.targetId = team.teamId
+  confirm.title = team.isActive ? 'Deactivate Team' : 'Activate Team'
+  confirm.message = team.isActive 
+    ? `When you deactivate a team, all the beneficiaries that belong to this team will be deactivated too. This will affect ${team.beneficiaryCount || 0} beneficiaries that belong to this team.`
+    : `Are you sure you want to activate the team "${team.name}"?`
+  confirm.type = team.isActive ? 'warning' : 'primary'
+  confirm.tempRow = team
+}
+
+const processToggleActive = async () => {
+  const team = confirm.tempRow
+  confirm.loading = true
   try {
     const res = await CharityService.updateTeam(team.teamId, { isActive: !team.isActive })
     if (res.success) {
       team.isActive = res.data.isActive
       addToast(`Team ${team.isActive ? 'activated' : 'deactivated'} successfully`)
+      confirm.show = false
     } else {
       addToast(res.error, 'error')
     }
   } catch (err) {
     addToast('Failed to toggle status', 'error')
+  } finally {
+    confirm.loading = false
   }
 }
 
@@ -248,8 +265,8 @@ onMounted(() => {
 .action-btn:hover { border-color: #6a11cb; color: #6a11cb; background: #f5f3ff; }
 .action-btn.delete:hover { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
 .btn-outline { padding: 8px 14px; background: white; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 13px; cursor: pointer; color: #475569; }
-.lt-badge--active { background: #e6f7ee; color: #0d6b36; border: 1px solid #b7e4cf; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
-.lt-badge--inactive { background: #fef1f1; color: #b91c1c; border: 1px solid #fecaca; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+.lt-badge--active { background: #e6f7ee; color: #0d6b36; border: 1px solid #b7e4cf; padding: 2px 8px; border-radius: 20px; font-size: 11px; padding: 2px 8px;}
+.lt-badge--inactive { background: #fef1f1; color: #b91c1c; border: 1px solid #fecaca; padding: 2px 8px; border-radius: 20px; font-size: 11px; padding: 2px 8px;}
 .error-alert { background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c; padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
 .error-alert button { background: #b91c1c; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
 .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 100; display: flex; flex-direction: column; gap: 12px; }

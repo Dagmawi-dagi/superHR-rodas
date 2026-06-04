@@ -121,7 +121,7 @@
               <label>Distribution Release</label>
               <select v-model="bulkDelivery.distribution_release_id">
                 <option value="">Select a release date</option>
-                <option v-for="rel in settings?.distributionRelease" :key="rel.distribution_release_id" :value="rel.distribution_release_id">
+                <option v-for="rel in activeReleases" :key="rel.distribution_release_id" :value="rel.distribution_release_id">
                   {{ CharityService.formatDate(rel.date) }} ({{ rel.payment_for_indays }} days)
                 </option>
               </select>
@@ -206,7 +206,8 @@
           
           <div class="bulk-edit-container">
             <div class="edit-section">
-              <div class="edit-field">
+              <!-- Team Selection (Admin/Charity Admin Only) -->
+              <div v-if="!isTeamLeader" class="edit-field">
                 <label class="toggle-label">
                   <input type="checkbox" v-model="bulkEdit.fields.teamId" />
                   <span>Change Team</span>
@@ -216,6 +217,7 @@
                   <option v-for="t in teams" :key="t.teamId" :value="t.teamId">{{ t.name }}</option>
                 </select>
               </div>
+
               <div class="edit-field">
                 <label class="toggle-label">
                   <input type="checkbox" v-model="bulkEdit.fields.paymentMethod" />
@@ -224,6 +226,17 @@
                 <select v-model="bulkEdit.values.paymentMethod" :disabled="!bulkEdit.fields.paymentMethod">
                   <option value="bank">Bank</option>
                   <option value="cash">Cash</option>
+                </select>
+              </div>
+
+              <div class="edit-field">
+                <label class="toggle-label">
+                  <input type="checkbox" v-model="bulkEdit.fields.isActive" />
+                  <span>Change Status</span>
+                </label>
+                <select v-model="bulkEdit.values.isActive" :disabled="!bulkEdit.fields.isActive">
+                  <option :value="true">Active</option>
+                  <option :value="false">Inactive</option>
                 </select>
               </div>
             </div>
@@ -272,7 +285,7 @@
       :type="confirm.type"
       :loading="submitting"
       @close="confirm.show = false"
-      @confirm="processBulkAction"
+      @confirm="confirm.action === 'toggleStatus' ? processToggleActive() : processBulkAction()"
     />
 
     <!-- Toasts -->
@@ -284,11 +297,15 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted, watch } from 'vue'
+import { useAuthStore } from '@/stores/auth'
 import CharityService from '@/stores/charity'
 import StatsCards from './components/common/StatsCards.vue'
 import FilterBar   from './components/common/FilterBar.vue'
 import ListTable   from './components/common/ListTable.vue'
 import ConfirmationModal from './components/modals/ConfirmationModal.vue'
+
+const authStore = useAuthStore()
+const isTeamLeader = computed(() => authStore.userRole === 'charity_teamleader')
 
 const beneficiaries = ref([])
 const teams = ref([])
@@ -324,14 +341,19 @@ const bulkDelivery = reactive({
 })
 const bulkAdjustment = reactive({ type: 'increase', amount: 0, reason: '' })
 
+const activeReleases = computed(() => {
+  return (settings.value?.distributionRelease || []).filter(rel => !rel.is_completed)
+})
+
 const bulkEdit = reactive({
-  fields: { teamId: false, paymentMethod: false, monthlyAllocation: false, location: false, contact: false },
+  fields: { teamId: false, paymentMethod: false, monthlyAllocation: false, location: false, contact: false, isActive: false },
   values: {
     teamId: '',
     paymentMethod: 'bank',
     monthlyAllocation: 0,
     location: { region: '', city: '', woreda: '' },
-    contact: { phone: '', email: '' }
+    contact: { phone: '', email: '' },
+    isActive: true
   }
 })
 
@@ -457,6 +479,7 @@ const processBulkAction = async () => {
       if (bulkEdit.fields.teamId) updates.teamId = bulkEdit.values.teamId
       if (bulkEdit.fields.paymentMethod) updates.paymentMethod = bulkEdit.values.paymentMethod
       if (bulkEdit.fields.monthlyAllocation) updates.monthlyAllocation = bulkEdit.values.monthlyAllocation
+      if (bulkEdit.fields.isActive) updates.isActive = bulkEdit.values.isActive
       
       if (bulkEdit.fields.location || bulkEdit.fields.contact) {
         updates.fullInfo = {}
@@ -503,12 +526,19 @@ const onSort = ({ key, dir }) => {
   console.log('Sort:', key, dir) 
 }
 
-const statsCards = computed(() => [
-  { key: 'total', label: 'Total Beneficiaries', value: pagination.value.totalItems },
-  { key: 'active', label: 'Active', value: beneficiaries.value.filter(b => b.isActive).length, color: '#10b981' },
-  { key: 'allocated', label: 'Total Allocated (ETB)', value: beneficiaries.value.reduce((s, b) => s + parseFloat(b.monthlyAllocation || 0), 0), format: 'currency' },
-  { key: 'teams', label: 'Assigned Teams', value: teams.value.length, color: '#3b82f6' },
-])
+const statsCards = computed(() => {
+  const cards = [
+    { key: 'total', label: 'Total Beneficiaries', value: pagination.value.totalItems },
+    { key: 'active', label: 'Active', value: beneficiaries.value.filter(b => b.isActive).length, color: '#10b981' },
+    { key: 'allocated', label: 'Total Allocated (ETB)', value: beneficiaries.value.reduce((s, b) => s + parseFloat(b.monthlyAllocation || 0), 0), format: 'currency' },
+  ]
+  
+  if (!isTeamLeader.value) {
+    cards.push({ key: 'teams', label: 'Assigned Teams', value: teams.value.length, color: '#3b82f6' })
+  }
+  
+  return cards
+})
 
 const benColumns = [
   { key: 'beneficiaryId', label: 'ID', width: '60px' },
@@ -519,17 +549,32 @@ const benColumns = [
   { key: 'isActive', label: 'Active' },
 ]
 
-const toggleActive = async (row) => {
+const toggleActive = (row) => {
+  confirm.show = true
+  confirm.action = 'toggleStatus'
+  confirm.targetId = row.beneficiaryId
+  confirm.title = row.isActive ? 'Deactivate Beneficiary' : 'Activate Beneficiary'
+  confirm.message = `Are you sure you want to ${row.isActive ? 'deactivate' : 'activate'} "${row.fullname}"?`
+  confirm.type = row.isActive ? 'warning' : 'primary'
+  confirm.tempRow = row
+}
+
+const processToggleActive = async () => {
+  const row = confirm.tempRow
+  submitting.value = true
   try {
     const res = await CharityService.updateBeneficiary(row.beneficiaryId, { isActive: !row.isActive })
     if (res.success) {
       row.isActive = res.data.isActive
       addToast(`Beneficiary ${row.isActive ? 'activated' : 'deactivated'}`)
+      confirm.show = false
     } else {
       addToast(res.error, 'error')
     }
   } catch (err) {
     addToast('Failed to toggle status', 'error')
+  } finally {
+    submitting.value = false
   }
 }
 
@@ -604,8 +649,10 @@ onMounted(() => {
 .action-btn:hover { border-color: #6a11cb; color: #6a11cb; background: #f5f3ff; }
 .action-btn.details:hover { border-color: #10b981; color: #10b981; background: #e6f7ee; }
 
-.lt-badge--active { background: #e6f7ee; color: #0d6b36; border: 1px solid #b7e4cf; }
-.lt-badge--inactive { background: #fef1f1; color: #b91c1c; border: 1px solid #fecaca; }
+.lt-badge--active { background: #e6f7ee; color: #0d6b36; border: 1px solid #b7e4cf; border-radius: 20px; padding: 2px 8px;}
+.lt-badge--inactive { background: #fef1f1; color: #b91c1c; border: 1px solid #fecaca; border-radius: 20px; padding: 2px 8px;}
+.lt-badge--bank { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; border-radius: 20px; padding: 2px 8px;}
+.lt-badge--cash { background: #fdf2f7; color: #be185d; border: 1px solid #fbcfe8; border-radius: 20px; padding: 2px 8px;}
 
 /* Modals */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }

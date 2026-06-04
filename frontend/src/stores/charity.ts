@@ -220,6 +220,16 @@ class CharityService {
     catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
   }
 
+  async getLogs(params?: { page?: number; limit?: number }) {
+    try {
+      const q = new URLSearchParams()
+      if (params?.page) q.set('page', String(params.page))
+      if (params?.limit) q.set('limit', String(params.limit))
+      const r = await api.get(`/charity/dashboard/logs${q.toString() ? `?${q}` : ''}`)
+      return r.data
+    } catch (e: any) { return { success: false, error: e.response?.data?.error || e.message } }
+  }
+
   // ── Employees Dropdown ────────────────────────────────────────────────────
   async getEmployeesForDropdown() {
     try {
