@@ -43,6 +43,9 @@
       <template #cell-members="{ value }">
         <span class="members-badge">{{ value?.length || 0 }} members</span>
       </template>
+      <template #cell-beneficiaries="{ row }">
+        <span class="beneficiaries-badge">{{ row.beneficiaryCount || 0 }} beneficiaries</span>
+      </template>
       <template #cell-headMember="{ row }">
         {{ row.headMember ? `${row.headMember.firstName} ${row.headMember.lastName}` : 'Not assigned' }}
       </template>
@@ -170,6 +173,7 @@ const teamColumns = [
   { key: 'headMember', label: 'Team Head' },
   { key: 'viceMember', label: 'Vice Head' },
   { key: 'members', label: 'Members' },
+  { key: 'beneficiaries', label: 'Beneficiaries' },
   { key: 'isActive', label: 'Active' },
 ]
 
@@ -258,13 +262,18 @@ onMounted(() => {
 .page-subtitle { font-size: 13px; color: #64748b; }
 .btn-primary { display: flex; align-items: center; gap: 8px; padding: 10px 20px; background: linear-gradient(135deg, #6a11cb, #7c3aed); color: white; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; text-decoration: none; }
 .btn-icon { width: 18px; height: 18px; }
+.btn-icon-small { width: 16px; height: 16px; margin-right: 4px; }
 .members-badge { background: #e0e7ff; color: #3730a3; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.beneficiaries-badge { background: #f0fdf4; color: #166534; padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; border: 1px solid #b7e4cf; }
 .actions-group { display: flex; gap: 8px; }
 .action-btn { width: 32px; height: 32px; border-radius: 8px; border: 1px solid #e2e8f0; background: white; color: #64748b; display: flex; align-items: center; justify-content: center; cursor: pointer; text-decoration: none; }
 .action-btn svg { width: 16px; height: 16px; }
 .action-btn:hover { border-color: #6a11cb; color: #6a11cb; background: #f5f3ff; }
 .action-btn.delete:hover { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
-.btn-outline { padding: 8px 14px; background: white; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 13px; cursor: pointer; color: #475569; }
+.btn-outline { display: inline-flex; align-items: center; padding: 8px 14px; background: white; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 13px; cursor: pointer; color: #475569; }
+.btn-outline:hover:not(:disabled) { border-color: #6366f1; color: #6366f1; }
+.export-btn { background: #f8fafc; border-color: #cbd5e1; }
+.export-btn:hover:not(:disabled) { background: #f1f5f9; border-color: #6366f1; }
 .lt-badge--active { background: #e6f7ee; color: #0d6b36; border: 1px solid #b7e4cf; padding: 2px 8px; border-radius: 20px; font-size: 11px; padding: 2px 8px;}
 .lt-badge--inactive { background: #fef1f1; color: #b91c1c; border: 1px solid #fecaca; padding: 2px 8px; border-radius: 20px; font-size: 11px; padding: 2px 8px;}
 .error-alert { background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c; padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }

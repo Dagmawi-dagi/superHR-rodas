@@ -112,6 +112,31 @@
                 <button class="btn-primary small" @click="confirmUpdateDefaults">Update Defaults</button>
               </div>
             </div>
+
+            <!-- Special Cases Management -->
+            <div class="special-cases-section">
+              <h4>Beneficiary Special Cases</h4>
+              <p class="section-desc">Managed categories for flagging specific beneficiary needs (e.g. Elderly, Disabled).</p>
+              
+              <div class="tags-container" v-if="settings.defaults.beneficiaries_special_cases?.length > 0">
+                <div v-for="(sc, idx) in settings.defaults.beneficiaries_special_cases" :key="idx" class="tag">
+                  <span>{{ sc }}</span>
+                  <button v-if="canEdit" @click="removeSpecialCase(idx)" class="tag-remove">×</button>
+                </div>
+              </div>
+              <div v-else class="empty-tags">No special cases defined.</div>
+
+              <div class="add-tag-form" v-if="canEdit">
+                <input 
+                  type="text" 
+                  v-model="newSpecialCase" 
+                  placeholder="Add new category..." 
+                  @keyup.enter="addSpecialCase"
+                />
+                <button @click="addSpecialCase" class="btn-add-tag">+</button>
+              </div>
+            </div>
+
             <div class="audit-info" v-if="settings.lastUpdatedBy">
               Last updated by {{ settings.lastUpdatedBy.fullName }} on {{ CharityService.formatDate(settings.updatedAt) }}
             </div>
@@ -159,13 +184,34 @@ const toasts = ref([])
 
 const settings = ref({
   distributionRelease: [],
-  defaults: { monthly_allocation: 3000, payment_method: 'bank' }
+  defaults: { monthly_allocation: 3000, payment_method: 'bank', beneficiaries_special_cases: [] }
 })
 
 const newRelease = reactive({
   date: '',
   payment_for_indays: 30
 })
+
+const newSpecialCase = ref('')
+
+const addSpecialCase = () => {
+  const val = newSpecialCase.value.trim()
+  if (!val) return
+  
+  if (!settings.value.defaults.beneficiaries_special_cases) {
+    settings.value.defaults.beneficiaries_special_cases = []
+  }
+
+  if (settings.value.defaults.beneficiaries_special_cases.includes(val)) {
+    return addToast('This category already exists', 'error')
+  }
+  settings.value.defaults.beneficiaries_special_cases.push(val)
+  newSpecialCase.value = ''
+}
+
+const removeSpecialCase = (index) => {
+  settings.value.defaults.beneficiaries_special_cases.splice(index, 1)
+}
 
 // Auto-calculate coverage days when date changes
 watch(() => newRelease.date, (newDate) => {
@@ -344,6 +390,22 @@ onMounted(() => {
 .status-pill.completed { background: #e6f7ee; color: #0d6b36; border: 1px solid #b7e4cf; }
 .status-pill.pending { background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; }
 .clickable { cursor: pointer; }
+
+/* Special Cases Styles */
+.special-cases-section { margin-top: 32px; padding-top: 24px; border-top: 1px dashed #e2e8f0; }
+.special-cases-section h4 { margin: 0 0 8px; font-size: 15px; color: #1e293b; }
+.section-desc { font-size: 13px; color: #64748b; margin: 0 0 20px; }
+
+.tags-container { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+.tag { display: flex; align-items: center; gap: 8px; background: #f1f5f9; padding: 6px 12px; border-radius: 10px; font-size: 13px; color: #475569; border: 1px solid #e2e8f0; }
+.tag-remove { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px; padding: 0; line-height: 1; }
+.tag-remove:hover { color: #ef4444; }
+.empty-tags { font-size: 13px; color: #94a3b8; font-style: italic; margin-bottom: 20px; }
+
+.add-tag-form { display: flex; gap: 10px; max-width: 400px; }
+.add-tag-form input { flex: 1; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 13px; }
+.btn-add-tag { width: 40px; height: 40px; border-radius: 10px; background: #6366f1; color: white; border: none; cursor: pointer; font-size: 20px; font-weight: 600; transition: all 0.2s; }
+.btn-add-tag:hover { background: #4f46e5; transform: translateY(-1px); }
 
 .audit-info { margin-top: 24px; font-size: 12px; color: #94a3b8; text-align: right; }
 .loading-state { padding: 40px; text-align: center; color: #64748b; }

@@ -21,11 +21,20 @@ exports.getSettings = async (req, res) => {
       setting = await CharitySetting.create({
         settingKey: 'main',
         distributionRelease: [],
-        defaults: { monthly_allocation: 3000, payment_method: 'bank' }
+        defaults: { 
+          monthly_allocation: 3000, 
+          payment_method: 'bank',
+          beneficiaries_special_cases: ['Elderly', 'Disabled', 'Single Parent']
+        }
       });
     }
 
     const settingData = setting.get({ plain: true });
+
+    // Back-fill missing special cases key for existing data
+    if (settingData.defaults && !settingData.defaults.beneficiaries_special_cases) {
+      settingData.defaults.beneficiaries_special_cases = [];
+    }
 
     // Fetch usage counts for each release
     if (settingData.distributionRelease && settingData.distributionRelease.length > 0) {

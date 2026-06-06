@@ -40,6 +40,8 @@ export interface CharityBeneficiary {
   isActive: boolean
   monthlyAllocation: number
   paymentMethod: 'cash' | 'bank'
+  bankInfo?: { account_no: string; bank: string }
+  isSpecialCase?: string | null
   deliveries: Array<{
     delivery_id: number
     distribution_release_id: number
@@ -89,7 +91,9 @@ export interface CharitySetting {
   defaults: {
     monthly_allocation: number
     payment_method: 'cash' | 'bank'
+    beneficiaries_special_cases: string[]
   }
+
   updatedBy?: number
   created_at?: string
   updated_at?: string

@@ -7,10 +7,21 @@
           {{ isTeamLeader ? 'Overview of your assigned beneficiaries and deliveries' : 'Global overview of charity operations and distribution' }}
         </p>
       </div>
-      <div class="header-actions" v-if="!isTeamLeader">
-        <router-link to="/charity/settings" class="btn-outline">
+      <div class="header-actions">
+        <div class="export-controls" v-if="allReleases.length > 0">
+          <select v-model="selectedReleaseId" class="release-select">
+            <option :value="null" disabled>Select Release for Report</option>
+            <option v-for="rel in sortedAllReleases" :key="rel.distribution_release_id" :value="rel.distribution_release_id">
+              {{ CharityService.formatDate(rel.date) }} ({{ rel.payment_for_indays }}d)
+            </option>
+          </select>
+          <button class="btn-outline master-export-btn" @click="handleMasterExport" :disabled="loadingMasterExport || !selectedReleaseId">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            {{ loadingMasterExport ? 'Preparing...' : 'Master Report' }}
+          </button>
+        </div>
+        <router-link to="/charity/settings" class="btn-outline" v-if="!isTeamLeader">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>
-          Distribution Settings
         </router-link>
       </div>
     </div>
@@ -151,6 +162,13 @@
         </div>
       </div>
     </template>
+
+    <!-- Toasts -->
+    <div class="toast-container">
+      <div v-for="t in toasts" :key="t.id" :class="['toast', `toast-${t.type}`]">
+        {{ t.msg }}
+      </div>
+    </div>
   </div>
 </template>
 
@@ -158,13 +176,23 @@
 import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import CharityService from '@/stores/charity'
+import { exportCharityMasterReport } from '@/utils/charityExport'
 
 const authStore = useAuthStore()
 const isTeamLeader = computed(() => authStore.user?.role === 'charity_teamleader')
 
 const loading = ref(true)
 const loadingLogs = ref(false)
+const loadingMasterExport = ref(false)
 const error = ref(null)
+
+const allReleases = ref([])
+const selectedReleaseId = ref(null)
+
+const sortedAllReleases = computed(() => {
+  return [...allReleases.value].sort((a, b) => new Date(b.date) - new Date(a.date))
+})
+
 const stats = ref({
   beneficiaries: { total: 0, active: 0, inactive: 0 },
   teams: { total: 0, active: 0 },
@@ -181,27 +209,95 @@ const logPagination = ref({
 
 const hasMoreLogs = computed(() => logPagination.value.hasMore)
 
+const toasts = ref([])
+
+const addToast = (msg, type = 'success') => {
+  const id = Date.now()
+  toasts.value.push({ id, msg, type })
+  setTimeout(() => {
+    toasts.value = toasts.value.filter(t => t.id !== id)
+  }, 4000)
+}
+
+const handleMasterExport = async () => {
+  console.log('Master Export Button Clicked');
+  if (!selectedReleaseId.value) {
+    return alert('Please select a distribution release first')
+  }
+  
+  loadingMasterExport.value = true
+  try {
+    const targetRelease = allReleases.value.find(r => r.distribution_release_id === selectedReleaseId.value)
+    console.log('Target Release:', targetRelease);
+
+    // 1. Fetch All Data
+    const [bensRes, teamsRes] = await Promise.all([
+      CharityService.getBeneficiaries({ page: 1, size: 5000, isActive: true }),
+      CharityService.getTeams({ page: 1, size: 500 })
+    ])
+
+    if (!bensRes.success) throw new Error(bensRes.error || 'Failed to fetch beneficiaries')
+    if (!teamsRes.success) throw new Error(teamsRes.error || 'Failed to fetch teams')
+
+    console.log('Data fetched successfully', { 
+      bens: bensRes.data?.length, 
+      teams: teamsRes.data?.length 
+    });
+
+    // 2. Trigger Complex Export
+    exportCharityMasterReport({
+      beneficiaries: bensRes.data,
+      teams: teamsRes.data,
+      release: targetRelease,
+      fileName: 'Charity_Master_Report'
+    })
+
+    addToast('✅ Master Report generated successfully')
+  } catch (err) {
+    console.error('Master Export Error:', err)
+    addToast(`❌ ${err.message || 'Failed to generate report'}`, 'error')
+  } finally {
+    loadingMasterExport.value = false
+  }
+}
+
 const fetchStats = async () => {
   loading.value = true
   error.value = null
   try {
-    const res = await CharityService.getDashboardStats()
-    if (res.success) {
+    const [statsRes, settingsRes] = await Promise.all([
+      CharityService.getDashboardStats(),
+      CharityService.getSettings()
+    ])
+
+    if (statsRes.success) {
       stats.value = {
-        beneficiaries: res.data.beneficiaries || { total: 0, active: 0, inactive: 0 },
-        teams: res.data.teams || { total: 0, active: 0 },
-        allocation: res.data.allocation || { totalMonthly: 0 },
-        distribution: res.data.distribution || { completed: 0, total: 0, release: null },
-        recentActivity: res.data.recentActivity || []
+        beneficiaries: statsRes.data.beneficiaries || { total: 0, active: 0, inactive: 0 },
+        teams: statsRes.data.teams || { total: 0, active: 0 },
+        allocation: statsRes.data.allocation || { totalMonthly: 0 },
+        distribution: statsRes.data.distribution || { completed: 0, total: 0, release: null },
+        recentActivity: statsRes.data.recentActivity || []
       }
       if (stats.value.recentActivity.length >= 10) {
         logPagination.value.hasMore = true
       }
     } else {
-      error.value = res.error
+      error.value = statsRes.error || 'Failed to load dashboard statistics'
+      return // Stop if stats fail
+    }
+
+    if (settingsRes.success) {
+      allReleases.value = settingsRes.data.distributionRelease || []
+      // Auto-select latest release
+      if (allReleases.value.length > 0) {
+        const sorted = [...allReleases.value].sort((a, b) => new Date(b.date) - new Date(a.date))
+        const latest = sorted[0]
+        selectedReleaseId.value = latest.distribution_release_id
+      }
     }
   } catch (err) {
-    error.value = 'Failed to connect to server'
+    console.error('fetchStats Crash:', err)
+    error.value = 'An unexpected error occurred while loading dashboard data'
   } finally {
     loading.value = false
   }
@@ -251,6 +347,7 @@ const keyMap = {
   isActive_en: 'Is Active',
   teamId: 'Team ID',
   paymentMethod: 'Payment Method',
+  bankInfo: 'Bank Details',
   type: 'Adjustment Type',
   reason: 'Reason',
   is_delivered: 'Delivered',
@@ -288,6 +385,9 @@ const formatDetailValue = (val, key) => {
       if (val.location) parts.push(val.location.city || val.location.region)
       if (val.contact) parts.push(val.contact.phone)
       return parts.join(', ') || 'Contact/Location details'
+    }
+    if (key === 'bankInfo') {
+      return `${val.bank || 'Unknown Bank'}: ${val.account_no || 'No Account'}`
     }
     if (key === 'appliedUpdates') {
       return Object.keys(val).map(k => `${formatDetailKey(k)}: ${formatDetailValue(val[k], k)}`).join(' | ')
@@ -332,6 +432,11 @@ onMounted(fetchStats)
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
 .page-title { font-size: 26px; font-weight: 800; color: #1e293b; margin: 0; }
 .page-subtitle { color: #64748b; font-size: 14px; margin-top: 4px; }
+
+.header-actions { display: flex; gap: 12px; align-items: center; }
+.export-controls { display: flex; gap: 8px; align-items: center; background: #fff; padding: 4px; border-radius: 12px; border: 1px solid #e2e8f0; }
+.release-select { border: none; background: transparent; font-size: 13px; color: #475569; font-weight: 600; padding: 0 8px; outline: none; cursor: pointer; max-width: 220px; }
+.master-export-btn { background: #f0fdf4; color: #166534; border-color: #b7e4cf; padding: 8px 16px; font-size: 13px; }
 
 .btn-outline { display: flex; align-items: center; gap: 8px; padding: 10px 20px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; color: #475569; font-weight: 600; text-decoration: none; transition: all 0.2s; }
 .btn-outline:hover { border-color: #6366f1; color: #6366f1; }
@@ -442,6 +547,14 @@ onMounted(fetchStats)
 
 .error-alert { background: #fee2e2; border: 1px solid #fecaca; color: #b91c1c; padding: 20px; border-radius: 16px; text-align: center; margin: 40px 0; }
 .error-alert button { margin-top: 12px; padding: 8px 20px; background: #b91c1c; color: white; border: none; border-radius: 8px; cursor: pointer; }
+
+/* Toasts */
+.toast-container { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 12px; z-index: 9999; }
+.toast { padding: 14px 24px; border-radius: 12px; color: white; font-weight: 600; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); min-width: 200px; animation: slideIn 0.3s ease; }
+.toast-success { background: #10b981; }
+.toast-error { background: #ef4444; }
+
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
 @media (max-width: 1024px) { .dashboard-grid { grid-template-columns: 1fr; } }
 </style>

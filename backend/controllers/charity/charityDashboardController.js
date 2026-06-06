@@ -76,12 +76,13 @@ exports.getStats = async (req, res) => {
     const latestRelease = (settings?.distributionRelease || [])
       .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
 
-    let distributionProgress = { completed: 0, total: totalBens, release: latestRelease || null };
+    let distributionProgress = { completed: 0, total: activeBens, release: latestRelease || null };
     if (latestRelease) {
       // deliveries is JSONB array: [{ "distribution_release_id": 123, "is_delivered": true, ... }]
       const deliveredCount = await CharityBeneficiary.count({
         where: {
           ...benWhere,
+          isActive: true, // Only count active beneficiaries
           deliveries: {
             [Op.contains]: [{ distribution_release_id: latestRelease.distribution_release_id, is_delivered: true }]
           }

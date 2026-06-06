@@ -39,7 +39,16 @@
           <div class="summary-item"><span class="label">Full Name</span><span class="value">{{ beneficiary.fullname }}</span></div>
           <div class="summary-item"><span class="label">Team</span><span class="value">{{ beneficiary.team?.name || '—' }}</span></div>
           <div class="summary-item"><span class="label">Monthly Allocation</span><span class="value allocation-value">{{ CharityService.formatCurrency(beneficiary.monthlyAllocation) }}</span></div>
-          <div class="summary-item"><span class="label">Payment Method</span><span class="value">{{ beneficiary.paymentMethod }}</span></div>
+          <div class="summary-item">
+            <span class="label">Payment Method</span>
+            <span class="value">
+              {{ beneficiary.paymentMethod }}
+              <span v-if="beneficiary.paymentMethod === 'bank' && beneficiary.bankInfo" class="bank-acc">
+                ({{ beneficiary.bankInfo.bank }}: {{ beneficiary.bankInfo.account_no }})
+              </span>
+            </span>
+          </div>
+          <div class="summary-item"><span class="label">Special Case</span><span class="value">{{ beneficiary.isSpecialCase || 'None' }}</span></div>
           <div class="summary-item"><span class="label">Status</span><span :class="['status-badge', beneficiary.isActive ? 'active' : 'inactive']">{{ beneficiary.isActive ? 'Active' : 'Inactive' }}</span></div>
         </div>
       </div>
@@ -406,6 +415,7 @@ onMounted(() => {
 .summary-item .label { font-size: 12px; color: #64748b; text-transform: uppercase; }
 .summary-item .value { font-size: 16px; font-weight: 600; color: #1e293b; }
 .allocation-value { color: #6a11cb; background: #f5f3ff; padding: 2px 8px; border-radius: 20px; display: inline-block; }
+.bank-acc { font-size: 13px; color: #64748b; font-weight: 400; margin-left: 4px; }
 .status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
 .status-badge.active { background: #e6f7ee; color: #0d6b36; }
 .status-badge.inactive { background: #fef1f1; color: #b91c1c; }

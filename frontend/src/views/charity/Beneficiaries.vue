@@ -615,7 +615,11 @@ onMounted(() => {
 
 .btn-primary { display: flex; align-items: center; gap: 8px; padding: 10px 20px; background: linear-gradient(135deg, #6a11cb, #7c3aed); color: white; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; text-decoration: none; }
 .btn-icon { width: 18px; height: 18px; }
-.btn-outline { padding: 8px 14px; background: white; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 13px; cursor: pointer; color: #475569; }
+.btn-icon-small { width: 16px; height: 16px; margin-right: 4px; }
+.btn-outline { display: inline-flex; align-items: center; padding: 8px 14px; background: white; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 13px; cursor: pointer; color: #475569; }
+.btn-outline:hover:not(:disabled) { border-color: #6366f1; color: #6366f1; }
+.export-btn { background: #f8fafc; border-color: #cbd5e1; }
+.export-btn:hover:not(:disabled) { background: #f1f5f9; border-color: #6366f1; }
 
 .fb-select { padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: white; font-size: 13px; color: #475569; outline: none; }
 .fullname-text { font-weight: 600; color: #1e293b; }

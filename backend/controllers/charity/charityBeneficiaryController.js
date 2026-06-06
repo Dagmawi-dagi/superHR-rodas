@@ -108,11 +108,16 @@ exports.getBeneficiaryById = async (req, res) => {
 exports.createBeneficiary = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { fullname, fullInfo, teamId, monthlyAllocation, paymentMethod } = req.body;
+    const { fullname, fullInfo, teamId, monthlyAllocation, paymentMethod, bankInfo, isSpecialCase } = req.body;
     
     if (!fullname?.trim() || !teamId) {
       await t.rollback();
       return res.status(400).json({ success: false, error: 'fullname and teamId are mandatory' });
+    }
+
+    if (paymentMethod === 'bank' && (!bankInfo || !bankInfo.account_no || !bankInfo.bank)) {
+      await t.rollback();
+      return res.status(400).json({ success: false, error: 'Bank account number and bank name are required' });
     }
 
     // Role Logic
@@ -128,7 +133,7 @@ exports.createBeneficiary = async (req, res) => {
 
     // Get defaults from settings
     const settings = await CharitySetting.findOne({ where: { settingKey: 'main' }, transaction: t });
-    const defaults = settings?.defaults || { monthly_allocation: 3000, payment_method: 'bank' };
+    const defaults = settings?.defaults || { monthly_allocation: 3000, payment_method: 'bank', beneficiaries_special_cases: [] };
 
     const ben = await CharityBeneficiary.create({
       fullname,
@@ -136,6 +141,8 @@ exports.createBeneficiary = async (req, res) => {
       teamId: assignedTeamId,
       monthlyAllocation: monthlyAllocation !== undefined ? monthlyAllocation : defaults.monthly_allocation,
       paymentMethod: paymentMethod || defaults.payment_method,
+      bankInfo,
+      isSpecialCase,
       isActive: true,
       createdBy: req.user.userId
     }, { transaction: t });
@@ -167,7 +174,7 @@ exports.updateBeneficiary = async (req, res) => {
       }
     }
 
-    const fields = ['fullname', 'fullInfo', 'teamId', 'monthlyAllocation', 'paymentMethod', 'isActive'];
+    const fields = ['fullname', 'fullInfo', 'teamId', 'monthlyAllocation', 'paymentMethod', 'bankInfo', 'isActive', 'isSpecialCase'];
     const updates = { updatedBy: req.user.userId };
     
     fields.forEach(k => {
@@ -177,6 +184,15 @@ exports.updateBeneficiary = async (req, res) => {
         updates[k] = req.body[k];
       }
     });
+
+    if (updates.paymentMethod === 'bank' && (!updates.bankInfo || !updates.bankInfo.account_no || !updates.bankInfo.bank)) {
+      // If paymentMethod is becoming 'bank' or is already 'bank', we need full bankInfo
+      const currentBankInfo = updates.bankInfo || ben.bankInfo;
+      if (!currentBankInfo || !currentBankInfo.account_no || !currentBankInfo.bank) {
+        await t.rollback();
+        return res.status(400).json({ success: false, error: 'Bank account number and bank name are required' });
+      }
+    }
 
     await ben.update(updates, { transaction: t });
     await logAction('UPDATE', 'beneficiary', ben.beneficiaryId, updates, req.user.userId);
@@ -617,7 +633,7 @@ exports.bulkUpdateBeneficiaries = async (req, res) => {
       transaction: t
     });
 
-    const fields = ['teamId', 'paymentMethod', 'monthlyAllocation', 'isActive'];
+    const fields = ['teamId', 'paymentMethod', 'bankInfo', 'monthlyAllocation', 'isActive', 'isSpecialCase'];
     const results = [];
 
     for (const ben of beneficiaries) {

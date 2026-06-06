@@ -73,6 +73,17 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         field: 'payment_method',
       },
+      bankInfo: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: { account_no: '', bank: '' },
+        field: 'bank_info',
+      },
+      isSpecialCase: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        field: 'is_specialcase',
+      },
       // Array of objects for deliveries
       deliveries: {
         type: DataTypes.JSONB,

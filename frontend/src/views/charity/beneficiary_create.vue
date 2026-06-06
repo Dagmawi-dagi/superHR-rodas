@@ -78,15 +78,29 @@
           <div v-show="!collapsed.allocation" class="card-body">
             <div class="form-row">
               <div class="form-field">
+                <label>Special Case</label>
+                <select v-model="form.isSpecialCase" :disabled="isView">
+                  <option :value="null">None</option>
+                  <option v-for="sc in specialCases" :key="sc" :value="sc">{{ sc }}</option>
+                </select>
+              </div>
+              <div class="form-field">
                 <label>Monthly Allocation (ETB) <span class="required">*</span></label>
                 <input type="number" step="0.01" v-model.number="form.monthlyAllocation" placeholder="0.00" :disabled="isView" />
               </div>
-              <div class="form-field">
-                <label>Payment Method</label>
-                <select v-model="form.paymentMethod" :disabled="isView">
-                  <option value="bank">Bank</option>
-                  <option value="cash">Cash</option>
-                </select>
+            </div>
+            <div class="form-field full" v-if="form.paymentMethod === 'bank'">
+              <div class="form-row">
+                <div class="form-field">
+                  <label>Bank Name <span class="required">*</span></label>
+                  <input type="text" v-model="form.bankInfo.bank" placeholder="e.g. CBE, Dashen" :disabled="isView" />
+                  <span class="error" v-if="errors['bankInfo.bank']">{{ errors['bankInfo.bank'] }}</span>
+                </div>
+                <div class="form-field">
+                  <label>Account Number <span class="required">*</span></label>
+                  <input type="text" v-model="form.bankInfo.account_no" placeholder="Enter account number" :disabled="isView" />
+                  <span class="error" v-if="errors['bankInfo.account_no']">{{ errors['bankInfo.account_no'] }}</span>
+                </div>
               </div>
             </div>
           </div>
@@ -222,11 +236,14 @@ const hideDropdown = (type) => {
 }
 
 // ── Form ──────────────────────────────────────────────────────────────
+const specialCases = ref([])
 const form = reactive({
   fullname: '',
   teamId: null,
   monthlyAllocation: 0,
   paymentMethod: 'bank',
+  bankInfo: { account_no: '', bank: '' },
+  isSpecialCase: null,
   fullInfo: {
     location: { region: '', city: '', woreda: '' },
     contact: { phone: '', email: '' },
@@ -248,10 +265,13 @@ const initData = async () => {
 
     if (teamsRes.success) teams.value = teamsRes.data
     
-    if (!isEdit.value && !isView.value && settingsRes.success) {
-      // Set defaults for new beneficiary
-      form.monthlyAllocation = settingsRes.data.defaults.monthly_allocation
-      form.paymentMethod = settingsRes.data.defaults.payment_method
+    if (settingsRes.success) {
+      specialCases.value = settingsRes.data.defaults.beneficiaries_special_cases || []
+      if (!isEdit.value && !isView.value) {
+        // Set defaults for new beneficiary
+        form.monthlyAllocation = settingsRes.data.defaults.monthly_allocation
+        form.paymentMethod = settingsRes.data.defaults.payment_method
+      }
     }
 
     if (isEdit.value || isView.value) {
@@ -262,6 +282,8 @@ const initData = async () => {
         form.teamId = b.teamId
         form.monthlyAllocation = b.monthlyAllocation
         form.paymentMethod = b.paymentMethod
+        form.isSpecialCase = b.isSpecialCase
+        if (b.bankInfo) form.bankInfo = { ...b.bankInfo }
         if (b.fullInfo) {
            if (b.fullInfo.location) form.fullInfo.location = { ...b.fullInfo.location }
            if (b.fullInfo.contact) form.fullInfo.contact = { ...b.fullInfo.contact }
@@ -282,6 +304,10 @@ const validateForm = () => {
   const newErrors = {}
   if (!form.fullname?.trim()) newErrors.fullname = 'Full name is required'
   if (!form.teamId) newErrors.teamId = 'Team is mandatory'
+  if (form.paymentMethod === 'bank') {
+    if (!form.bankInfo.bank?.trim()) newErrors['bankInfo.bank'] = 'Bank name is required'
+    if (!form.bankInfo.account_no?.trim()) newErrors['bankInfo.account_no'] = 'Account number is required'
+  }
   errors.value = newErrors
   return Object.keys(newErrors).length === 0
 }
