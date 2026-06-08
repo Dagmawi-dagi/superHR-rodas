@@ -1,18 +1,18 @@
 <template>
   <div class="app-layout">
     <!-- Header at the top - full width -->
-    <AppHeader @toggle-sidebar="toggleSidebar" />
+    <AppHeader class="no-print" @toggle-sidebar="toggleSidebar" />
     
     <div class="layout-body">
       <!-- Sidebar below header - STICKY (stays in place while scrolling) -->
-      <AppSidebar :class="{ collapsed: isSidebarCollapsed }" />
+      <AppSidebar class="no-print" :class="{ collapsed: isSidebarCollapsed }" />
       
       <!-- Main content area - this scrolls -->
       <div class="main-container" :class="{ expanded: isSidebarCollapsed }">
-        <div class="content-wrapper">
+        <div class="content-wrapper print-wrapper">
           <router-view />
         </div>
-        <AppFooter />
+        <AppFooter class="no-print" />
       </div>
     </div>
   </div>
@@ -77,6 +77,31 @@ html, body {
 @media (max-width: 768px) {
   .content-wrapper {
     padding: 16px;
+  }
+}
+
+/* Print specific styles to flatten layout and hide UI */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  
+  .app-layout, .layout-body, .main-container {
+    display: block !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    background: transparent !important;
+  }
+  
+  .content-wrapper.print-wrapper {
+    padding: 0 !important;
+    margin: 0 !important;
   }
 }
 </style>

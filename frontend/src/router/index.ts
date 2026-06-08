@@ -88,6 +88,12 @@ const router = createRouter({
           component: () => import("@/views/attendance/attendanceConfig.vue"),
           meta: { title: "HR attendance Config", roles: ["admin", "hr","attendance"] },
         },
+        {
+          path: "print-test",
+          name: "print-test",
+          component: () => import("@/views/PrintTest.vue"),
+          meta: { title: "Print Test", roles: ["admin", "hr", "finance", "employee", "attendance", "charity_admin", "charity_teamleader"] },
+        },
         // ── CHARITY SECTION ───────────────────────────────────────────────────
         
            {
