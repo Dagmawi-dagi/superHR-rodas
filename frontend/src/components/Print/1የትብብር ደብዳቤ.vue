@@ -19,16 +19,16 @@
 
       <!-- Subject -->
       <div class="subject-section">
-        <span class="subject-label">ጉዳዩ ፡</span> <span class="subject-text">{{ subject }}</span>
+        <span class="subject-label">ጉዳዩ :</span> <span class="subject-text">{{ subject }}</span>
       </div>
 
       <!-- Body -->
       <div class="document-body">
         <p>
-          በድርጅታችን ሱፐር ደብል ቲ ጄኔራል ትሬዲንግ ኃ.የተ.የግል ማህበር ውስጥ ተቀጥረው እያገለገሉ ለሚገኙት ለአቶ/ወ/ሮ/ወ/ሪት <strong>{{ employeeName }}</strong> {{ senderDepartment }} በደብዳቤ ቁጥር <strong>{{ letterRefNumber }}</strong> በቀን <strong>{{ letterDate }}</strong> በተፃፈ ደብዳቤ አቶ/ወ/ሮ/ወ/ሪት <strong>{{ guarantorName }}</strong> ዋስትና ገብተዋል፡፡ አባሪው መመሪያ ወደ እናንተ ፖሊስ ጣቢያ የተላከ መሆኑ ተገልጿል፡፡
+          በድርጅታችን ሱፐር ደብል ቲ ጄኔራል ትሬዲንግ ኃ.የተ.የግል ማህበር ውስጥ ተቀጥረው እያገለገሉ ለሚገኙት ለአቶ/ወ/ሮ/ወ/ሪት <strong>{{ employeeName }}</strong> በደብዳቤ ቁጥር <strong>{{ letterRefNumber }}</strong> በቀን <strong>{{ letterDate }}</strong> ከመስሪያ ቤታችሁ በተፃፈ ደብዳቤ አቶ/ወ/ሮ/ወ/ሪት <strong>{{ guarantorName }}</strong> ዋስትና መግባታቸው ይታወቃል፡፡
         </p>
         <p>
-          በዚሁ መሰረት ሁሉም መስሪያ ቤቶች በሚፅፉልን ደብዳቤ ላይ ዋስትና የገባው ሰራተኛ በተለያዩ ምክንያቶች ስራውን መልቀቅ ቢፈልግ ከመልቀቁ በፊት ለድርጅታችን እንዲያሳውቁ ይገልፁልናል፡፡ ሆኖም ግን አንዳንድ መስሪያ ቤቶች ሰራተኛው ሲለቅ በተለያዩ ምክንያቶች አይነግሩንም፡፡ በመሆኑም ከላይ የተጠቀሱት የድርጅታችን ሰራተኛ በስራ ላይ ስለመሆናቸው በሚመለከተው አካል ፊርማ እና በድርጅቱ ማህተም ታረጋግጡልን ዘንድ በማክበር እንጠይቃለን፡፡
+          ሆኖም ግን በአንድ አንድ መስሪያ ቤቶች ስም ተጽፈው የሚላኩ የዋስትና ደብዳቤዎችን ትክክለኛነት በምናጣራበት ወቅት ከመ/ቤቱ በትክክለኛው መንገድ ያልወጡ ለመሆኑ ማረጋገጥ ችለናል፡፡ ስለሆነም ይህን ችግር ለመፍታት እና ህገወጥ ድርጊቱንም በጋራ ከወዲሁ ለመቅረፍ እንዲያስችለን የድርጅታችሁ ትብብር አስፈላጊ ሆኖ አግኝተነዋል፡፡ በዚህም መሰረት ከላይ ቁጥሩና ቀኑ የተጠቀሰውን ደብዳቤ ኮፒ የላክን በመሆኑ ደብዳቤው ከድርጅታችሁ ስለመውጣቱ ወይም ስለትክክለኛነቱ በሚመለከተው አካል ፊርማ እና በድርጅቱ ማህተም ታረጋግጡልን ዘንድ በማክበር እንጠይቃለን፡፡
         </p>
       </div>
 
@@ -41,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import PrintPage from '@/components/Print/PrintPage.vue';
+import PrintPage from '@/components/Print/ዋስትናPrintPage.vue';
 
 interface Props {
   refNumber: string;
@@ -50,7 +50,6 @@ interface Props {
   recipientCity?: string;
   subject?: string;
   employeeName: string;
-  senderDepartment?: string;
   letterRefNumber: string;
   letterDate: string;
   guarantorName: string;
@@ -59,7 +58,6 @@ interface Props {
 withDefaults(defineProps<Props>(), {
   recipientCity: 'አዲስ አበባ',
   subject: 'ትብብርን ይመለከታል',
-  senderDepartment: 'ከአ/ከ/ፖ/መምሪያ አከባቢ ፖሊስ ጣቢያ',
 });
 </script>
 
@@ -67,7 +65,7 @@ withDefaults(defineProps<Props>(), {
 .amharic-document {
   font-family: 'Nyala', 'Abyssinica SIL', 'Visual Geez Unicode', sans-serif;
   color: #000;
-  padding-top: 15mm;
+  padding-top: 15mm; /* Distance from the top graphic */
 }
 
 /* Header Meta Elements */

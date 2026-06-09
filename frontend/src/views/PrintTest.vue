@@ -4,10 +4,12 @@
       <div>
         <h1 class="text-2xl font-bold text-gray-900">Document Templates Preview</h1>
         <p class="text-gray-500">Preview and test the dynamic Amharic letter layouts.</p>
-        <div class="mt-4 flex gap-4">
+        <div class="mt-4 flex flex-wrap gap-4">
           <button @click="activeDoc = 1" :class="activeDoc === 1 ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700'" class="px-4 py-2 rounded shadow font-medium">Document 1</button>
           <button @click="activeDoc = 2" :class="activeDoc === 2 ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700'" class="px-4 py-2 rounded shadow font-medium">Document 2</button>
           <button @click="activeDoc = 3" :class="activeDoc === 3 ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700'" class="px-4 py-2 rounded shadow font-medium">Document 3</button>
+          <button @click="activeDoc = 4" :class="activeDoc === 4 ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700'" class="px-4 py-2 rounded shadow font-medium">Document 4</button>
+          <button @click="activeDoc = 5" :class="activeDoc === 5 ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700'" class="px-4 py-2 rounded shadow font-medium">Document 5</button>
         </div>
       </div>
       <button 
@@ -58,16 +60,45 @@
       guarantorName="የሻረግ ይታያሉ ሃይሉ"
     />
 
+    <Document4 v-if="activeDoc === 4"
+      refNumber="ሱዳቲ/ስህ/2014/18"
+      date="15/08/2018"
+      recipientName="ቦሌ ክ/ክ/ፖሊስ መምሪያ ቦሌ ቡልቡላ አካባቢ ፖሊስ ጣቢያ"
+      recipientCity="አዲስ አበባ"
+      subject="ዋስትና ድጋሚ ማረጋገጥን ይመለከታል"
+      employeeName="ጽዮን ምትኩ ከበደ"
+      senderDepartment="ከ/ክ/ፖሊስ ጣቢያ"
+      letterRefNumber="7ኛ አስ/ሰ/ፋ/777/2016"
+      letterDate="12/01/2016 ዓ.ም"
+      guarantorName="ኮንጆ ስውአስ ፈንታ ተገኝ"
+    />
+
+    
+
+    <Document5 v-if="activeDoc === 5"
+      refNumber="ሱዳቲ/ስህ/2016/18"
+      date="15/08/2018"
+      recipientName="ለ ኮልፌ ቀራኒዮ ክ/ከተማ ወረዳ 6 ጤና ጣቢያ የሰው ሃይል አስተዳደር ደጋፊ የስራ ሂደት"
+      recipientCity="አዲስ አበባ"
+      subject="የዋስትና ድጋሚ ማረጋገጥን ይመለከታል"
+      employeeName="መድኃኒት ሀ/መስቀል"
+      letterRefNumber="06/ጤ/ጣ/የሰው/ኃ/አስ/ደ/የ/ሂ/ሠ/158/72"
+      letterDate="13/08/2018 ዓ.ም"
+      guarantorName="ታደሰ ጤና"
+    />
+
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import Document1 from '@/components/Print/1.vue';
-import Document2 from '@/components/Print/2.vue';
-import Document3 from '@/components/Print/3.vue';
+import Document1 from '@/components/Print/1የትብብር ደብዳቤ.vue';
+import Document2 from '@/components/Print/2የትብብር ደብዳቤ.vue';
+import Document3 from '@/components/Print/2ድጋሚ ዋስትና ማረጋገጫ.vue';
+import Document4 from '@/components/Print/3የትብብር ደብዳቤ(ፖሊስ).vue';
+import Document5 from '@/components/Print/3ድጋሚ ዋስትና ማረጋገጫ(ፖሊስ).vue';
 
-const activeDoc = ref(1);
+const activeDoc = ref(4);
 
 const printDocument = () => {
   window.print();

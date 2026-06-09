@@ -25,7 +25,7 @@
       <!-- Body -->
       <div class="document-body">
         <p>
-          በድርጅታችን ሱፐር ደብል ቲ ጄኔራል ትሬዲንግ ኃ.የተ.የግል ማህበር ውስጥ ተቀጥረው እያገለገሉ ለሚገኙት ለአቶ/ወ/ሮ/ወ/ሪት <strong>{{ employeeName }}</strong> በደብዳቤ ቁጥር <strong>{{ letterRefNumber }}</strong> በቀን <strong>{{ letterDate }}</strong> ከመስሪያ ቤታችሁ በተፃፈ ደብዳቤ አቶ/ወ/ሮ/ወ/ሪት <strong>{{ guarantorName }}</strong> ዋስትና የገቡ መሆኑ ይታወቃል፡፡ የዋስትናው ደብዳቤ ከድርጅታችሁ ስለመውጣቱ ተረጋግጧል፡፡
+          በድርጅታችን ሱፐር ደብል ቲ ጄኔራል ትሬዲንግ ኃ.የተ.የግል ማህበር ውስጥ ተቀጥረው እያገለገሉ ለሚገኙት ለአቶ/ወ/ሮ/ወ/ሪት <strong>{{ employeeName }}</strong> {{ senderDepartment }} በደብዳቤ ቁጥር <strong>{{ letterRefNumber }}</strong> በቀን <strong>{{ letterDate }}</strong> በተፃፈ ደብዳቤ አቶ/ወ/ሮ/ወ/ሪት <strong>{{ guarantorName }}</strong> ዋስትና የገቡ መሆኑ ይታወቃል፡፡ አባሪው ወደ እናንተ ፖሊስ ጣቢያ የተላከ መሆኑ እና የዋስትና ደብዳቤውም ከድርጅታችሁ ስለመውጣቱ ተረጋግጧል፡፡
         </p>
         <p>
           ሆኖም ዋስትናው በሁለት ድርጅት የሚሰጥ በመሆኑ በመጀመሪያው ዙር የተረጋገጠው ዋስትና በትክክል ድርጅታችሁ ያረጋገጠው ስለመሆኑና የተጠቀሰውም ደብዳቤ ከድርጅታችሁ ስለመውጣቱ ወይም ስለትክክለኛነቱ በሚመለከተው አካል ፊርማ እና በድርጅቱ ማህተም ድጋሚ ታረጋግጡልን ዘንድ በማክበር እንጠይቃለን፡፡
@@ -41,7 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import PrintPage from '@/components/Print/PrintPage.vue';
+import PrintPage from '@/components/Print/ዋስትናPrintPage.vue';
 
 interface Props {
   refNumber: string;
@@ -50,6 +50,7 @@ interface Props {
   recipientCity?: string;
   subject?: string;
   employeeName: string;
+  senderDepartment?: string;
   letterRefNumber: string;
   letterDate: string;
   guarantorName: string;
@@ -57,7 +58,8 @@ interface Props {
 
 withDefaults(defineProps<Props>(), {
   recipientCity: 'አዲስ አበባ',
-  subject: 'የዋስትና ድጋሚ ማረጋገጥን ይመለከታል',
+  subject: 'ዋስትና ድጋሚ ማረጋገጥን ይመለከታል',
+  senderDepartment: 'ከ/ክ/ፖሊስ ጣቢያ',
 });
 </script>
 

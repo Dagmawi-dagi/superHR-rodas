@@ -1,6 +1,15 @@
 <template>
   <div class="print-container">
-    <div class="print-page">
+    
+    <!-- Floating toggle control (hidden during print) -->
+    <div class="no-print floating-controls">
+      <label class="flex items-center space-x-2 cursor-pointer bg-white px-4 py-2 rounded shadow-md text-sm text-gray-700 hover:bg-gray-50 transition border border-gray-200">
+        <input type="checkbox" v-model="withBackground" class="form-checkbox h-4 w-4 text-indigo-600 rounded">
+        <span class="font-medium">Include Letterhead Graphic</span>
+      </label>
+    </div>
+
+    <div class="print-page" :class="{ 'no-background': !withBackground }">
       <div class="print-content">
         <!-- Content specific to different documents will be injected here -->
         <slot>
@@ -15,7 +24,10 @@
 </template>
 
 <script setup lang="ts">
-// This component acts as a layout/wrapper for printable documents
+import { ref } from 'vue';
+
+// State to manage whether the background image is visible or not
+const withBackground = ref(true);
 </script>
 
 <style scoped>
@@ -25,6 +37,14 @@
   padding: 2rem;
   background-color: #f3f4f6; /* Gray background for screen viewing */
   min-height: 100vh;
+  position: relative;
+}
+
+.floating-controls {
+  position: absolute;
+  top: 2rem;
+  right: 2rem;
+  z-index: 50;
 }
 
 .print-page {
@@ -39,6 +59,11 @@
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
   position: relative;
   box-sizing: border-box;
+}
+
+/* Modifier class to remove background graphic */
+.print-page.no-background {
+  background-image: none !important;
 }
 
 .print-content {
